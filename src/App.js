@@ -1,6 +1,12 @@
 import DirectoryAnimes from "./components/directory-animes";
+import HeaderApp from "./components/header-app";
 const App = () => {
-  return <DirectoryAnimes />;
+  return (
+    <>
+      <HeaderApp />
+      <DirectoryAnimes />
+    </>
+  );
 };
 
 export default App;
