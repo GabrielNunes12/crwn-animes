@@ -3,7 +3,7 @@ const HeaderApp = () => {
   return (
     <>
       <header> Crwn Animes </header>
-      <small>E-commerce</small>
+      <small> E-commerce </small>
     </>
   );
 };

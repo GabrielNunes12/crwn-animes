@@ -12,7 +12,7 @@ const CategoryAnimeItem = ({ animeCategory }) => {
       ></section>
       <section className="anime-body-container">
         <h2>{title}</h2>
-        <p>shop now!</p>
+        <p>Shop now!</p>
       </section>
     </div>
   );
