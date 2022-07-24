@@ -8,8 +8,7 @@ const HeaderApp = () => {
       <section className="options">
         <Link to="/shop">Shop</Link>
         <Link to="/">Animes</Link>
-        <Link to="/login">Login</Link>
-        <Link to="/register">Register</Link>
+        <Link to="/login">Sign in</Link>
       </section>
     </>
   );
