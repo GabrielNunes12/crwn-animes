@@ -7,7 +7,7 @@ const HeaderApp = () => {
       <small> E-commerce </small>
       <section className="options">
         <Link to="/shop">Shop</Link>
-        <Link to="/animes">Animes</Link>
+        <Link to="/">Animes</Link>
         <Link to="/login">Login</Link>
         <Link to="/register">Register</Link>
       </section>
