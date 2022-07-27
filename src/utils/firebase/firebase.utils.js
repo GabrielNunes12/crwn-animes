@@ -7,6 +7,8 @@ import {
   GoogleAuthProvider,
 } from "firebase/auth";
 
+import { doc, getFirestore, getDoc, setDoc } from "firebase/firestore";
+
 const firebaseConfig = {
   apiKey: "AIzaSyBMeXelKRGlEBXgQZfcYOFdDF5GbqqE2TI",
   authDomain: "crwn-anime-db.firebaseapp.com",
@@ -27,3 +29,23 @@ provider.setCustomParameters({
 
 export const auth = getAuth();
 export const signInWithGooglePopup = () => signInWithPopup(auth, provider);
+
+//instantiate the database
+export const db = getFirestore();
+export const createUserDocumentFromAuth = async (userAuth) => {
+  const { user } = userAuth;
+  const userDocRef = doc(db, "users", user.uid);
+  const userSnapshot = await getDoc(userDocRef);
+
+  if (!userSnapshot.exists()) {
+    const { displayName, email } = user;
+    const createdAt = new Date();
+    const updatedAt = new Date();
+    try {
+      await setDoc(userDocRef, { displayName, email, createdAt, updatedAt });
+    } catch ({ message }) {
+      console.error(message);
+    }
+  }
+  return userDocRef;
+};
