@@ -4,3 +4,7 @@ export const formFieldRequired = {
   password: "",
   confirmPassword: "",
 };
+export const formFieldLoginRequired = {
+  email: "",
+  password: "",
+};
