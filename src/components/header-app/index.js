@@ -4,11 +4,7 @@ import { signOutUser } from "../../utils/firebase/firebase.utils";
 import { Link } from "react-router-dom";
 import "./style.scss";
 const HeaderApp = () => {
-  const { user, setUser } = useContext(UserContext);
-  const signOutHandler = async () => {
-    await signOutUser();
-    setUser(null);
-  };
+  const { user } = useContext(UserContext);
   return (
     <>
       <header> Crwn Animes </header>
@@ -17,7 +13,7 @@ const HeaderApp = () => {
         <Link to="/shop">Shop</Link>
         <Link to="/">Animes</Link>
         {user ? (
-          <Link to="/auth" onClick={signOutHandler}>
+          <Link to="/" onClick={signOutUser}>
             Sign out
           </Link>
         ) : (
