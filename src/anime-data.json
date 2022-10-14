@@ -1,0 +1,44 @@
+[
+  {
+    "id": 1,
+    "name": "Naruto Shippuden",
+    "imageUrl": "https://beta.crunchyroll.com/imgsrv/display/thumbnail/1200x675/catalog/crunchyroll/7add01c632a7aaf883a90d75b0154ab8.jpeg",
+    "price": 20
+  },
+  {
+    "id": 2,
+    "name": "Tokyo Ghoul",
+    "imageUrl": "https://beta.crunchyroll.com/imgsrv/display/thumbnail/1200x675/catalog/crunchyroll/95d654e35bbd2b8f972f2ccfe80df20b.jpeg",
+    "price": 20
+  },
+  {
+    "id": 3,
+    "name": "Black Summoner",
+    "imageUrl": "https://beta.crunchyroll.com/imgsrv/display/thumbnail/1200x675/catalog/crunchyroll/30c52b8f481041c3e629bbf67c90811e.jpeg",
+    "price": 35
+  },
+  {
+    "id": 4,
+    "name": "One Piece",
+    "imageUrl": "https://beta.crunchyroll.com/imgsrv/display/thumbnail/1200x675/catalog/crunchyroll/236f44583009506b8d9d012c4d3119a5.jpeg",
+    "price": 50
+  },
+  {
+    "id": 5,
+    "name": "Jujutsu Kaisen",
+    "imageUrl": "https://beta.crunchyroll.com/imgsrv/display/thumbnail/1200x675/catalog/crunchyroll/98662d1c546c4e74de58fbc52679ac6c.jpeg",
+    "price": 30
+  },
+  {
+    "id": 6,
+    "name": "Bleach",
+    "imageUrl": "https://beta.crunchyroll.com/imgsrv/display/thumbnail/1200x675/catalog/crunchyroll/8ee28177b8ff7446c5b5539e3d57dfae.jpeg",
+    "price": 14
+  },
+  {
+    "id": 7,
+    "name": "Chainsaw man",
+    "imageUrl": "https://beta.crunchyroll.com/imgsrv/display/thumbnail/1200x675/catalog/crunchyroll/ea075b926e1073f4eb016bff8cdb434c.jpeg",
+    "price": 500
+  }
+]
