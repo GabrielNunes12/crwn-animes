@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { VideoListTab } from "./VideoListTab.jsx";
 import { SeriesTab } from "./SeriesTab.jsx";
@@ -106,14 +106,16 @@ describe("admin lists — search", () => {
     await screen.findByText("Page 2 of 3");
 
     const box = screen.getByRole("searchbox", { name: "Search videos by title or series" });
-    await user.type(box, "nar");
+    // Keystrokes in quick succession (synchronous, so always inside the debounce window).
+    const typeFast = (text) => act(() => [...text].forEach((_, i) => fireEvent.change(box, { target: { value: text.slice(0, i + 1) } })));
+    typeFast("nar");
     await waitFor(() => expect(pending.nar).toBeTypeOf("function"));
     // Typing is debounced: one request for "nar", not one per key.
     expect(fetchFn.mock.calls.filter(([u]) => params(u).has("q")).map(([u]) => params(u).get("q"))).toEqual(["nar"]);
     // A new query goes back to the first page.
     expect(params(fetchFn.mock.calls.at(-1)[0]).has("offset")).toBe(false);
 
-    await user.type(box, "uto");
+    typeFast("naruto");
     // While searching, the heading counts results, not "published videos".
     await screen.findByRole("heading", { level: 2, name: "2 results for “naruto”" });
     expect(titles()).toEqual(["Naruto Shippuden 1", "Naruto Shippuden 2"]);

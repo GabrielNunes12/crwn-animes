@@ -20,5 +20,9 @@ export function validateRegistration({ email, displayName, password, consent }) 
  */
 export function safeNext(next) {
   if (typeof next !== "string" || !next.startsWith("/") || next.startsWith("//")) return "/";
-  return /[\u0000-\u0020\u007f\\]/.test(next) ? "/" : next;
+  for (const ch of next) {
+    const code = ch.codePointAt(0);
+    if (code <= 0x20 || code === 0x7f || ch === "\\") return "/";
+  }
+  return next;
 }
