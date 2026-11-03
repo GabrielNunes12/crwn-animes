@@ -305,7 +305,10 @@ Ordering is stable (ties broken by id) so paging never repeats or skips an item.
 - `/account` → "Export watch history" downloads `crwn-animes-progress.json`
   (`{ "version": 1, "exportedAt": ISO, "entries": { [youtubeVideoId]: { t, d, at, route, title, thumb } } }`);
   "Import watch history" merges a file (newest `at` wins per video; validates shape, size ≤ 1 MB,
-  ignores unknown keys and bad entries, keeps the 200-entry cap). Works logged out.
+  ignores unknown keys and bad entries, keeps the 200-entry cap). Works logged out. An entry is only
+  accepted when its key is an 11-character YouTube ID and its `route` is one of our own front-end routes;
+  `thumb` is kept only when it starts with `https://i.ytimg.com/` (else `null`), so a crafted file can never
+  make the page request another site.
 - Series pages and series cards show "watched N of M" from local progress; series page has a
   "Continue" button that opens the first unwatched episode (or resumes the in-progress one).
 - Long episode lists render with `content-visibility: auto` (no JS virtualisation library), grouped by

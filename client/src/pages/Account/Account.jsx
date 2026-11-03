@@ -293,8 +293,16 @@ function DeviceCard() {
           <span aria-hidden="true">⤓</span> {t("account.progress.export")}
         </button>
         <label className={`btn ${styles.fileBtn}`} data-busy={busy || undefined}>
-          <span aria-hidden="true">⤒</span> {t("account.progress.import")}
-          <input type="file" accept="application/json,.json" className="visually-hidden" onChange={onImport} disabled={busy} aria-describedby={`${id}-import-hint`} />
+          <span aria-hidden="true">⤒</span> <span id={`${id}-import`}>{t("account.progress.import")}</span>
+          <input
+            type="file"
+            accept="application/json,.json"
+            className="visually-hidden"
+            onChange={onImport}
+            disabled={busy}
+            aria-labelledby={`${id}-import`}
+            aria-describedby={`${id}-import-hint`}
+          />
         </label>
         <button type="button" className="btn" onClick={() => setOpen(true)} disabled={!count}>
           {t("account.clearHistory")}

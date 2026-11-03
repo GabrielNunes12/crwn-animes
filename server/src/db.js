@@ -275,7 +275,10 @@ const MIGRATIONS = [
   // 9: admin lists are paginated and searchable (v1.3). title_search is the
   // source title through searchNormalize() (JS, like series.search_text; set
   // on insert, titles never change). Indexes give the admin video list
-  // (newest created first, optionally per status) its order without a sort.
+  // (newest created first, optionally per status) its order without a sort;
+  // videos_created also holds every column the list filters on, so filtering,
+  // counting and skipping OFFSET rows never read the (wide) table rows:
+  // ~2x faster at 50k videos (src/scripts/bench-admin-lists.js).
   (db) => {
     db.exec("ALTER TABLE videos ADD COLUMN title_search TEXT NOT NULL DEFAULT ''");
     const update = db.prepare("UPDATE videos SET title_search = ? WHERE id = ?");
