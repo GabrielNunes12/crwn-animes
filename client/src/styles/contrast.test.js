@@ -1,11 +1,13 @@
-// @vitest-environment node
 // WCAG 1.4.3: text/background token pairs used by components must reach 4.5:1
 // in BOTH themes. Colours are read from tokens.css (oklch) and converted to sRGB.
 import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const tokens = readFileSync(new URL("./tokens.css", import.meta.url), "utf8");
-const seriesCss = readFileSync(new URL("../pages/Series/Series.module.css", import.meta.url), "utf8");
+const here = dirname(fileURLToPath(import.meta.url));
+const tokens = readFileSync(join(here, "tokens.css"), "utf8");
+const seriesCss = readFileSync(join(here, "../pages/Series/Series.module.css"), "utf8");
 
 /** Token values of a block: the base :root, overridden by the light block when asked. */
 function theme(light) {

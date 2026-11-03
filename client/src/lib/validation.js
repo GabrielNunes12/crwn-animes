@@ -13,7 +13,12 @@ export function validateRegistration({ email, displayName, password, consent }) 
   return errors;
 }
 
-/** Only allow same-site relative redirects (?next=). */
+/**
+ * Only allow same-site relative redirects (?next=). URL parsers drop tabs/newlines and
+ * treat "\\" like "/", so "/\t/evil.com" or "/\\evil.com" would become "//evil.com":
+ * control characters, whitespace and backslashes are refused outright.
+ */
 export function safeNext(next) {
-  return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/";
+  if (typeof next !== "string" || !next.startsWith("/") || next.startsWith("//")) return "/";
+  return /[\u0000-\u0020\u007f\\]/.test(next) ? "/" : next;
 }
