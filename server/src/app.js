@@ -39,7 +39,7 @@ const CSP_DIRECTIVES = {
 };
 
 /** Maps body-parser and unknown errors to the API's error shape. */
-function toHttpError(err) {
+export function toHttpError(err) {
   if (err instanceof HttpError) return err;
   switch (err?.type) {
     case "entity.too.large":

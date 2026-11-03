@@ -91,6 +91,21 @@ e-mail addresses or passwords. The only cookie is the essential `sid`
 (httpOnly, SameSite=Lax, Secure in production). Users can export their data
 (`GET /api/me/export`) and delete their account (`DELETE /api/me`).
 
+## CSRF and request hygiene (`src/middleware/security.js`, `src/app.js`)
+
+On every `POST`/`PUT`/`PATCH`/`DELETE` under `/api`, in this order:
+1. A body must be `application/json`, else **415** (a cross-site `<form>` cannot send JSON).
+2. `requireSameOrigin`: allowed when `Sec-Fetch-Site` is `same-origin` or `none`, or when `Origin` is a
+   trusted origin (the `APP_URL` origin or any `CLIENT_ORIGIN`, compared exactly). Otherwise, if
+   `Sec-Fetch-Site` or `Origin` is present, **403 `CROSS_SITE_REQUEST`**. Requests with neither header
+   (curl, server-to-server, tests) are allowed. The client always calls a relative `/api`, so through the Vite
+   dev/preview proxy or when this server serves it, its requests are same-origin.
+
+`/api/auth/logout` and `/logout-all` send a cookie-clearing `Set-Cookie` only when the request carried a
+`sid` cookie (valid or not). A malformed `%`-escape in a route parameter is **400 `VALIDATION_ERROR`**
+(`details.url`); any other 4xx error from Express or a middleware keeps its status; neither is logged.
+E-mail addresses with control characters (`\p{Cc}`: NUL, ESC, DEL, C1) are refused like other invalid ones.
+
 ## Background jobs (in-process, unref'd timers)
 
 - Retention: at startup and hourly — purge expired sessions/tokens, unverified
