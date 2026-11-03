@@ -59,7 +59,10 @@ const COPY = {
     verify: (name) => ({
       subject: "Confirme seu e-mail no Crwn Animes",
       heading: `Olá, ${name}!`,
-      paragraphs: ["Falta pouco: confirme seu e-mail para ativar sua conta e começar a avaliar episódios e capítulos.", "O link expira em 24 horas."],
+      paragraphs: [
+        "Falta pouco: confirme seu e-mail para ativar sua conta e começar a avaliar episódios e capítulos.",
+        "Ao abrir o link, vamos pedir a senha que você escolheu no cadastro. O link expira em 24 horas.",
+      ],
       label: "Confirmar e-mail",
     }),
     registerAttempt: () => ({
@@ -96,7 +99,10 @@ const COPY = {
     verify: (name) => ({
       subject: "Confirm your e-mail on Crwn Animes",
       heading: `Hi ${name}!`,
-      paragraphs: ["Almost there: confirm your e-mail to activate your account and start rating episodes and chapters.", "This link expires in 24 hours."],
+      paragraphs: [
+        "Almost there: confirm your e-mail to activate your account and start rating episodes and chapters.",
+        "When you open the link, you'll be asked for the password you chose when signing up. This link expires in 24 hours.",
+      ],
       label: "Confirm e-mail",
     }),
     registerAttempt: () => ({

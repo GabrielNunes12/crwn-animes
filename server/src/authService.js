@@ -125,11 +125,24 @@ export function createAuthService({ db, config, mailer, now = () => new Date(), 
       if (row && !row.email_verified_at) sendVerification(row, locale);
     },
 
-    /** Returns the verified user row. */
-    async verifyEmail(token) {
-      const userId = users.consumeEmailToken(hashToken(token), "verify", iso());
-      if (!userId) throw invalidToken();
+    /**
+     * Returns the verified user row. The password chosen at sign-up must be
+     * typed again: whoever clicks the link can only activate their own
+     * password, never one set by someone who signed up with this e-mail first.
+     * A wrong password leaves the token valid.
+     */
+    async verifyEmail(token, password) {
+      const tokenHash = hashToken(token);
+      // Token first: no scrypt work for a bad token.
+      const pendingUserId = users.peekEmailToken(tokenHash, "verify", iso());
+      if (!pendingUserId) throw invalidToken();
+      const pending = users.findById(pendingUserId);
+      if (!(await verifyPassword(password, pending.password_hash))) throw invalidCredentials();
+      // Consume only now; fails if a newer sign-up replaced the link meanwhile.
+      const userId = users.consumeEmailToken(tokenHash, "verify", iso());
+      if (userId !== pendingUserId) throw invalidToken();
       const before = users.findById(userId);
+      if (before.password_hash !== pending.password_hash) throw invalidToken();
       users.markVerified(userId, iso());
       const row = applyAdminRole(users.findById(userId));
       if (!before.email_verified_at) {

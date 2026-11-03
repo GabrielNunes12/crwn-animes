@@ -28,40 +28,96 @@ async function withServer(options, fn) {
 }
 
 describe("1. pre-registration account takeover", () => {
+  const register = (srv, password, displayName) =>
+    srv.client().post("/api/auth/register", { email: "admin@example.com", password, displayName, acceptPrivacy: true });
+  const verify = (client, token, password) => client.post("/api/auth/verify-email", { token, password });
+  const login = (srv, password) => srv.client().post("/api/auth/login", { email: "admin@example.com", password });
+  const ATTACKER = "attacker-pass-123";
+  const OWNER = "real-admin-pass-1";
+
   test("re-registering an unverified e-mail replaces the pending password; only the newest link works", () =>
     withServer({}, async (srv) => {
       // Attacker signs up with the victim's (admin) e-mail first.
-      await srv.client().post("/api/auth/register", {
-        email: "admin@example.com",
-        password: "attacker-pass-123",
-        displayName: "Attacker",
-        acceptPrivacy: true,
-      });
+      await register(srv, ATTACKER, "Attacker");
       const attackerLink = tokenFrom(lastEmail(srv.mailer, "admin@example.com"));
 
       // The real owner signs up: same 201, a fresh verification e-mail (not the "someone tried" one).
-      const victim = srv.client();
-      const reg = await victim.post("/api/auth/register", {
-        email: "admin@example.com",
-        password: "real-admin-pass-1",
-        displayName: "Real",
-        acceptPrivacy: true,
-      });
-      assert.equal(reg.status, 201);
+      const owner = srv.client();
+      assert.equal((await register(srv, OWNER, "Real")).status, 201);
       const mail = lastEmail(srv.mailer, "admin@example.com");
       assert.match(mail.subject, /Confirme/);
       const ownerLink = tokenFrom(mail);
       assert.notEqual(ownerLink, attackerLink);
 
-      assert.equal((await srv.client().post("/api/auth/verify-email", { token: attackerLink })).status, 400, "older link is dead");
-      const verified = await victim.post("/api/auth/verify-email", { token: ownerLink });
+      assert.equal((await verify(srv.client(), attackerLink, OWNER)).status, 400, "older link is dead");
+      assert.equal((await verify(srv.client(), attackerLink, ATTACKER)).status, 400, "older link is dead");
+      const verified = await verify(owner, ownerLink, OWNER);
       assert.equal(verified.status, 200);
       assert.equal(verified.body.user.displayName, "Real");
       assert.equal(verified.body.user.role, "admin");
 
-      const attacker = await srv.client().post("/api/auth/login", { email: "admin@example.com", password: "attacker-pass-123" });
-      assert.equal(attacker.status, 401);
-      assert.equal((await srv.client().post("/api/auth/login", { email: "admin@example.com", password: "real-admin-pass-1" })).status, 200);
+      assert.equal((await login(srv, ATTACKER)).status, 401);
+      assert.equal((await login(srv, OWNER)).status, 200);
+    }));
+
+  test("attacker re-registers AFTER the owner: the owner's password cannot activate the attacker's", () =>
+    withServer({}, async (srv) => {
+      await register(srv, ATTACKER, "Attacker");
+      await register(srv, OWNER, "Real");
+      await register(srv, ATTACKER, "Attacker"); // races the owner to the newest link
+      const newest = tokenFrom(lastEmail(srv.mailer, "admin@example.com"));
+
+      // The owner clicks the newest link and types their own password: refused, nothing activated.
+      const owner = srv.client();
+      const refused = await verify(owner, newest, OWNER);
+      assert.equal(refused.status, 401);
+      assert.equal(refused.body.error.code, "INVALID_CREDENTIALS");
+      assert.equal(owner.cookie, null);
+      assert.equal(srv.db.prepare("SELECT email_verified_at FROM users").get().email_verified_at, null);
+      assert.equal((await login(srv, ATTACKER)).status, 403, "still unverified: the attacker cannot log in");
+
+      // The owner signs up again (the token stayed valid, but a new sign-up replaces it) and wins.
+      await register(srv, OWNER, "Real");
+      const ownerLink = tokenFrom(lastEmail(srv.mailer, "admin@example.com"));
+      assert.equal((await verify(srv.client(), newest, ATTACKER)).status, 400, "the attacker's link is dead now");
+      assert.equal((await verify(owner, ownerLink, OWNER)).status, 200);
+      assert.equal((await login(srv, ATTACKER)).status, 401, "the attacker can never log in");
+      assert.equal((await login(srv, OWNER)).status, 200);
+    }));
+
+  test("verify-email: password required, wrong password keeps the token, no scrypt on bad tokens, rate limited", () =>
+    withServer({ config: { rateLimit: { max: 6, windowMs: 60_000 } } }, async (srv) => {
+      await srv.client().post("/api/auth/register", { email: "v@example.com", password: PASSWORD, displayName: "Vee", acceptPrivacy: true });
+      const token = tokenFrom(lastEmail(srv.mailer, "v@example.com"));
+      const client = srv.client();
+
+      const missing = await client.post("/api/auth/verify-email", { token });
+      assert.equal(missing.status, 400);
+      assert.ok(missing.body.error.details.password);
+      assert.equal((await client.post("/api/auth/verify-email", { token, password: "short" })).status, 400);
+      const wrong = await client.post("/api/auth/verify-email", { token, password: "not-my-password" });
+      assert.equal(wrong.status, 401);
+      assert.equal(wrong.body.error.code, "INVALID_CREDENTIALS");
+
+      const bad = await client.post("/api/auth/verify-email", { token: "bogus", password: "not-my-password" });
+      assert.equal(bad.status, 400);
+      assert.equal(bad.body.error.code, "INVALID_TOKEN");
+
+      const ok = await client.post("/api/auth/verify-email", { token, password: PASSWORD });
+      assert.equal(ok.status, 200, "the token survived the wrong password");
+      assert.ok(ok.setCookie.some((c) => c.startsWith("sid=") && c.length > 10));
+      assert.ok(client.cookie);
+
+      const statuses = [];
+      for (let i = 0; i < 2; i++) statuses.push((await client.post("/api/auth/verify-email", { token: "x", password: PASSWORD })).status);
+      assert.deepEqual(statuses, [400, 429]);
+
+      // 20 bogus tokens answer fast: the password is never hashed for them.
+      await withServer({}, async (other) => {
+        const started = Date.now();
+        await Promise.all(Array.from({ length: 20 }, () => other.client().post("/api/auth/verify-email", { token: "bogus", password: PASSWORD })));
+        assert.ok(Date.now() - started < 2000, `took ${Date.now() - started} ms`);
+      });
     }));
 
   test("a verified account is never changed by a new sign-up", () =>

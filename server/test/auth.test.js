@@ -27,6 +27,7 @@ describe("auth", () => {
     const email = outbox.body.filter((m) => m.to === "ana@example.com").at(-1);
     assert.match(email.subject, /Confirme seu e-mail/);
     assert.match(email.text, /24 horas/);
+    assert.match(email.text, /pedir a senha que você escolheu/);
     assert.match(email.html, /#0b0b14/);
     assert.match(email.html, /#ff5c9a/);
     assert.ok(email.sentAt);
@@ -40,7 +41,7 @@ describe("auth", () => {
 
     assert.deepEqual((await client.get("/api/auth/me")).body, { user: null });
 
-    const verified = await client.post("/api/auth/verify-email", { token });
+    const verified = await client.post("/api/auth/verify-email", { token, password: PASSWORD });
     assert.equal(verified.status, 200);
     assert.deepEqual(Object.keys(verified.body.user).sort(), ["createdAt", "displayName", "email", "id", "role"]);
     assert.equal(verified.body.user.email, "ana@example.com");
@@ -71,11 +72,11 @@ describe("auth", () => {
     const client = srv.client();
     await client.post("/api/auth/register", { email: "once@example.com", password: PASSWORD, displayName: "Once", acceptPrivacy: true });
     const token = tokenFrom(lastEmail(srv.mailer, "once@example.com"));
-    assert.equal((await client.post("/api/auth/verify-email", { token })).status, 200);
-    const again = await srv.client().post("/api/auth/verify-email", { token });
+    assert.equal((await client.post("/api/auth/verify-email", { token, password: PASSWORD })).status, 200);
+    const again = await srv.client().post("/api/auth/verify-email", { token, password: PASSWORD });
     assert.equal(again.status, 400);
     assert.equal(again.body.error.code, "INVALID_TOKEN");
-    const garbage = await srv.client().post("/api/auth/verify-email", { token: "nope" });
+    const garbage = await srv.client().post("/api/auth/verify-email", { token: "nope", password: PASSWORD });
     assert.equal(garbage.body.error.code, "INVALID_TOKEN");
   });
 
@@ -157,8 +158,9 @@ describe("auth", () => {
     const email = lastEmail(srv.mailer, "late@example.com");
     assert.match(email.subject, /Confirm your e-mail/);
     assert.match(email.text, /expires in 24 hours/);
-    assert.equal((await srv.client().post("/api/auth/verify-email", { token: firstToken })).status, 400, "older link replaced");
-    assert.equal((await srv.client().post("/api/auth/verify-email", { token: tokenFrom(email) })).status, 200);
+    assert.match(email.text, /asked for the password you chose/);
+    assert.equal((await srv.client().post("/api/auth/verify-email", { token: firstToken, password: PASSWORD })).status, 400, "older link replaced");
+    assert.equal((await srv.client().post("/api/auth/verify-email", { token: tokenFrom(email), password: PASSWORD })).status, 200);
 
     const unknown = await srv.client().post("/api/auth/resend-verification", { email: "nobody@example.com" });
     assert.equal(unknown.status, 202);

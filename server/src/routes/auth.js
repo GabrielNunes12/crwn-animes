@@ -11,6 +11,7 @@ export function authRoutes({ auth, config }) {
   const limitResend = limit("resend-verification");
   const limitForgot = limit("forgot-password");
   const limitReset = limit("reset-password");
+  const limitVerify = limit("verify-email");
 
   /** Rotates the session (drops the one in the cookie, if any) and sends { user }. */
   const signIn = (req, res, row, status = 200) => {
@@ -31,11 +32,12 @@ export function authRoutes({ auth, config }) {
     res.status(201).json({ message: "Check your inbox: we sent you a link to confirm your e-mail." });
   });
 
-  router.post("/verify-email", async (req, res) => {
+  router.post("/verify-email", limitVerify, async (req, res) => {
     const v = validator(bodyOf(req));
     const token = v.token();
+    const password = v.password();
     v.done();
-    signIn(req, res, await auth.verifyEmail(token));
+    signIn(req, res, await auth.verifyEmail(token, password));
   });
 
   router.post("/resend-verification", limitResend, async (req, res) => {

@@ -129,7 +129,7 @@ export async function signUp(srv, { email, displayName = "Tester", password = PA
   const reg = await client.post("/api/auth/register", { email, password, displayName, acceptPrivacy: true });
   if (reg.status !== 201) throw new Error(`register failed: ${reg.status} ${reg.text}`);
   const token = tokenFrom(lastEmail(srv.mailer, email.toLowerCase(), /confirm|confirme/i));
-  const verified = await client.post("/api/auth/verify-email", { token });
+  const verified = await client.post("/api/auth/verify-email", { token, password });
   if (verified.status !== 200) throw new Error(`verify failed: ${verified.status} ${verified.text}`);
   return client;
 }

@@ -110,7 +110,7 @@ describe("production: built client", () => {
     const client = srv.client();
     await client.post("/api/auth/register", { email: "prod@example.com", password: "a-long-password", displayName: "Prod", acceptPrivacy: true });
     const token = tokenFrom(lastEmail(srv.mailer, "prod@example.com"));
-    const res = await client.post("/api/auth/verify-email", { token });
+    const res = await client.post("/api/auth/verify-email", { token, password: "a-long-password" });
     assert.equal(res.status, 200);
     assert.match(res.setCookie.find((c) => c.startsWith("sid=")), /;\s*Secure/i);
   });
