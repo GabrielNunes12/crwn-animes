@@ -70,14 +70,15 @@ type RatingSummary = RatingAverage & {
 | Method & path | Body | Success | Notes |
 |---|---|---|---|
 | `POST /api/auth/register` | `{ email, password, displayName, acceptPrivacy: true }` | `201 { message }` | password ≥ 10 chars; displayName 2–30 chars; `acceptPrivacy` must be `true`. Sends a verification email. **Same 201 if the email already exists** (no account enumeration; the existing owner gets a "someone tried to register" email instead). |
-| `POST /api/auth/verify-email` | `{ token }` | `200 { user }` + sets `sid` | Token is single-use, valid 24 h. Invalid/expired → 400 `INVALID_TOKEN`. |
+| `POST /api/auth/verify-email` | `{ token, password }` | `200 { user }` + sets `sid` | Token is single-use, valid 24 h. Invalid/expired → 400 `INVALID_TOKEN`. `password` must match the password chosen at sign-up, else 401 `INVALID_CREDENTIALS` (the token stays valid; rate limited). This stops a pre-registration takeover: someone who signed up with your e-mail first can never get *their* password activated by you clicking a link. |
 | `POST /api/auth/resend-verification` | `{ email }` | `202 { message }` | Always 202. |
 | `POST /api/auth/login` | `{ email, password }` | `200 { user }` + sets `sid` | 401 `INVALID_CREDENTIALS`; 403 `EMAIL_NOT_VERIFIED` if not verified yet. Rate limited. |
 | `POST /api/auth/logout` | – | `204` | Deletes the session, clears the cookie. |
 | `GET /api/auth/me` | – | `200 { user: User \| null }` | Never 401. |
 
-The verification email links to `${APP_URL}/verify-email?token=<token>`; that page POSTs the
-token to `/api/auth/verify-email`.
+The verification email links to `${APP_URL}/verify-email?token=<token>`; that page asks for the
+password chosen at sign-up and POSTs `{ token, password }` to `/api/auth/verify-email`. Signing up
+again with a still-unverified e-mail replaces the pending password and invalidates older links.
 
 ## Your data (RGPD / LGPD)
 
