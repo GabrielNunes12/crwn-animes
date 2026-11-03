@@ -138,34 +138,6 @@
     background: var(--elevated);
   }
 
-  /* Route transitions: React <ViewTransition> drives the View Transitions API. */
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
-    animation-duration: 220ms;
-  }
-  ::view-transition-group(page) {
-    animation-duration: 280ms;
-    animation-timing-function: var(--ease-out);
-  }
-  ::view-transition-old(page) {
-    animation: vt-out 160ms ease-in both;
-  }
-  ::view-transition-new(page) {
-    animation: vt-in 280ms var(--ease-out) both;
-  }
-  @keyframes vt-out {
-    to {
-      opacity: 0;
-      transform: translateY(-6px);
-    }
-  }
-  @keyframes vt-in {
-    from {
-      opacity: 0;
-      transform: translateY(10px);
-    }
-  }
-
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -174,11 +146,6 @@
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
-    }
-    ::view-transition-group(*),
-    ::view-transition-old(*),
-    ::view-transition-new(*) {
-      animation: none !important;
     }
   }
 }
@@ -494,11 +461,9 @@
     }
   }
 
-  /* Route content fade for browsers without the View Transitions API. */
-  @supports not (view-transition-name: none) {
-    .route-fallback-fade {
-      animation: route-fade 300ms var(--ease-out);
-    }
+  /* Route entrance: a pure CSS animation on the keyed page wrapper. It never blocks input. */
+  .route-enter {
+    animation: route-fade 280ms var(--ease-out);
   }
   @keyframes route-fade {
     from {

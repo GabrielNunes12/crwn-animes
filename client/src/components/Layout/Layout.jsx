@@ -1,4 +1,4 @@
-import { ViewTransition, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Outlet, ScrollRestoration, useLocation, useNavigation } from "react-router";
 import { Header } from "./Header.jsx";
 import { Footer } from "./Footer.jsx";
@@ -28,20 +28,21 @@ export function Layout() {
       </a>
       <div className={styles.progress} data-active={navigation.state !== "idle"} aria-hidden="true" />
       <Header searchRef={searchRef} />
-      <ViewTransition name="page">
-        <main id="main" className={styles.main} tabIndex={-1}>
-          {notice && (
-            <div className="container">
-              <p className="alert alert-info" role="status" style={{ marginBlockStart: "var(--space-4)" }}>
-                {t(`notice.${notice}`)}
-              </p>
-            </div>
-          )}
-          <div key={location.pathname} className="route-fallback-fade">
-            <Outlet />
+      <main id="main" className={styles.main} tabIndex={-1}>
+        {notice && (
+          <div className="container">
+            <p className="alert alert-info" role="status" style={{ marginBlockStart: "var(--space-4)" }}>
+              {t(`notice.${notice}`)}
+            </p>
           </div>
-        </main>
-      </ViewTransition>
+        )}
+        {/* Keyed by path so each page plays a short CSS entrance. We deliberately do not use
+            React <ViewTransition>: an active view transition swallows clicks and a commit
+            prepared before the user typed overwrites inputs filled right after page load. */}
+        <div key={location.pathname} className="route-enter">
+          <Outlet />
+        </div>
+      </main>
       <Footer onShowShortcuts={() => setHelpOpen(true)} />
       <ShortcutsDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
       <ScrollRestoration />

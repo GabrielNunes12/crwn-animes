@@ -20,7 +20,7 @@ routes it to the right page.
 
 | | |
 |---|---|
-| `client/` | Vite, React 19, React Router (data router, lazy routes), modern CSS (`@layer`, `oklch`, container queries, view transitions, scroll-driven reveal animations), Vitest |
+| `client/` | Vite, React 19, React Router (data router, lazy routes), modern CSS (`@layer`, `oklch`, container queries, scroll-driven reveal animations, CSS route entrances), Vitest |
 | `server/` | Node.js, Express 5, SQLite (better-sqlite3), nodemailer, helmet, `node:test` |
 | `docs/` | [`API.md`](docs/API.md) — the contract between client and server · [`ROADMAP.md`](docs/ROADMAP.md) |
 
