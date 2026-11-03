@@ -26,11 +26,26 @@
     "chapter": "Chapter {n}",
     "chapterUnknown": "Chapter",
     "season": "Season {n}",
-    "episodes": { "one": "{count} episode", "other": "{count} episodes" },
-    "chapters": { "one": "{count} chapter", "other": "{count} chapters" },
-    "seriesCount": { "one": "{count} series", "other": "{count} series" },
-    "videoCount": { "one": "{count} video", "other": "{count} videos" },
-    "ratingCount": { "one": "{count} rating", "other": "{count} ratings" },
+    "episodes": {
+      "one": "{count} episode",
+      "other": "{count} episodes"
+    },
+    "chapters": {
+      "one": "{count} chapter",
+      "other": "{count} chapters"
+    },
+    "seriesCount": {
+      "one": "{count} series",
+      "other": "{count} series"
+    },
+    "videoCount": {
+      "one": "{count} video",
+      "other": "{count} videos"
+    },
+    "ratingCount": {
+      "one": "{count} rating",
+      "other": "{count} ratings"
+    },
     "noRatings": "No ratings yet"
   },
   "errors": {
@@ -170,7 +185,10 @@
   "rating": {
     "heading": "Ratings & reactions",
     "yours": "Your rating",
-    "stars": { "one": "{count} star", "other": "{count} stars" },
+    "stars": {
+      "one": "{count} star",
+      "other": "{count} stars"
+    },
     "averageLong": "Average {avg} out of 5 from {count} ratings",
     "reactions": "Reactions",
     "reactionsHint": "Rate it first to add a reaction.",
@@ -203,7 +221,10 @@
     "resend": "Resend verification email",
     "resent": "If that account is waiting for verification, we sent a new link.",
     "errors": {
-      "summary": { "one": "Please fix {count} field.", "other": "Please fix {count} fields." },
+      "summary": {
+        "one": "Please fix {count} field.",
+        "other": "Please fix {count} fields."
+      },
       "email": "Enter a valid email address.",
       "displayName": "Display name must be 2–30 characters.",
       "passwordLength": "Password must be at least {min} characters.",
@@ -224,7 +245,7 @@
       "title": "Create your account",
       "subtitle": "Free. Just an email, a display name and a password.",
       "submit": "Create account",
-      "displayNameHint": "2–30 characters, shown next to nothing but your account menu.",
+      "displayNameHint": "2–30 characters. Shown in your account menu.",
       "passwordHint": "At least {min} characters. A short sentence works well.",
       "consentBefore": "I have read and accept the",
       "consentLink": "privacy notice",
@@ -292,7 +313,10 @@
     "passwordConfirm": "Your password",
     "device": "On this device",
     "deviceText": "Watch history, theme, language and player preferences are stored only in this browser. We never receive them.",
-    "historyCount": { "one": "{count} video in your watch history.", "other": "{count} videos in your watch history." },
+    "historyCount": {
+      "one": "{count} video in your watch history.",
+      "other": "{count} videos in your watch history."
+    },
     "clearHistory": "Clear watch history",
     "clearHistoryText": "This removes all saved positions and ✓ marks from this browser.",
     "clearConfirm": "Clear",
@@ -361,6 +385,213 @@
         "until": "30 days"
       }
     },
-    "never": "We do not store IP addresses, browser user agents, analytics, advertising IDs or any third-party trackers."
+    "never": "We do not store IP addresses, browser user agents, analytics, advertising IDs or any third-party trackers.",
+    "device": {
+      "title": "Stored only on your device",
+      "intro": "Some things are saved in your browser's localStorage. They never reach our server:",
+      "progress": "Watch progress (key crwn:progress:v1): for up to 200 videos — the position, the length, when you last watched, and the episode's link, title and thumbnail, so we can show “Resume at…”, ✓ marks and “Continue watching”.",
+      "prefs": "Preferences: theme (light/dark), language, “Autoplay next” and “Always load YouTube”.",
+      "clear": "You can clear your watch history at any time, even without an account:",
+      "clearLink": "My account → On this device"
+    },
+    "cookies": {
+      "title": "Cookies",
+      "p1": "We use a single cookie, sid. It is strictly necessary: it only exists while you are logged in, is unreadable by scripts (httpOnly), is only sent to this site (SameSite=Lax) and expires after 30 days.",
+      "p2": "Because it is essential for a service you asked for, it doesn't need a consent banner. We use no analytics, advertising or social media cookies."
+    },
+    "youtube": {
+      "title": "YouTube videos and thumbnails",
+      "p1": "Every episode is a YouTube video. Thumbnails are loaded from YouTube's image server (i.ytimg.com), so Google can see your IP address when they load.",
+      "p2": "The YouTube player is only loaded after you press play (or if you switch on “Always load YouTube”). It uses YouTube's privacy-enhanced domain youtube-nocookie.com, but once it plays, Google's own privacy policy applies to what happens inside the player.",
+      "p3": "If you prefer, use “Watch on YouTube” to open a video directly on youtube.com."
+    },
+    "email": {
+      "title": "Emails",
+      "p1": "We only send emails you need: the verification link, password reset links and a notice when your password changes. The language you choose is used only to write that one email and is not stored."
+    },
+    "basis": {
+      "title": "Legal basis",
+      "contract": "Providing your account, logins and ratings: performance of a contract (GDPR art. 6(1)(b); LGPD art. 7, V).",
+      "consent": "Recording that you accepted this notice: to demonstrate compliance (GDPR art. 7(1); LGPD art. 8, §2).",
+      "legit": "Security measures such as rate limiting and hashed tokens: legitimate interest in keeping accounts safe (GDPR art. 6(1)(f); LGPD art. 7, IX)."
+    },
+    "rights": {
+      "title": "Your rights",
+      "intro": "Under the GDPR (RGPD) and Brazil's LGPD you can:",
+      "cta": "Go to My account",
+      "access": {
+        "name": "Access & portability",
+        "how": "“Download my data” in My account gives you everything we keep about you as a JSON file."
+      },
+      "rectify": {
+        "name": "Rectification",
+        "how": "Change your display name in My account. To change your email, contact us."
+      },
+      "erase": {
+        "name": "Erasure",
+        "how": "“Delete my account” erases your account, sessions and ratings immediately."
+      },
+      "object": {
+        "name": "Objection & restriction",
+        "how": "Contact us and we'll answer within 15 days (LGPD) / one month (GDPR)."
+      },
+      "complain": {
+        "name": "Complaint",
+        "how": "You can complain to your data protection authority — in Brazil the ANPD, in the EU your national authority."
+      }
+    },
+    "security": {
+      "title": "Security",
+      "p1": "Passwords are stored only as scrypt hashes; session and email tokens only as SHA-256 fingerprints. The site is served over HTTPS with a strict Content Security Policy. Changing or resetting your password signs out your other devices."
+    },
+    "contact": {
+      "title": "Contact",
+      "p1": "The Crwn Animes team is the data controller. For any privacy question or request, write to the contact address published by the site operator; we never ask for more data than needed to answer."
+    }
+  },
+  "admin": {
+    "title": "Admin",
+    "subtitle": "Post series, add YouTube episodes and keep the catalog tidy.",
+    "tabs": {
+      "series": "Series",
+      "add": "Add video",
+      "bulk": "Bulk add",
+      "pending": "Pending",
+      "published": "Published",
+      "broken": "Broken"
+    },
+    "status": {
+      "published": "Published",
+      "pending": "Pending"
+    },
+    "auto": "Automatic",
+    "open": "Open",
+    "refresh": "Refresh",
+    "unclassified": "Not classified yet",
+    "chipsHint": "Press Enter or comma to add. Backspace removes the last one.",
+    "scores": "Scores — anime {anime}, manga {manga}",
+    "suggested": "suggested number {n}",
+    "fields": {
+      "section": "Section",
+      "series": "Series",
+      "season": "Season",
+      "number": "Number",
+      "title": "Title"
+    },
+    "series": {
+      "newTitle": "New series",
+      "editTitle": "Edit {name}",
+      "name": "Name",
+      "slug": "Slug",
+      "slugHint": "Lowercase letters, numbers and dashes. Leave empty to generate it from the name.",
+      "synopsis": "Synopsis",
+      "aliases": "Aliases (alternative titles)",
+      "cover": "Cover image URL",
+      "coverPreview": "Cover preview",
+      "coverNone": "Preview appears here",
+      "create": "Create series",
+      "nameRequired": "The name is required.",
+      "created": "Created {name}.",
+      "updated": "Saved {name}.",
+      "published": {
+        "one": "{count} pending video was published.",
+        "other": "{count} pending videos were published."
+      },
+      "deleted": "Deleted {name}.",
+      "all": {
+        "one": "{count} series",
+        "other": "{count} series"
+      },
+      "none": "No series yet.",
+      "deleteTitle": "Delete {name}?",
+      "deleteText": "This deletes the series, all its videos and their ratings. It can't be undone."
+    },
+    "add": {
+      "title": "Add a video",
+      "url": "YouTube link or ID",
+      "urlHint": "Any YouTube link (watch, youtu.be, shorts, embed) or the 11-character ID.",
+      "overrides": "Optional overrides",
+      "overridesHint": "Leave on Automatic and the server classifies the video from its title.",
+      "submit": "Add video",
+      "adding": "Adding…",
+      "result": "Result",
+      "resultEmpty": "Add a link to see how it gets classified.",
+      "publishedMsg": "Published — it found its home.",
+      "pendingMsg": "Pending — it needs a hand. Fix it in the Pending tab.",
+      "duplicate": "This video was already added. Here it is:"
+    },
+    "bulk": {
+      "title": "Bulk add",
+      "links": "Links",
+      "hint": "Paste up to 50 YouTube links or IDs — one per line, or any text containing them. Duplicates are ignored.",
+      "defaults": "Defaults for every link",
+      "preview": "Preview",
+      "confirm": {
+        "one": "Confirm and add {count} video",
+        "other": "Confirm and add {count} videos"
+      },
+      "previewTitle": {
+        "one": "Preview — {count} link",
+        "other": "Preview — {count} links"
+      },
+      "resultTitle": {
+        "one": "Done — {count} link",
+        "other": "Done — {count} links"
+      },
+      "previewCaption": "Preview of the bulk import",
+      "resultCaption": "Result of the bulk import",
+      "input": "Video",
+      "outcome": "Outcome",
+      "placement": "Placement",
+      "details": "Details",
+      "noLinks": "No YouTube links found in that text.",
+      "outcomes": {
+        "created": "Created",
+        "would-create": "Will be created",
+        "duplicate": "Already added",
+        "invalid": "Invalid",
+        "unavailable": "Unavailable",
+        "error": "Error"
+      }
+    },
+    "videos": {
+      "pendingTitle": {
+        "one": "{count} pending video",
+        "other": "{count} pending videos"
+      },
+      "publishedTitle": {
+        "one": "{count} published video",
+        "other": "{count} published videos"
+      },
+      "pendingHint": "These couldn't be placed automatically. Fix the section, series, season or number and save. Clearing a field hands it back to the classifier.",
+      "publishedHint": "Everything that is live. Open Edit to move a video or fix its number.",
+      "pendingEmpty": "Nothing pending. 🎉",
+      "publishedEmpty": "Nothing published yet.",
+      "editLabel": "Fix {title}",
+      "saveFix": "Save",
+      "saved": "Saved {title}.",
+      "nowPublished": "Published {title} at {route}.",
+      "nowPending": "{title} is pending again.",
+      "deleted": "Deleted {title}.",
+      "deleteTitle": "Delete this video?",
+      "deleteText": "“{title}” and its ratings will be deleted."
+    },
+    "broken": {
+      "title": {
+        "one": "{count} broken video",
+        "other": "{count} broken videos"
+      },
+      "hint": "Videos YouTube reports as removed, private or blocked. Viewers see them greyed out. Replace the link to keep the episode's route and ratings.",
+      "run": "Run health check",
+      "checking": "Checking every video…",
+      "checked": {
+        "one": "Checked {checked} videos — {count} unavailable.",
+        "other": "Checked {checked} videos — {count} unavailable."
+      },
+      "none": "No broken videos. 👌",
+      "newUrl": "New YouTube link",
+      "replace": "Replace",
+      "replaced": "Replaced the link for {title}."
+    }
   }
 }

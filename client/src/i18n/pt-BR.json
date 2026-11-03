@@ -1,0 +1,597 @@
+{
+  "common": {
+    "anime": "Anime",
+    "manga": "Mangá",
+    "loading": "Carregando…",
+    "working": "Processando…",
+    "saving": "Salvando…",
+    "retry": "Tentar de novo",
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "close": "Fechar",
+    "continue": "Continuar",
+    "delete": "Excluir",
+    "edit": "Editar",
+    "optional": "opcional",
+    "seeAll": "Ver tudo",
+    "new": "Novo",
+    "newTab": "abre em nova aba",
+    "unavailable": "Indisponível",
+    "watched": "Assistido",
+    "genres": "Gêneros",
+    "aliases": "Também conhecido como",
+    "removeItem": "Remover {item}",
+    "episode": "Episódio {n}",
+    "episodeUnknown": "Episódio",
+    "chapter": "Capítulo {n}",
+    "chapterUnknown": "Capítulo",
+    "season": "Temporada {n}",
+    "episodes": {
+      "one": "{count} episódio",
+      "other": "{count} episódios"
+    },
+    "chapters": {
+      "one": "{count} capítulo",
+      "other": "{count} capítulos"
+    },
+    "seriesCount": {
+      "one": "{count} série",
+      "other": "{count} séries"
+    },
+    "videoCount": {
+      "one": "{count} vídeo",
+      "other": "{count} vídeos"
+    },
+    "ratingCount": {
+      "one": "{count} avaliação",
+      "other": "{count} avaliações"
+    },
+    "noRatings": "Sem avaliações ainda"
+  },
+  "errors": {
+    "generic": "Algo deu errado. Tente novamente.",
+    "VALIDATION_ERROR": "Alguns campos não são válidos. Confira e tente de novo.",
+    "UNAUTHENTICATED": "Entre na sua conta para continuar.",
+    "INVALID_CREDENTIALS": "E-mail ou senha incorretos.",
+    "EMAIL_NOT_VERIFIED": "Confirme seu e-mail primeiro — veja sua caixa de entrada.",
+    "FORBIDDEN": "Você não tem permissão para fazer isso.",
+    "NOT_FOUND": "Não encontramos isso.",
+    "CONFLICT": "Isso já existe.",
+    "UNSUPPORTED_MEDIA_TYPE": "A requisição foi enviada no formato errado.",
+    "UNPROCESSABLE": "Não foi possível processar esse pedido.",
+    "RATE_LIMITED": "Muitas tentativas. Aguarde um pouco e tente de novo.",
+    "UPSTREAM_ERROR": "O YouTube não respondeu. Tente mais tarde.",
+    "INVALID_TOKEN": "Este link é inválido ou expirou.",
+    "NETWORK_ERROR": "Sem conexão com o servidor. Verifique sua internet e tente de novo."
+  },
+  "notice": {
+    "adminOnly": "Essa área é só para administradores.",
+    "verified": "E-mail confirmado — boas-vindas ao Crwn Animes!",
+    "passwordReset": "Sua senha foi alterada e você já entrou. Os outros dispositivos foram desconectados.",
+    "accountDeleted": "Sua conta e todos os seus dados foram excluídos.",
+    "signedOutEverywhere": "Você saiu da conta em todos os dispositivos."
+  },
+  "nav": {
+    "skip": "Pular para o conteúdo",
+    "main": "Principal",
+    "homeLabel": "Crwn Animes — início",
+    "anime": "Anime",
+    "manga": "Mangá",
+    "admin": "Admin",
+    "search": "Buscar séries",
+    "searchPlaceholder": "Buscar anime e mangá…",
+    "login": "Entrar",
+    "signup": "Criar conta",
+    "logout": "Sair",
+    "account": "Minha conta",
+    "userMenu": "Menu da conta de {name}",
+    "toLight": "Mudar para tema claro",
+    "toDark": "Mudar para tema escuro",
+    "language": "Idioma"
+  },
+  "footer": {
+    "label": "Rodapé",
+    "privacy": "Privacidade",
+    "shortcuts": "Atalhos de teclado",
+    "note": "Seu progresso fica neste dispositivo. Sem rastreadores, sem anúncios."
+  },
+  "shortcuts": {
+    "title": "Atalhos de teclado",
+    "help": "Mostrar esta ajuda",
+    "search": "Ir para a busca",
+    "next": "Próximo episódio / capítulo",
+    "prev": "Episódio / capítulo anterior",
+    "theatre": "Modo cinema",
+    "close": "Fechar diálogos",
+    "note": "Os atalhos são ignorados enquanto você digita em um campo."
+  },
+  "home": {
+    "eyebrow": "🌸 Anime e mangá, episódio por episódio",
+    "heroTitleA": "Assista às histórias que você",
+    "heroTitleB": "não consegue parar de ver",
+    "heroText": "Todos os episódios e capítulos num só lugar. Continue de onde parou, avalie o que assistiu e reaja com a comunidade.",
+    "browseAnime": "Ver animes",
+    "browseManga": "Ver mangás",
+    "surprise": "Me surpreenda",
+    "surpriseNone": "Ainda não há nada para surpreender — volte em breve.",
+    "sections": "Seções",
+    "continue": "Continuar assistindo",
+    "continueHint": "Salvo só neste dispositivo",
+    "removeContinue": "Remover {title} de Continuar assistindo",
+    "new": "Novidades da semana",
+    "latest": "Últimos episódios",
+    "trending": "Em alta",
+    "topAnime": "Animes mais bem avaliados",
+    "topManga": "Mangás mais bem avaliados",
+    "genres": "Explorar por gênero"
+  },
+  "section": {
+    "kicker": "Explorar",
+    "subtitle": {
+      "anime": "Séries com episódios prontos para assistir.",
+      "manga": "Adaptações de mangá e motion comics, capítulo por capítulo."
+    },
+    "searchLabel": "Buscar em {section}",
+    "searchPlaceholder": "Nome ou título alternativo…",
+    "search": "Buscar",
+    "allGenres": "Todos",
+    "resultsFor": "Resultados para “{q}”",
+    "clear": "Limpar filtros",
+    "tryOther": "Tentar em {section}",
+    "empty": "Nenhuma série corresponde a esses filtros."
+  },
+  "search": {
+    "title": "Busca",
+    "resultsFor": "Resultados para “{q}”",
+    "prompt": "Digite o nome de uma série (ou um título alternativo) na busca.",
+    "empty": "Nada encontrado. Tente um nome mais curto ou alternativo."
+  },
+  "series": {
+    "coverAlt": "Capa de {name}",
+    "episodes": "Episódios",
+    "chapters": "Capítulos",
+    "startWatching": "Começar a assistir",
+    "startReading": "Começar a ler",
+    "continue": "Continuar: {label}",
+    "noVideos": "Nada publicado aqui ainda.",
+    "progress": "{percent}% assistido"
+  },
+  "watch": {
+    "play": "Reproduzir: {title}",
+    "playNote": "Reproduzir carrega o YouTube (Google).",
+    "alwaysLoad": "Sempre carregar o YouTube",
+    "loadingPlayer": "Carregando o player…",
+    "resumeAt": "Continuar em {time}",
+    "cantPlay": "Não dá para reproduzir agora",
+    "cantPlayText": "Este vídeo está indisponível ou o dono não permite incorporá-lo aqui.",
+    "playerFailed": "O player do YouTube não carregou",
+    "playerFailedText": "Um bloqueador ou um problema de rede pode estar impedindo.",
+    "watchOnYouTube": "Assistir no YouTube",
+    "next": "Próximo",
+    "prev": "Anterior",
+    "nextEpisode": "Próximo episódio",
+    "nextChapter": "Próximo capítulo",
+    "allEpisodes": "Todos os episódios",
+    "allChapters": "Todos os capítulos",
+    "episodeNav": "Navegação entre episódios",
+    "upNext": "A seguir",
+    "autoNextAnnounce": "O próximo começa em {seconds} segundos: {title}. Pressione Cancelar para ficar.",
+    "playNow": "Reproduzir agora",
+    "autoplay": "Reprodução automática",
+    "theatre": "Modo cinema",
+    "channel": "Canal: {name}",
+    "shortcutsHint": "Dica: Shift+N / Shift+P para próximo / anterior, T para modo cinema, ? para todos os atalhos."
+  },
+  "rating": {
+    "heading": "Avaliações e reações",
+    "yours": "Sua avaliação",
+    "stars": {
+      "one": "{count} estrela",
+      "other": "{count} estrelas"
+    },
+    "averageLong": "Média {avg} de 5 com {count} avaliações",
+    "reactions": "Reações",
+    "reactionsHint": "Avalie primeiro para adicionar uma reação.",
+    "reaction": {
+      "fire": "Fogo",
+      "laugh": "Engraçado",
+      "cry": "Triste",
+      "wow": "Uau",
+      "love": "Amei"
+    },
+    "distribution": "Distribuição",
+    "loginToRate": "Entre para avaliar",
+    "loginHint": "Membros com e-mail confirmado podem dar de 1 a 5 estrelas e reagir.",
+    "remove": "Remover minha avaliação",
+    "saving": "Salvando sua avaliação…",
+    "saved": "Avaliação salva.",
+    "removed": "Avaliação removida.",
+    "failed": "Não foi possível salvar sua avaliação: {message}"
+  },
+  "auth": {
+    "email": "E-mail",
+    "password": "Senha",
+    "newPassword": "Nova senha",
+    "confirmPassword": "Repita a nova senha",
+    "displayName": "Nome de exibição",
+    "show": "Mostrar",
+    "hide": "Ocultar",
+    "showPassword": "Mostrar senha",
+    "hidePassword": "Ocultar senha",
+    "resend": "Reenviar e-mail de confirmação",
+    "resent": "Se essa conta estiver aguardando confirmação, enviamos um novo link.",
+    "errors": {
+      "summary": {
+        "one": "Corrija {count} campo.",
+        "other": "Corrija {count} campos."
+      },
+      "email": "Digite um e-mail válido.",
+      "displayName": "O nome de exibição deve ter de 2 a 30 caracteres.",
+      "passwordLength": "A senha deve ter pelo menos {min} caracteres.",
+      "consent": "Você precisa aceitar o aviso de privacidade para criar uma conta.",
+      "mismatch": "As senhas não coincidem."
+    },
+    "login": {
+      "title": "Entrar",
+      "subtitle": "Que bom te ver! Avalie episódios e guarde suas reações.",
+      "submit": "Entrar",
+      "forgot": "Esqueceu a senha?",
+      "noAccount": "Novo por aqui?",
+      "createAccount": "Crie uma conta",
+      "notVerified": "Seu e-mail ainda não foi confirmado. Procure o link na sua caixa de entrada ou peça um novo.",
+      "already": "Você entrou como {name}"
+    },
+    "register": {
+      "title": "Crie sua conta",
+      "subtitle": "Grátis. Só um e-mail, um nome de exibição e uma senha.",
+      "submit": "Criar conta",
+      "displayNameHint": "De 2 a 30 caracteres. Aparece no menu da sua conta.",
+      "passwordHint": "Pelo menos {min} caracteres. Uma frase curta funciona bem.",
+      "consentBefore": "Li e aceito o",
+      "consentLink": "aviso de privacidade",
+      "consentAfter": ".",
+      "haveAccount": "Já tem uma conta?"
+    },
+    "checkEmail": {
+      "title": "Confira seu e-mail",
+      "text": "Enviamos um link de confirmação para {email}. Abra-o para ativar sua conta (vale por 24 horas).",
+      "textNoEmail": "Enviamos um link de confirmação. Abra-o para ativar sua conta (vale por 24 horas).",
+      "spam": "Não chegou? Veja a pasta de spam ou reenvie o link. Contas não confirmadas são excluídas após 7 dias."
+    },
+    "verify": {
+      "title": "Confirmando seu e-mail",
+      "working": "Um momento, confirmando seu link…",
+      "invalid": "Este link de confirmação é inválido, já foi usado ou expirou.",
+      "missing": "Este link está sem o token. Abra novamente o link do e-mail.",
+      "requestNew": "Receber um novo link"
+    },
+    "forgot": {
+      "title": "Esqueceu a senha?",
+      "text": "Digite o e-mail da sua conta e enviaremos um link para escolher uma nova senha. O link vale por 1 hora.",
+      "submit": "Enviar link",
+      "sent": "Se existir uma conta com esse e-mail, o link já está a caminho."
+    },
+    "reset": {
+      "title": "Escolha uma nova senha",
+      "submit": "Salvar nova senha",
+      "invalid": "Este link de redefinição é inválido, já foi usado ou expirou.",
+      "missing": "Este link está sem o token.",
+      "requestNew": "Pedir um novo link"
+    }
+  },
+  "password": {
+    "strengthLabel": "força: {value}",
+    "strength": {
+      "empty": "vazia",
+      "weak": "fraca",
+      "fair": "razoável",
+      "good": "boa",
+      "strong": "forte"
+    }
+  },
+  "account": {
+    "title": "Minha conta",
+    "profile": "Perfil",
+    "saveName": "Salvar nome",
+    "nameSaved": "Nome de exibição salvo.",
+    "password": "Senha",
+    "passwordText": "Alterar a senha desconecta todos os outros dispositivos.",
+    "currentPassword": "Senha atual",
+    "changePassword": "Alterar senha",
+    "passwordChanged": "Senha alterada. Os outros dispositivos foram desconectados.",
+    "sessions": "Sessões",
+    "sessionsText": "Perdeu um aparelho ou usou um computador compartilhado? Saia de todos os lugares, inclusive daqui.",
+    "signOutEverywhere": "Sair de todos os dispositivos",
+    "data": "Seus dados",
+    "exportText": "Baixe tudo o que guardamos sobre você (sua conta e todas as avaliações) em um arquivo JSON.",
+    "export": "Baixar meus dados",
+    "deleteTitle": "Excluir conta",
+    "deleteText": "Exclui sua conta, suas sessões e todas as suas avaliações na hora. Não dá para desfazer.",
+    "deleteButton": "Excluir minha conta",
+    "deleteConfirmTitle": "Excluir sua conta?",
+    "deleteConfirmText": "Sua conta, sessões e avaliações serão apagadas para sempre. Digite sua senha para confirmar.",
+    "passwordConfirm": "Sua senha",
+    "device": "Neste dispositivo",
+    "deviceText": "Histórico, tema, idioma e preferências do player ficam só neste navegador. Nós nunca os recebemos.",
+    "historyCount": {
+      "one": "{count} vídeo no seu histórico.",
+      "other": "{count} vídeos no seu histórico."
+    },
+    "clearHistory": "Limpar histórico",
+    "clearHistoryText": "Isso apaga todas as posições salvas e marcas ✓ deste navegador.",
+    "clearConfirm": "Limpar",
+    "historyCleared": "Histórico apagado.",
+    "loggedOutTitle": "Você não entrou na sua conta",
+    "loggedOutText": "Entre para alterar seu perfil, baixar seus dados ou excluir sua conta."
+  },
+  "notFound": {
+    "title": "Página não encontrada",
+    "text": "Esta página não existe (mais). Ela pode ter mudado de lugar ou o link está errado.",
+    "home": "Voltar ao início"
+  },
+  "error": {
+    "title": "Algo quebrou",
+    "text": "Aconteceu um erro inesperado ao mostrar esta página.",
+    "reload": "Recarregar página"
+  },
+  "privacy": {
+    "kicker": "LGPD / RGPD",
+    "title": "Aviso de privacidade",
+    "lead": "Guardamos o mínimo possível sobre você, explicamos exatamente o quê e por quê, e você pode levar ou apagar seus dados quando quiser.",
+    "updated": "Última atualização: novembro de 2026",
+    "toc": "Nesta página",
+    "short": {
+      "title": "Resumo",
+      "p1": "Navegar e assistir não exige conta. A conta só é necessária para avaliar e reagir.",
+      "p2": "Para uma conta guardamos seu e-mail, nome de exibição, a senha embaralhada (hash) e quando você aceitou este aviso.",
+      "p3": "Sem analytics, sem anúncios, sem rastreadores, sem endereços IP. Um único cookie essencial mantém você conectado.",
+      "p4": "Seu progresso nunca sai do seu navegador.",
+      "p5": "Baixe seus dados ou exclua sua conta você mesmo, a qualquer momento, em “Minha conta”."
+    },
+    "keep": {
+      "title": "O que guardamos, por que e por quanto tempo",
+      "intro": "Isto é tudo o que guardamos no nosso servidor relacionado a você:",
+      "colWhat": "Dado",
+      "colWhy": "Por quê",
+      "colHowLong": "Guardado até",
+      "users": {
+        "name": "Sua conta",
+        "what": "E-mail, nome de exibição, hash da senha (scrypt), data em que você aceitou o aviso de privacidade",
+        "why": "Para você entrar, mostrar seu nome no menu da conta e comprovar seu consentimento",
+        "until": "Você excluir sua conta. Contas nunca confirmadas são excluídas automaticamente após 7 dias."
+      },
+      "sessions": {
+        "name": "Sessões de login",
+        "what": "Uma impressão digital SHA-256 do token da sessão, seu id de usuário, data de expiração",
+        "why": "Para manter você conectado",
+        "until": "Expiração (30 dias) — removidas automaticamente; ou quando você sai / sai de todos os dispositivos"
+      },
+      "tokens": {
+        "name": "Links por e-mail",
+        "what": "Uma impressão digital SHA-256 do token do link, seu id de usuário, data de expiração",
+        "why": "Para confirmar seu e-mail ou redefinir sua senha",
+        "until": "Usado ou expirado (24 horas para confirmar, 1 hora para redefinir) — removidos automaticamente"
+      },
+      "ratings": {
+        "name": "Avaliações",
+        "what": "Seu id de usuário, o vídeo, sua nota (1–5) e a reação opcional",
+        "why": "O recurso de avaliações e reações",
+        "until": "Você remover a avaliação ou excluir sua conta"
+      },
+      "activity": {
+        "name": "Atividade de avaliações (não é dado pessoal)",
+        "what": "Totais diários anônimos por vídeo (número de avaliações, soma das notas) — sem id de usuário",
+        "why": "Para mostrar o que está em alta",
+        "until": "30 dias"
+      }
+    },
+    "never": "Não guardamos endereços IP, user agents do navegador, analytics, IDs de publicidade nem rastreadores de terceiros.",
+    "device": {
+      "title": "Guardado só no seu dispositivo",
+      "intro": "Algumas coisas ficam no localStorage do seu navegador. Elas nunca chegam ao nosso servidor:",
+      "progress": "Progresso (chave crwn:progress:v1): para até 200 vídeos — a posição, a duração, quando você assistiu pela última vez e o link, título e miniatura do episódio, para mostrar “Continuar em…”, marcas ✓ e “Continuar assistindo”.",
+      "prefs": "Preferências: tema (claro/escuro), idioma, “Reprodução automática” e “Sempre carregar o YouTube”.",
+      "clear": "Você pode limpar seu histórico a qualquer momento, mesmo sem conta:",
+      "clearLink": "Minha conta → Neste dispositivo"
+    },
+    "cookies": {
+      "title": "Cookies",
+      "p1": "Usamos um único cookie, sid. Ele é estritamente necessário: só existe enquanto você está conectado, não pode ser lido por scripts (httpOnly), só é enviado a este site (SameSite=Lax) e expira em 30 dias.",
+      "p2": "Por ser essencial a um serviço que você pediu, ele não precisa de banner de consentimento. Não usamos cookies de analytics, publicidade ou redes sociais."
+    },
+    "youtube": {
+      "title": "Vídeos e miniaturas do YouTube",
+      "p1": "Cada episódio é um vídeo do YouTube. As miniaturas são carregadas do servidor de imagens do YouTube (i.ytimg.com), então o Google pode ver seu endereço IP quando elas carregam.",
+      "p2": "O player do YouTube só é carregado depois que você aperta play (ou se ativar “Sempre carregar o YouTube”). Ele usa o domínio de privacidade aprimorada youtube-nocookie.com, mas quando o vídeo toca vale a política de privacidade do Google para o que acontece dentro do player.",
+      "p3": "Se preferir, use “Assistir no YouTube” para abrir o vídeo direto no youtube.com."
+    },
+    "email": {
+      "title": "E-mails",
+      "p1": "Só enviamos e-mails necessários: o link de confirmação, links de redefinição de senha e um aviso quando sua senha muda. O idioma escolhido é usado só para escrever aquele e-mail e não é guardado."
+    },
+    "basis": {
+      "title": "Base legal",
+      "contract": "Oferecer sua conta, login e avaliações: execução de contrato (LGPD art. 7º, V; RGPD art. 6(1)(b)).",
+      "consent": "Registrar que você aceitou este aviso: para comprovar a conformidade (LGPD art. 8º, §2º; RGPD art. 7(1)).",
+      "legit": "Medidas de segurança como limite de tentativas e tokens com hash: legítimo interesse em manter as contas seguras (LGPD art. 7º, IX; RGPD art. 6(1)(f))."
+    },
+    "rights": {
+      "title": "Seus direitos",
+      "intro": "Pela LGPD e pelo RGPD (GDPR) você pode:",
+      "cta": "Ir para Minha conta",
+      "access": {
+        "name": "Acesso e portabilidade",
+        "how": "“Baixar meus dados” em Minha conta entrega tudo o que guardamos sobre você em um arquivo JSON."
+      },
+      "rectify": {
+        "name": "Correção",
+        "how": "Altere seu nome de exibição em Minha conta. Para trocar o e-mail, fale com a gente."
+      },
+      "erase": {
+        "name": "Eliminação",
+        "how": "“Excluir minha conta” apaga sua conta, sessões e avaliações na hora."
+      },
+      "object": {
+        "name": "Oposição e limitação",
+        "how": "Fale com a gente e responderemos em até 15 dias (LGPD) / um mês (RGPD)."
+      },
+      "complain": {
+        "name": "Reclamação",
+        "how": "Você pode reclamar à autoridade de proteção de dados — no Brasil a ANPD, na UE a autoridade do seu país."
+      }
+    },
+    "security": {
+      "title": "Segurança",
+      "p1": "Senhas são guardadas só como hashes scrypt; tokens de sessão e de e-mail só como impressões digitais SHA-256. O site é servido por HTTPS com uma Content Security Policy rígida. Alterar ou redefinir a senha desconecta seus outros dispositivos."
+    },
+    "contact": {
+      "title": "Contato",
+      "p1": "A equipe do Crwn Animes é a controladora dos dados. Para qualquer dúvida ou pedido sobre privacidade, escreva para o endereço de contato publicado pelo operador do site; nunca pedimos mais dados do que o necessário para responder."
+    }
+  },
+  "admin": {
+    "title": "Admin",
+    "subtitle": "Publique séries, adicione episódios do YouTube e mantenha o catálogo em ordem.",
+    "tabs": {
+      "series": "Séries",
+      "add": "Adicionar vídeo",
+      "bulk": "Em lote",
+      "pending": "Pendentes",
+      "published": "Publicados",
+      "broken": "Quebrados"
+    },
+    "status": {
+      "published": "Publicado",
+      "pending": "Pendente"
+    },
+    "auto": "Automático",
+    "open": "Abrir",
+    "refresh": "Atualizar",
+    "unclassified": "Ainda não classificado",
+    "chipsHint": "Pressione Enter ou vírgula para adicionar. Backspace remove o último.",
+    "scores": "Pontuação — anime {anime}, mangá {manga}",
+    "suggested": "número sugerido {n}",
+    "fields": {
+      "section": "Seção",
+      "series": "Série",
+      "season": "Temporada",
+      "number": "Número",
+      "title": "Título"
+    },
+    "series": {
+      "newTitle": "Nova série",
+      "editTitle": "Editar {name}",
+      "name": "Nome",
+      "slug": "Slug",
+      "slugHint": "Letras minúsculas, números e hífens. Deixe vazio para gerar a partir do nome.",
+      "synopsis": "Sinopse",
+      "aliases": "Apelidos (títulos alternativos)",
+      "cover": "URL da capa",
+      "coverPreview": "Prévia da capa",
+      "coverNone": "A prévia aparece aqui",
+      "create": "Criar série",
+      "nameRequired": "O nome é obrigatório.",
+      "created": "{name} criada.",
+      "updated": "{name} salva.",
+      "published": {
+        "one": "{count} vídeo pendente foi publicado.",
+        "other": "{count} vídeos pendentes foram publicados."
+      },
+      "deleted": "{name} excluída.",
+      "all": {
+        "one": "{count} série",
+        "other": "{count} séries"
+      },
+      "none": "Nenhuma série ainda.",
+      "deleteTitle": "Excluir {name}?",
+      "deleteText": "Isso exclui a série, todos os vídeos dela e as avaliações. Não dá para desfazer."
+    },
+    "add": {
+      "title": "Adicionar um vídeo",
+      "url": "Link ou ID do YouTube",
+      "urlHint": "Qualquer link do YouTube (watch, youtu.be, shorts, embed) ou o ID de 11 caracteres.",
+      "overrides": "Ajustes opcionais",
+      "overridesHint": "Deixe em Automático e o servidor classifica o vídeo pelo título.",
+      "submit": "Adicionar vídeo",
+      "adding": "Adicionando…",
+      "result": "Resultado",
+      "resultEmpty": "Adicione um link para ver como ele é classificado.",
+      "publishedMsg": "Publicado — encontrou seu lugar.",
+      "pendingMsg": "Pendente — precisa de uma ajuda. Corrija na aba Pendentes.",
+      "duplicate": "Este vídeo já foi adicionado. Aqui está ele:"
+    },
+    "bulk": {
+      "title": "Adicionar em lote",
+      "links": "Links",
+      "hint": "Cole até 50 links ou IDs do YouTube — um por linha, ou qualquer texto que os contenha. Duplicados são ignorados.",
+      "defaults": "Padrões para todos os links",
+      "preview": "Pré-visualizar",
+      "confirm": {
+        "one": "Confirmar e adicionar {count} vídeo",
+        "other": "Confirmar e adicionar {count} vídeos"
+      },
+      "previewTitle": {
+        "one": "Prévia — {count} link",
+        "other": "Prévia — {count} links"
+      },
+      "resultTitle": {
+        "one": "Concluído — {count} link",
+        "other": "Concluído — {count} links"
+      },
+      "previewCaption": "Prévia da importação em lote",
+      "resultCaption": "Resultado da importação em lote",
+      "input": "Vídeo",
+      "outcome": "Resultado",
+      "placement": "Destino",
+      "details": "Detalhes",
+      "noLinks": "Nenhum link do YouTube encontrado nesse texto.",
+      "outcomes": {
+        "created": "Criado",
+        "would-create": "Será criado",
+        "duplicate": "Já adicionado",
+        "invalid": "Inválido",
+        "unavailable": "Indisponível",
+        "error": "Erro"
+      }
+    },
+    "videos": {
+      "pendingTitle": {
+        "one": "{count} vídeo pendente",
+        "other": "{count} vídeos pendentes"
+      },
+      "publishedTitle": {
+        "one": "{count} vídeo publicado",
+        "other": "{count} vídeos publicados"
+      },
+      "pendingHint": "Estes não puderam ser posicionados automaticamente. Corrija seção, série, temporada ou número e salve. Limpar um campo devolve a decisão ao classificador.",
+      "publishedHint": "Tudo o que está no ar. Abra Editar para mover um vídeo ou corrigir o número.",
+      "pendingEmpty": "Nada pendente. 🎉",
+      "publishedEmpty": "Nada publicado ainda.",
+      "editLabel": "Corrigir {title}",
+      "saveFix": "Salvar",
+      "saved": "{title} salvo.",
+      "nowPublished": "{title} publicado em {route}.",
+      "nowPending": "{title} voltou a ficar pendente.",
+      "deleted": "{title} excluído.",
+      "deleteTitle": "Excluir este vídeo?",
+      "deleteText": "“{title}” e suas avaliações serão excluídos."
+    },
+    "broken": {
+      "title": {
+        "one": "{count} vídeo quebrado",
+        "other": "{count} vídeos quebrados"
+      },
+      "hint": "Vídeos que o YouTube informa como removidos, privados ou bloqueados. O público os vê acinzentados. Troque o link para manter a rota e as avaliações do episódio.",
+      "run": "Verificar agora",
+      "checking": "Verificando todos os vídeos…",
+      "checked": {
+        "one": "{checked} vídeos verificados — {count} indisponível.",
+        "other": "{checked} vídeos verificados — {count} indisponíveis."
+      },
+      "none": "Nenhum vídeo quebrado. 👌",
+      "newUrl": "Novo link do YouTube",
+      "replace": "Trocar",
+      "replaced": "Link de {title} trocado."
+    }
+  }
+}
