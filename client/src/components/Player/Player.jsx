@@ -53,7 +53,6 @@ export function Player({ video, autoStart = false, onEnded, next, nextLabel }) {
       timer = null;
     };
 
-    setPhase("loading");
     loadYouTubeApi()
       .then((YT) => {
         if (cancelled || !mount) return;

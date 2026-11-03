@@ -2,7 +2,8 @@ import { useId, useState } from "react";
 import { Link } from "react-router";
 import { adminApi } from "../../api/client.js";
 import { useT } from "../../i18n/useT.js";
-import { ErrorText, numOrUndef, SectionSelect, SeriesSelect } from "./shared.jsx";
+import { numOrUndef } from "../../lib/numbers.js";
+import { ErrorText, SectionSelect, SeriesSelect } from "./shared.jsx";
 import styles from "./Admin.module.css";
 
 function rowRoute(row) {

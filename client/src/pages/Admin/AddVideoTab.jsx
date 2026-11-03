@@ -2,7 +2,8 @@ import { useState } from "react";
 import { adminApi } from "../../api/client.js";
 import { TextField } from "../../components/Form/TextField.jsx";
 import { useT } from "../../i18n/useT.js";
-import { ErrorText, numOrUndef, Reasons, SectionSelect, SeriesSelect, VideoSummary } from "./shared.jsx";
+import { numOrUndef } from "../../lib/numbers.js";
+import { ErrorText, Reasons, SectionSelect, SeriesSelect, VideoSummary } from "./shared.jsx";
 import styles from "./Admin.module.css";
 
 const EMPTY = { url: "", title: "", section: "", seriesSlug: "", season: "", number: "" };

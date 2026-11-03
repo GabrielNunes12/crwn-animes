@@ -67,7 +67,7 @@ export function Component() {
             </tbody>
           </table>
         </div>
-        <p>{t("privacy.keep.never")}</p>
+        <p>{t("privacy.never")}</p>
       </section>
 
       <section id="device" aria-labelledby="device-h">

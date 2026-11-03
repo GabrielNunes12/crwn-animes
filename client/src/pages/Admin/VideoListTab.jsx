@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { adminApi } from "../../api/client.js";
 import { ConfirmDialog } from "../../components/ConfirmDialog/ConfirmDialog.jsx";
@@ -17,18 +17,23 @@ export function VideoListTab({ status, series }) {
   const [toDelete, setToDelete] = useState(null);
   const [deleteState, setDeleteState] = useState({ busy: false, error: null });
 
-  const load = useCallback(async () => {
-    try {
-      setVideos(await adminApi.videos({ status }));
-      setError(null);
-    } catch (err) {
-      setError(err);
-    }
-  }, [status]);
+  const [version, setVersion] = useState(0);
+  const load = () => setVersion((v) => v + 1);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    let alive = true;
+    adminApi
+      .videos({ status })
+      .then((list) => {
+        if (!alive) return;
+        setVideos(list);
+        setError(null);
+      })
+      .catch((err) => alive && setError(err));
+    return () => {
+      alive = false;
+    };
+  }, [status, version]);
 
   function onSaved(updated) {
     if (updated.status !== status) {

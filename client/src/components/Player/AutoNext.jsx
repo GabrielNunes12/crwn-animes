@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useT } from "../../i18n/useT.js";
 import styles from "./Player.module.css";
 
-export const AUTO_NEXT_SECONDS = 10;
+const AUTO_NEXT_SECONDS = 10;
 
 /** "Up next in 10 s" countdown with Cancel / Play now. Calls onPlay at 0. */
 export function AutoNext({ title, seconds = AUTO_NEXT_SECONDS, onPlay, onCancel }) {

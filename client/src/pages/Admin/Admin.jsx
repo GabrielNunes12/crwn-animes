@@ -23,22 +23,30 @@ export function Component() {
   const [error, setError] = useState(null);
   useTitle(t("admin.title"));
 
-  const reloadSeries = useCallback(async () => {
-    try {
-      setSeries(await adminApi.series());
-      setError(null);
-    } catch (err) {
-      setError(err);
-    }
-  }, []);
+  const [seriesVersion, setSeriesVersion] = useState(0);
+  const reloadSeries = useCallback(() => setSeriesVersion((v) => v + 1), []);
 
   useEffect(() => {
-    reloadSeries();
+    let alive = true;
+    adminApi
+      .series()
+      .then((list) => {
+        if (!alive) return;
+        setSeries(list);
+        setError(null);
+      })
+      .catch((err) => alive && setError(err));
+    return () => {
+      alive = false;
+    };
+  }, [seriesVersion]);
+
+  useEffect(() => {
     catalogApi
       .genres()
       .then(setGenres)
       .catch(() => {});
-  }, [reloadSeries]);
+  }, [seriesVersion]);
 
   return (
     <div className="container" style={{ paddingBlock: "var(--space-6)" }}>

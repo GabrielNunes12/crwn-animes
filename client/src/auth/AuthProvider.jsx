@@ -20,8 +20,16 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    let alive = true;
+    authApi
+      .me()
+      .then(({ user: me }) => alive && setUser(me ?? null))
+      .catch(() => alive && setUser(null))
+      .finally(() => alive && setStatus("ready"));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const login = useCallback(async (email, password) => {
     const { user: me } = await authApi.login(email, password);

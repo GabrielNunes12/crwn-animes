@@ -18,7 +18,7 @@ export default defineConfig([
     rules: {
       "no-unused-vars": ["error", { varsIgnorePattern: "^[A-Z_]", argsIgnorePattern: "^_" }],
       // Route modules export `loader` next to `Component` (React Router lazy routes).
-      "react-refresh/only-export-components": ["warn", { allowExportNames: ["loader", "Component", "ErrorBoundary"] }],
+      "react-refresh/only-export-components": ["warn", { allowExportNames: ["loader"] }],
     },
   },
   {

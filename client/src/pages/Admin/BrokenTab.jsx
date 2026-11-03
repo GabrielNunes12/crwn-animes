@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { adminApi } from "../../api/client.js";
 import { CardGridSkeleton } from "../../components/Skeleton/Skeleton.jsx";
 import { useT } from "../../i18n/useT.js";
@@ -42,18 +42,16 @@ export function BrokenTab() {
   const [error, setError] = useState(null);
   const [check, setCheck] = useState({ busy: false, message: "", error: null });
 
-  const load = useCallback(async () => {
-    try {
-      setVideos(await adminApi.videos({ availability: "unavailable" }));
-      setError(null);
-    } catch (err) {
-      setError(err);
-    }
-  }, []);
-
   useEffect(() => {
-    load();
-  }, [load]);
+    let alive = true;
+    adminApi
+      .videos({ availability: "unavailable" })
+      .then((list) => alive && setVideos(list))
+      .catch((err) => alive && setError(err));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   async function runCheck() {
     setCheck({ busy: true, message: "", error: null });

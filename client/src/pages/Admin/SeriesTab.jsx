@@ -63,7 +63,7 @@ export function SeriesTab({ series, genres, reloadSeries }) {
         (published.length ? ` ${t("admin.series.published", { count: published.length })}` : "");
       setState({ busy: false, error: null, message });
       reset();
-      await reloadSeries();
+      reloadSeries();
     } catch (err) {
       setState({ busy: false, error: err, message: "" });
     }
@@ -77,7 +77,7 @@ export function SeriesTab({ series, genres, reloadSeries }) {
       setToDelete(null);
       setDeleteState({ busy: false, error: null });
       setState({ busy: false, error: null, message: t("admin.series.deleted", { name: toDelete.name }) });
-      await reloadSeries();
+      reloadSeries();
     } catch (err) {
       setDeleteState({ busy: false, error: err });
     }
