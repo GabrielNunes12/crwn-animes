@@ -87,17 +87,40 @@ export function detectSection(normalizedTitle) {
 }
 
 /**
+ * The catalog, prepared once for many classify() calls: every name and alias
+ * normalised (`needles`), and an index from a needle's first word to the
+ * needles, so matching a title costs O(words in the title), not O(series ×
+ * aliases). classify() and matchSeries() also accept a plain series array.
+ */
+export function prepareCatalog(seriesList) {
+  if (seriesList?.prepared) return seriesList;
+  const series = (seriesList ?? []).map((s) => ({
+    ...s,
+    needles: [s.name, ...(s.aliases ?? [])].map(normalize).filter((needle) => needle.trim() !== ""),
+  }));
+  const byFirstWord = new Map();
+  for (const entry of series) {
+    for (const needle of new Set(entry.needles)) {
+      const first = needle.slice(1, needle.indexOf(" ", 1));
+      if (!byFirstWord.has(first)) byFirstWord.set(first, []);
+      byFirstWord.get(first).push({ series: entry, needle });
+    }
+  }
+  return { prepared: true, series, byFirstWord };
+}
+
+/**
  * Finds the catalog series named in the title. The longest matching name or
  * alias wins, so "Naruto Shippuden" beats "Naruto". Equal-length matches for
  * two different series are ambiguous and return null.
  */
 export function matchSeries(normalizedTitle, seriesList) {
+  const catalog = prepareCatalog(seriesList);
   let best = null;
   let ambiguous = false;
-  for (const series of seriesList) {
-    for (const name of [series.name, ...(series.aliases ?? [])]) {
-      const needle = normalize(name);
-      if (needle.trim() === "" || !normalizedTitle.includes(needle)) continue;
+  for (const word of new Set(normalizedTitle.trim().split(" "))) {
+    for (const { series, needle } of catalog.byFirstWord.get(word) ?? []) {
+      if (!normalizedTitle.includes(needle)) continue;
       if (!best || needle.length > best.needle.length) {
         best = { series, needle };
         ambiguous = false;
@@ -168,6 +191,7 @@ export function extractNumber(rawTitle, normalizedRemainder, section) {
  *          for sure; anything else is "pending" and waits for an admin.
  */
 export function classify(info, seriesList, overrides = {}) {
+  const catalog = prepareCatalog(seriesList);
   const text = normalize(info.title);
   const reasons = [];
 
@@ -186,10 +210,10 @@ export function classify(info, seriesList, overrides = {}) {
   let series = null;
   let remainder = text;
   if (overrides.seriesSlug) {
-    series = seriesList.find((s) => s.slug === overrides.seriesSlug) ?? null;
+    series = catalog.series.find((s) => s.slug === overrides.seriesSlug) ?? null;
     reasons.push(series ? `series set by admin: ${series.name}` : `admin picked unknown series "${overrides.seriesSlug}"`);
   } else {
-    const match = matchSeries(text, seriesList);
+    const match = matchSeries(text, catalog);
     if (match) {
       series = match.series;
       reasons.push(`title names the series "${series.name}"`);
@@ -198,10 +222,7 @@ export function classify(info, seriesList, overrides = {}) {
     }
   }
   if (series) {
-    for (const name of [series.name, ...(series.aliases ?? [])]) {
-      const needle = normalize(name);
-      if (needle.trim()) remainder = remainder.split(needle).join(" ");
-    }
+    for (const needle of series.needles) remainder = remainder.split(needle).join(" ");
   }
 
   // 3. Season. Manga chapters have no seasons (/manga/:slug/chapter/:n), so

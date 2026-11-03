@@ -185,11 +185,6 @@ describe("1. ReDoS / CPU exhaustion", () => {
 
   test(
     "bulk add: a 20 KB paste is tokenised in < 100 ms, whatever its shape",
-    {
-      todo:
-        "src/routes/admin.js:65 collectBulkInputs strips trailing punctuation with /[>)\"'\\].]+$/g, which backtracks O(n²) " +
-        "on one long token of '.' or ')' etc.: ~0.5 s of blocked event loop per 20 KB request (admin only).",
-    },
     () =>
       withServer({}, async (srv) => {
         const { client: admin } = quickUser(srv, "admin@example.com", "admin");
@@ -264,13 +259,6 @@ describe("1. ReDoS / CPU exhaustion", () => {
 
   test(
     "adding or editing a series re-classifies the pending queue in < 150 ms (300 pending × 100 series × 20 aliases)",
-    {
-      todo:
-        "src/videoService.js:120 reclassifyPending runs place() per pending video, and place() (videoService.js:30) re-reads " +
-        "repo.listSeries() and classify() re-normalizes every name/alias each time: O(pending × series × aliases) of " +
-        "synchronous work on EVERY series POST/PATCH (even a synopsis edit). ~0.7 s here, ~22 s at 2000 × 200 × 50, " +
-        "blocking every other request.",
-    },
     () =>
       withServer({}, async (srv) => {
         const { repo } = srv.services;
@@ -554,12 +542,6 @@ describe("2. races between concurrent requests", () => {
 
   test(
     "a password change also ends logins that were in flight with the old password",
-    {
-      todo:
-        "src/authService.js:154-166 login() verifies against the row read BEFORE its ~0.4 s scrypt and then creates a session " +
-        "(routes/auth.js:18) without re-checking password_hash; a change committed meanwhile (authService.js:199-200) does not " +
-        "kill that session. An attacker looping logins with a phished password keeps access after the victim changes it.",
-    },
     () =>
       withServer({}, async (srv) => {
         const T = await scryptMs();
@@ -583,11 +565,6 @@ describe("2. races between concurrent requests", () => {
 
   test(
     "a password reset also ends logins that were in flight with the old password",
-    {
-      todo:
-        "same root cause as above (authService.js:154-166 + 177-187): a login that read the row before resetPassword committed " +
-        "creates its session after deleteSessionsOfUser; the reset e-mail still says every other session was signed out.",
-    },
     () =>
       withServer({}, async (srv) => {
         const T = await scryptMs();
@@ -614,12 +591,6 @@ describe("2. races between concurrent requests", () => {
 
   test(
     "an old-password login on a legacy-hash account cannot undo a password change or reset",
-    {
-      todo:
-        "src/authService.js:165 the rehash-on-login (needsRehash) writes hashPassword(OLD password) after its own scrypt " +
-        "without checking the hash it verified is still current: a login racing POST /me/password or reset-password " +
-        "overwrites the new password with the old one (old works, new fails) and keeps its session.",
-    },
     () =>
       withServer({}, async (srv) => {
         const outcomes = [];
@@ -659,11 +630,6 @@ describe("2. races between concurrent requests", () => {
 
   test(
     "a login racing the deletion of its account answers 401 (or 200 if it finished first), never 500",
-    {
-      todo:
-        "src/routes/auth.js:57 + authService.js:68: login verifies the password (~0.4 s), the account is deleted meanwhile, " +
-        "then INSERT INTO sessions fails with SQLITE_CONSTRAINT_FOREIGNKEY -> 500 INTERNAL_ERROR (and a stack trace in the log).",
-    },
     (t) =>
       withServer({}, async (srv) => {
         const errors = t.mock.method(console, "error", () => {});
@@ -798,12 +764,6 @@ describe("3. business-logic abuse", () => {
 
   test(
     "concurrent health checks are coalesced: N parallel runs cost at most one oEmbed lookup per video",
-    {
-      todo:
-        "src/routes/admin.js:177 + videoService.js:200 healthCheck() has no single-flight: every POST /api/admin/videos/health-check " +
-        "re-queries oEmbed for EVERY video (8 parallel calls = 8 x 20 lookups here), independent of the daily job's own " +
-        "`running` guard (retention.js:44). With 10k videos one call is 10k outbound requests held open for minutes.",
-    },
     () =>
       withServer({}, async (srv) => {
         const { client: admin } = quickUser(srv, "admin@example.com", "admin");
