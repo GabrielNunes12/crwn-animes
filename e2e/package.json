@@ -1,0 +1,14 @@
+{
+  "name": "crwn-animes-e2e",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end tests (Playwright) for Crwn Animes: starts the API and the Vite client, drives Chromium.",
+  "scripts": {
+    "test": "playwright test",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@playwright/test": "^1.64.1"
+  }
+}

@@ -1,0 +1,219 @@
+@layer components {
+  .panel {
+    container-type: inline-size;
+    display: grid;
+    gap: var(--space-4);
+    padding: var(--space-5);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+  }
+  .head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+  .heading {
+    font-size: var(--step-1);
+  }
+  .average {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+  }
+  .big {
+    font-family: var(--font-heading);
+    font-size: var(--step-3);
+    font-weight: 750;
+    line-height: 1;
+  }
+  .outOf {
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .loading {
+    display: grid;
+    gap: var(--space-3);
+  }
+  .grid {
+    display: grid;
+    gap: var(--space-5);
+  }
+  @container (inline-size > 34rem) {
+    .grid {
+      grid-template-columns: 1.2fr 1fr;
+    }
+  }
+  .mine {
+    display: grid;
+    gap: var(--space-4);
+    align-content: start;
+    justify-items: start;
+  }
+  .stars {
+    border: 0;
+    padding: 0;
+  }
+  .legend {
+    margin-block-end: var(--space-2);
+    font-weight: 600;
+    font-size: var(--step--1);
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .starRow {
+    display: flex;
+    gap: 0.15rem;
+  }
+  .star {
+    display: grid;
+    place-items: center;
+    inline-size: 2.75rem;
+    block-size: 2.75rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--star-empty);
+    transition:
+      transform var(--dur-fast) var(--ease-spring),
+      color var(--dur-fast);
+  }
+  /* Empty = outline, filled = solid: shape differs, not only colour. */
+  .star svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linejoin: round;
+  }
+  .star[data-filled="true"] {
+    color: var(--star);
+  }
+  .star[data-filled="true"] svg {
+    fill: currentColor;
+  }
+  .star:hover {
+    transform: scale(1.18);
+  }
+  .star:active {
+    transform: scale(0.9);
+  }
+  .star:has(input:focus-visible) {
+    outline: 2px solid var(--secondary);
+    outline-offset: 1px;
+  }
+  .star:has(input:checked) svg {
+    filter: drop-shadow(0 0 6px color-mix(in oklch, var(--star) 60%, transparent));
+  }
+
+  .reactions {
+    display: grid;
+  }
+  .chipRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    padding: 0;
+    list-style: none;
+  }
+  .reaction,
+  .reactionStatic {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-block-size: 2.5rem;
+    padding: 0.25rem 0.8rem;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-pill);
+    background: var(--elevated);
+    font-weight: 600;
+  }
+  .reaction {
+    transition:
+      transform var(--dur-fast) var(--ease-spring),
+      border-color var(--dur-fast),
+      background-color var(--dur-fast);
+  }
+  .reaction:hover:not(:disabled) {
+    border-color: var(--primary);
+    transform: translateY(-2px);
+  }
+  .reaction:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .reaction[aria-pressed="true"] {
+    background: var(--primary-fill);
+    border-color: transparent;
+    color: var(--on-accent);
+    animation: pop 380ms var(--ease-spring);
+  }
+  .emoji {
+    font-size: 1.2rem;
+    line-height: 1;
+  }
+  .count {
+    font-variant-numeric: tabular-nums;
+  }
+  @keyframes pop {
+    0% {
+      transform: scale(1);
+    }
+    40% {
+      transform: scale(1.25);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  .loggedOut {
+    display: grid;
+    gap: var(--space-3);
+    justify-items: start;
+  }
+
+  .bars {
+    display: grid;
+    gap: 0.4rem;
+    padding: 0;
+  }
+  .bar {
+    display: grid;
+    grid-template-columns: 2.2rem 1fr 2.5rem;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--step--1);
+  }
+  .barLabel {
+    color: var(--muted);
+  }
+  .track {
+    block-size: 0.5rem;
+    border-radius: var(--radius-pill);
+    background: var(--elevated);
+    overflow: hidden;
+  }
+  .fill {
+    display: block;
+    block-size: 100%;
+    border-radius: inherit;
+    background: var(--gradient-brand);
+    transition: inline-size var(--dur-slow) var(--ease-out);
+  }
+  .barCount {
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+  }
+  .live {
+    min-block-size: 1.4em;
+    font-size: var(--step--1);
+    color: var(--muted);
+  }
+  .live[data-kind="ok"] {
+    color: var(--success);
+  }
+  .live[data-kind="error"] {
+    color: var(--danger);
+  }
+}

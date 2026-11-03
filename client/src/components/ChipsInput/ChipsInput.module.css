@@ -1,0 +1,58 @@
+@layer components {
+  .box {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 0.4rem 0.5rem;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--bg);
+  }
+  .box:focus-within {
+    border-color: var(--secondary);
+    box-shadow: var(--ring);
+  }
+  .list {
+    display: contents;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.15rem 0.2rem 0.15rem 0.65rem;
+    border-radius: var(--radius-pill);
+    background: var(--primary-soft);
+    border: 1px solid color-mix(in oklch, var(--primary) 40%, transparent);
+    font-size: var(--step--1);
+    animation: chip-in var(--dur) var(--ease-spring);
+  }
+  .x {
+    display: grid;
+    place-items: center;
+    inline-size: 1.6rem;
+    block-size: 1.6rem;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    line-height: 1;
+  }
+  .x:hover {
+    background: var(--danger);
+    color: var(--on-danger);
+  }
+  .input {
+    flex: 1 1 8rem;
+    min-inline-size: 6rem;
+    min-block-size: 2rem;
+    border: 0;
+    background: transparent;
+    outline: none;
+  }
+  @keyframes chip-in {
+    from {
+      scale: 0.6;
+      opacity: 0;
+    }
+  }
+}

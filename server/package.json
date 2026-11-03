@@ -1,0 +1,25 @@
+{
+  "name": "crwn-animes-server",
+  "version": "1.0.0",
+  "description": "API for Crwn Animes: stores YouTube videos by section (anime/manga), classifies them and routes them to the right series.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test",
+    "make-admin": "node src/scripts/make-admin.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.9",
+    "express": "^5.3.0",
+    "helmet": "^8.3.0",
+    "nodemailer": "^10.3.1"
+  },
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  }
+}

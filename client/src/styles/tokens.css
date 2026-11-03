@@ -1,0 +1,154 @@
+/*
+ * "Midnight Sakura" design tokens.
+ * Dark is the default; light applies via prefers-color-scheme (unless the
+ * user forced dark) or via the manual toggle (data-theme="light" on <html>).
+ */
+@layer tokens {
+  :root {
+    color-scheme: dark;
+
+    /* Brand hues */
+    --sakura: oklch(70.5% 0.204 0.3);        /* ≈ #ff5c9a */
+    --violet: oklch(60.6% 0.219 292.7);      /* ≈ #8b5cf6 */
+    --cyan: oklch(81.4% 0.127 206.6);        /* ≈ #3dd9eb */
+
+    /* Surfaces */
+    --bg: oklch(15.5% 0.019 283.9);          /* ≈ #0b0b14 */
+    --surface: oklch(20.5% 0.034 283);       /* ≈ #151526 */
+    --elevated: oklch(24.2% 0.042 282.8);    /* ≈ #1d1d33 */
+    --border: oklch(29.8% 0.049 283.1);      /* ≈ #2a2a45 */
+    --border-strong: oklch(38% 0.06 285);
+
+    /* Text */
+    --text: oklch(96.2% 0.012 296.4);        /* ≈ #f3f1fa */
+    --muted: oklch(70.5% 0.041 291.9);       /* ≈ #a09cb8 */
+
+    /* Roles */
+    /* --primary / --secondary are used for text, icons and borders (AA on --bg).
+       Filled accent surfaces (buttons, active chips) use --*-fill with the dark
+       --on-accent text in BOTH themes: white on #ff5c9a / #3dd9eb fails AA. */
+    --primary: var(--sakura);
+    --primary-strong: oklch(76% 0.18 2);
+    --secondary: var(--cyan);
+    --primary-fill: var(--sakura);
+    --primary-fill-hover: oklch(76% 0.18 2);
+    --secondary-fill: var(--cyan);
+    --on-accent: oklch(15.5% 0.019 283.9);   /* #0b0b14 */
+    --success-fill: oklch(77.3% 0.153 163.2);
+    --warning-fill: oklch(83.7% 0.164 84.4);
+    --success: oklch(77.3% 0.153 163.2);
+    --warning: oklch(83.7% 0.164 84.4);
+    --danger: oklch(71.1% 0.166 22.2);
+    --on-danger: oklch(15.5% 0.019 283.9);
+    --star: oklch(84% 0.16 84);
+    --star-empty: oklch(58% 0.05 288);   /* ≥ 3:1 on --surface (WCAG 1.4.11) */
+
+    /* Derived with color-mix() */
+    --primary-soft: color-mix(in oklch, var(--primary) 16%, transparent);
+    --secondary-soft: color-mix(in oklch, var(--secondary) 14%, transparent);
+    --danger-soft: color-mix(in oklch, var(--danger) 16%, transparent);
+    --success-soft: color-mix(in oklch, var(--success) 16%, transparent);
+    --warning-soft: color-mix(in oklch, var(--warning) 16%, transparent);
+    --glass: color-mix(in oklch, var(--bg) 72%, transparent);
+    --overlay: color-mix(in oklch, var(--bg) 60%, transparent);
+    --skeleton: color-mix(in oklch, var(--elevated) 90%, var(--text));
+    --skeleton-shine: color-mix(in oklch, var(--elevated) 70%, var(--text));
+
+    /* Gradients */
+    --gradient-brand: linear-gradient(120deg in oklch, var(--sakura), var(--violet) 55%, var(--cyan));
+    --gradient-text: linear-gradient(100deg in oklch, var(--sakura), var(--violet), var(--cyan));
+    --gradient-glow:
+      radial-gradient(60% 80% at 10% 0%, color-mix(in oklch, var(--sakura) 35%, transparent), transparent 70%),
+      radial-gradient(50% 60% at 90% 10%, color-mix(in oklch, var(--cyan) 25%, transparent), transparent 70%),
+      radial-gradient(55% 35% at 50% 55%, color-mix(in oklch, var(--violet) 22%, transparent), transparent 70%);
+
+    /* Shape & depth */
+    --radius-sm: 0.5rem;
+    --radius: 0.875rem;
+    --radius-lg: 1.25rem;
+    --radius-pill: 999px;
+    --shadow-sm: 0 1px 2px oklch(0% 0 0 / 0.3);
+    --shadow: 0 8px 24px -8px oklch(0% 0 0 / 0.55);
+    --shadow-lift: 0 18px 40px -14px color-mix(in oklch, var(--sakura) 40%, oklch(0% 0 0 / 0.6));
+    --ring: 0 0 0 3px color-mix(in oklch, var(--secondary) 75%, transparent);
+
+    /* Type */
+    --font-heading: "Outfit Variable", "Outfit", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-body: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --step--1: clamp(0.8rem, 0.78rem + 0.1vw, 0.875rem);
+    --step-0: clamp(0.95rem, 0.92rem + 0.15vw, 1.0625rem);
+    --step-1: clamp(1.15rem, 1.08rem + 0.35vw, 1.35rem);
+    --step-2: clamp(1.35rem, 1.2rem + 0.7vw, 1.8rem);
+    --step-3: clamp(1.7rem, 1.4rem + 1.4vw, 2.6rem);
+    --step-4: clamp(2.1rem, 1.6rem + 2.6vw, 3.8rem);
+
+    /* Space & layout */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.5rem;
+    --space-6: 2rem;
+    --space-7: 3rem;
+    --space-8: 4.5rem;
+    --gutter: clamp(1rem, 0.6rem + 2vw, 2rem);
+    --content-max: 78rem;
+    --header-h: 4rem;
+
+    /* Motion */
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --dur-fast: 150ms;
+    --dur: 260ms;
+    --dur-slow: 600ms;
+  }
+
+  /* Light theme: system preference (unless forced dark) or manual choice. */
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      color-scheme: light;
+      --bg: oklch(98.3% 0.009 299.2);
+      --surface: oklch(100% 0 0);
+      --elevated: oklch(95.5% 0.015 298.6);
+      --border: oklch(89.2% 0.028 297.3);
+      --border-strong: oklch(80% 0.04 297);
+      --text: oklch(22.5% 0.046 285.9);
+      --muted: oklch(47% 0.05 291.8);
+      --primary: oklch(57.6% 0.22 4.1);
+      --primary-strong: oklch(51% 0.2 4);
+      --secondary: oklch(50% 0.09 207.7);
+      --success: oklch(52% 0.13 163);
+      --warning: oklch(52% 0.13 70);
+      --danger: oklch(55% 0.2 25);
+      --on-danger: oklch(100% 0 0);
+      --star: oklch(62% 0.16 65);
+    --star-empty: oklch(60% 0.04 290);
+      --glass: color-mix(in oklch, var(--surface) 75%, transparent);
+      --shadow: 0 8px 24px -12px oklch(30% 0.05 290 / 0.25);
+      --shadow-lift: 0 18px 36px -16px color-mix(in oklch, var(--sakura) 45%, oklch(30% 0.05 290 / 0.35));
+    }
+  }
+
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: oklch(98.3% 0.009 299.2);
+    --surface: oklch(100% 0 0);
+    --elevated: oklch(95.5% 0.015 298.6);
+    --border: oklch(89.2% 0.028 297.3);
+    --border-strong: oklch(80% 0.04 297);
+    --text: oklch(22.5% 0.046 285.9);
+    --muted: oklch(47% 0.05 291.8);
+    --primary: oklch(57.6% 0.22 4.1);
+    --primary-strong: oklch(51% 0.2 4);
+    --secondary: oklch(50% 0.09 207.7);
+    --success: oklch(52% 0.13 163);
+    --warning: oklch(52% 0.13 70);
+    --danger: oklch(55% 0.2 25);
+    --on-danger: oklch(100% 0 0);
+    --star: oklch(62% 0.16 65);
+    --star-empty: oklch(60% 0.04 290);
+    --glass: color-mix(in oklch, var(--surface) 75%, transparent);
+    --shadow: 0 8px 24px -12px oklch(30% 0.05 290 / 0.25);
+    --shadow-lift: 0 18px 36px -16px color-mix(in oklch, var(--sakura) 45%, oklch(30% 0.05 290 / 0.35));
+  }
+}
