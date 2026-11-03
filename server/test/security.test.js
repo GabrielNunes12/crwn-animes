@@ -368,12 +368,15 @@ describe("11. static fallback", () => {
     fs.writeFileSync(path.join(dir, "index.html"), "<!doctype html><title>Crwn Animes</title>");
     try {
       await withServer({ config: { clientDist: dir } }, async (srv) => {
-        for (const p of ["/assets/missing-123.js", "/assets/sub/thing", "/robots.txt", "/favicon.ico", "/anime/x.map"]) {
+        for (const p of ["/assets/missing-123.js", "/assets/sub/thing", "/humans.txt", "/favicon.ico", "/anime/x.map"]) {
           const res = await srv.client().get(p);
           assert.equal(res.status, 404, p);
           assert.doesNotMatch(res.text, /Crwn Animes/, p);
         }
-        assert.equal((await srv.client().get("/anime/one-piece/episode/5")).status, 200);
+        assert.equal((await srv.client().get("/anime")).status, 200);
+        // v1.2: unknown episodes are 404 (with the SPA shell); robots.txt is served by the API.
+        assert.equal((await srv.client().get("/anime/one-piece/episode/5")).status, 404);
+        assert.equal((await srv.client().get("/robots.txt")).status, 200);
       });
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });

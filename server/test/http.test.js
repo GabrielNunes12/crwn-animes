@@ -95,12 +95,17 @@ describe("production: built client", () => {
     assert.equal(asset.status, 200);
     assert.equal(asset.headers.get("cache-control"), "public, max-age=31536000, immutable");
 
-    for (const p of ["/", "/anime/one-piece/episode/5", "/verify-email?token=abc"]) {
+    for (const p of ["/", "/anime", "/verify-email?token=abc"]) {
       const page = await srv.client().get(p);
       assert.equal(page.status, 200, p);
       assert.match(page.text, /Crwn Animes/);
       assert.equal(page.headers.get("cache-control"), "no-cache", p);
     }
+    // v1.2: an episode that does not exist is a real 404, still with the SPA shell.
+    const missing = await srv.client().get("/anime/one-piece/episode/5");
+    assert.equal(missing.status, 404);
+    assert.match(missing.text, /Página não encontrada · Crwn Animes/);
+    assert.equal(missing.headers.get("cache-control"), "no-cache");
     const api = await srv.client().get("/api/nothing");
     assert.equal(api.status, 404);
     assert.equal(api.body.error.code, "NOT_FOUND");

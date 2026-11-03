@@ -16,7 +16,16 @@ In development no SMTP server is needed: e-mails go to an in-memory outbox
 (`GET /api/dev/outbox`) and verification/reset links are printed to the console.
 With `NODE_ENV=production` the server refuses to start without `SMTP_HOST`.
 In production, if `../client/dist/index.html` exists the server also serves the
-built React app and falls back to `index.html` for client-side routes.
+built React app and falls back to `index.html` for client-side routes. That
+fallback is server-rendered for crawlers and link previews (`src/seo.js`): the
+static `<title>` is replaced by the page's title, description, canonical URL,
+Open Graph/Twitter tags and JSON-LD, read from the database (every value
+HTML-escaped; JSON-LD escapes `<` as `\u003c`). Unknown series/episodes answer
+**404** with the SPA shell, non-canonical watch URLs (`/episode/01`,
+`/season/1/episode/2`) **301** to the canonical route, and account/admin/search
+pages carry `noindex`. The template is cached and re-read when its mtime
+changes. `GET /sitemap.xml` and `GET /robots.txt` (absolute URLs from `APP_URL`)
+are served even without a built client.
 
 ## Scripts
 
@@ -24,7 +33,7 @@ built React app and falls back to `index.html` for client-side routes.
 |---|---|
 | `npm start` | Start the API (`src/index.js`). |
 | `npm run dev` | Same, with `node --watch`. |
-| `npm test` | All tests (`node --test`): classifier, auth, sessions, admin, ratings, catalog, GDPR, headers. In-memory DB, fake YouTube lookups. |
+| `npm test` | All tests (`node --test`): classifier, auth, sessions, admin, ratings, catalog, search, SEO/sitemap, GDPR, headers. In-memory DB, fake YouTube lookups, a temporary fake `client/dist` (`createApp({ config: { clientDist } })`). |
 | `npm run make-admin -- someone@example.com` | Promote an existing account to admin. |
 
 ## Environment
@@ -40,7 +49,10 @@ See [`.env.example`](.env.example) — each variable is documented there.
 - `src/routes/` — `auth`, `me`, `catalog`, `ratings`, `admin`, `dev`.
 - `src/*Service.js` — auth, ratings, videos; `src/mail.js` — e-mails (pt-BR + en).
 - `src/classifier.js` — works out section/series/season/number from a YouTube title.
-- `src/db.js` — schema + migrations (`PRAGMA user_version`); `src/retention.js` — cleanup and YouTube health-check jobs.
+- `src/search.js` — `series.search_text` (`|name|alias|…|`, each through `normalize()`: no accents, lower case),
+  kept up to date by the repository on create/patch; `GET /api/search` and `GET /api/:section/series?q=` match it with `instr()`.
+- `src/seo.js` — page resolution (200/301/404) + `<head>` rendering, sitemap and robots.txt.
+- `src/db.js` — schema + migrations (`PRAGMA user_version`; an entry is SQL or a JS function — migration 4 adds and backfills `search_text`); `src/retention.js` — cleanup and YouTube health-check jobs.
 
 ## Data we store and why
 

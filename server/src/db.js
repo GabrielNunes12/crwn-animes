@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
+import { searchText } from "./search.js";
 import { SEED_SERIES } from "./seed.js";
 
 // series: one row per franchise (One Piece), shared by both sections.
@@ -15,7 +16,8 @@ import { SEED_SERIES } from "./seed.js";
 //
 // Each entry in MIGRATIONS runs once, in order; PRAGMA user_version remembers
 // how many ran. Migration 1 is the original schema (IF NOT EXISTS, so a dev
-// database created before migrations existed upgrades cleanly).
+// database created before migrations existed upgrades cleanly). An entry is
+// SQL, or a function (db) => void for steps SQL cannot do alone.
 const MIGRATIONS = [
   // 1: catalog
   `
@@ -147,6 +149,23 @@ const MIGRATIONS = [
         '$[#]', 'its series was deleted; pick a new one'))
   WHERE status = 'published' AND (series_id IS NULL OR series_id NOT IN (SELECT id FROM series));
   `,
+
+  // 4: accent/case-insensitive search. search_text = normalize()d name + aliases
+  // (see src/search.js); normalize() strips accents, which SQLite cannot, so
+  // existing rows are filled in from JS.
+  (db) => {
+    db.exec("ALTER TABLE series ADD COLUMN search_text TEXT NOT NULL DEFAULT ''");
+    const update = db.prepare("UPDATE series SET search_text = ? WHERE id = ?");
+    for (const row of db.prepare("SELECT id, name, aliases FROM series").all()) {
+      let aliases = [];
+      try {
+        aliases = JSON.parse(row.aliases);
+      } catch {
+        // keep [] for a broken aliases value
+      }
+      update.run(searchText(row.name, Array.isArray(aliases) ? aliases : []), row.id);
+    }
+  },
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
@@ -159,7 +178,9 @@ function migrate(db) {
   try {
     for (let version = current; version < MIGRATIONS.length; version++) {
       db.transaction(() => {
-        db.exec(MIGRATIONS[version]);
+        const step = MIGRATIONS[version];
+        if (typeof step === "function") step(db);
+        else db.exec(step);
         db.pragma(`user_version = ${version + 1}`);
       })();
     }
@@ -174,11 +195,19 @@ function seed(db) {
   const { n } = db.prepare("SELECT COUNT(*) AS n FROM series").get();
   if (n > 0) return;
   const insert = db.prepare(
-    "INSERT INTO series (slug, name, synopsis, aliases, genres, cover_url) VALUES (?, ?, ?, ?, ?, ?)"
+    "INSERT INTO series (slug, name, synopsis, aliases, genres, cover_url, search_text) VALUES (?, ?, ?, ?, ?, ?, ?)"
   );
   db.transaction(() => {
     for (const s of SEED_SERIES) {
-      insert.run(s.slug, s.name, s.synopsis ?? null, JSON.stringify(s.aliases), JSON.stringify(s.genres), s.coverUrl);
+      insert.run(
+        s.slug,
+        s.name,
+        s.synopsis ?? null,
+        JSON.stringify(s.aliases),
+        JSON.stringify(s.genres),
+        s.coverUrl,
+        searchText(s.name, s.aliases)
+      );
     }
   })();
 }

@@ -11,6 +11,7 @@ import { noStore, requireJsonBody } from "./middleware/security.js";
 import { loadSession } from "./middleware/session.js";
 import { createRatingService } from "./ratingService.js";
 import { createRepository } from "./repository.js";
+import { createTemplate, renderPage, resolvePage, robotsTxt, sitemapXml } from "./seo.js";
 import { adminRoutes } from "./routes/admin.js";
 import { authRoutes } from "./routes/auth.js";
 import { catalogRoutes } from "./routes/catalog.js";
@@ -100,11 +101,24 @@ export function createApp({ db, config: overrides = {}, mailer, fetchVideoInfo =
     throw notFound("There is no API endpoint here.");
   });
 
+  // ---- crawlers (served with or without a built client) ----
+  app.get("/robots.txt", (req, res) => {
+    res.set("Cache-Control", "public, max-age=3600");
+    res.type("text/plain").send(robotsTxt(config.appUrl));
+  });
+  app.get("/sitemap.xml", (req, res) => {
+    res.set("Cache-Control", "public, max-age=3600");
+    res.type("application/xml").send(sitemapXml(repo, config.appUrl));
+  });
+
   // ---- built React app (production) ----
+  // config.clientDist defaults to ../client/dist; tests point it at a temp dir.
   const indexHtml = path.join(config.clientDist, "index.html");
   if (fs.existsSync(indexHtml)) {
+    const template = createTemplate(indexHtml);
     app.use(
       express.static(config.clientDist, {
+        index: false, // "/" goes through the SEO fallback below, like every other page
         setHeaders(res, file) {
           const relative = path.relative(config.clientDist, file).split(path.sep);
           if (relative[0] === "assets") res.set("Cache-Control", "public, max-age=31536000, immutable");
@@ -121,8 +135,14 @@ export function createApp({ db, config: overrides = {}, mailer, fetchVideoInfo =
         res.set("Cache-Control", "no-cache");
         return res.status(404).type("text/plain").send("Not found");
       }
+      // index.html with the page's <title>, meta, Open Graph and JSON-LD (src/seo.js).
       res.set("Cache-Control", "no-cache");
-      res.sendFile(indexHtml);
+      const page = resolvePage(repo, req.path);
+      if (page.status === 301) {
+        const query = req.originalUrl.indexOf("?");
+        return res.redirect(301, page.location + (query >= 0 ? req.originalUrl.slice(query) : ""));
+      }
+      res.status(page.status).type("html").send(renderPage(template(), page, config.appUrl));
     });
   }
 
