@@ -1,6 +1,6 @@
 // Journey 3: an admin builds a series, adds videos (auto-classified and
 // pending), fixes a pending one, edits the series, deletes a video and the series.
-import { test, expect, ADMIN_STATE, fakeYouTubeId } from "./fixtures.js";
+import { test, expect, ADMIN_STATE, fakeYouTubeId, listAll } from "./fixtures.js";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -13,6 +13,15 @@ test("admin: series CRUD, add videos, fix a pending one, delete video and series
   const tab = (name) => page.getByRole("tab", { name, exact: true });
   const panel = page.getByRole("tabpanel");
   const seriesRow = () => panel.getByRole("listitem").filter({ has: page.getByText("E2E Saga", { exact: true }) });
+  // Admin lists are paginated (20 per page, API v1.3) and other specs seed many
+  // series/videos in parallel: narrow each list with its search box first.
+  const search = async (label, q) => {
+    await panel.getByRole("searchbox", { name: label }).fill(q);
+    // The search bar's live results line ("1 resultado para “q”").
+    await expect(panel.locator('p.hint[aria-live="polite"]')).toHaveText(new RegExp(`^\\d+ resultados? para “${q}”$`));
+  };
+  const searchSeries = (q = "E2E Saga") => search("Buscar séries", q);
+  const searchVideos = (q) => search("Buscar vídeos por título ou série", q);
 
   await test.step("open the admin area from the header", async () => {
     await page.goto("/");
@@ -31,6 +40,7 @@ test("admin: series CRUD, add videos, fix a pending one, delete video and series
     await expect(page.getByRole("list", { name: "Apelidos (títulos alternativos)" }).getByRole("listitem")).toContainText(["Saga do Teste"]);
     await page.getByRole("button", { name: "Criar série" }).click();
     await expect(page.getByRole("status").filter({ hasText: "E2E Saga criada." })).toBeVisible();
+    await searchSeries();
     await expect(seriesRow()).toContainText("e2e-saga");
   });
 
@@ -64,6 +74,7 @@ test("admin: series CRUD, add videos, fix a pending one, delete video and series
 
   await test.step("the published link opens the episode page", async () => {
     await page.goto("/admin?tab=published");
+    await searchVideos("E2E Saga Episode 3");
     await panel.getByRole("link", { name: "/anime/e2e-saga/episode/3" }).click();
     await expect(page).toHaveURL(/\/anime\/e2e-saga\/episode\/3$/);
     await expect(page.getByRole("heading", { level: 1, name: "Episódio 3" })).toBeVisible();
@@ -72,6 +83,7 @@ test("admin: series CRUD, add videos, fix a pending one, delete video and series
 
   await test.step("fix the pending video from the Pendentes tab → published", async () => {
     await tab("Pendentes").click();
+    await searchVideos("Unknown show 12");
     const form = page.getByRole("form", { name: "Corrigir Unknown show 12" });
     await expect(form).toBeVisible();
     await form.getByLabel("Seção").selectOption("anime");
@@ -80,13 +92,14 @@ test("admin: series CRUD, add videos, fix a pending one, delete video and series
     await form.getByRole("button", { name: "Salvar" }).click();
     await expect(panel.getByRole("status")).toHaveText("Unknown show 12 publicado em /anime/e2e-saga/episode/12.");
     await expect(form).toHaveCount(0);
-    const res = await admin.get("/api/admin/videos?status=published");
-    const fixed = (await res.json()).find((v) => v.youtubeVideoId === unknown);
+    const published = await listAll(admin, "/api/admin/videos", { status: "published", q: "Unknown show 12" });
+    const fixed = published.find((v) => v.youtubeVideoId === unknown);
     expect(fixed).toMatchObject({ status: "published", route: "/anime/e2e-saga/episode/12" });
   });
 
   await test.step("edit the series", async () => {
     await tab("Séries").click();
+    await searchSeries();
     await seriesRow().getByRole("button", { name: "Editar" }).click();
     await expect(page.getByRole("heading", { name: "Editar E2E Saga" })).toBeVisible();
     await page.getByLabel("Sinopse").fill("A saga criada pelos testes e2e.");
@@ -104,6 +117,7 @@ test("admin: series CRUD, add videos, fix a pending one, delete video and series
 
   await test.step("delete a video (confirm dialog)", async () => {
     await page.goto("/admin?tab=published");
+    await searchVideos("E2E Saga Chapter 7");
     const row = panel.getByRole("listitem").filter({ hasText: "E2E Saga Chapter 7 manga" });
     await row.getByRole("button", { name: "Excluir" }).click();
     const dialog = page.getByRole("dialog", { name: "Excluir este vídeo?" });
@@ -118,6 +132,7 @@ test("admin: series CRUD, add videos, fix a pending one, delete video and series
 
   await test.step("delete the series (cancel first, then confirm)", async () => {
     await page.goto("/admin");
+    await searchSeries();
     await seriesRow().getByRole("button", { name: "Excluir" }).click();
     const dialog = page.getByRole("dialog", { name: "Excluir E2E Saga?" });
     await expect(dialog).toBeVisible();
@@ -132,7 +147,7 @@ test("admin: series CRUD, add videos, fix a pending one, delete video and series
     await expect(seriesRow()).toHaveCount(0);
 
     // v1.1: deleting a series deletes its videos.
-    const all = await (await admin.get("/api/admin/videos")).json();
+    const all = await listAll(admin, "/api/admin/videos");
     expect(all.filter((v) => [ep3, ch7, unknown].includes(v.youtubeVideoId))).toEqual([]);
     await page.goto("/anime/e2e-saga/episode/3");
     await expect(page.getByRole("heading", { level: 1, name: "Página não encontrada" })).toBeVisible();

@@ -161,3 +161,46 @@ export function limitParam(value, { fallback = 12, max = 50 } = {}) {
   }
   return Math.min(Number(value), max);
 }
+
+/**
+ * Reads query-string parameters, collecting one message per bad field;
+ * `done()` throws a single 400 VALIDATION_ERROR listing all of them.
+ * A repeated parameter (?q=a&q=b arrives as an array) is always an error.
+ */
+export function queryReader(query) {
+  const errors = {};
+  const fail = (field, message) => void (errors[field] ??= message);
+  const reader = {
+    errors,
+    fail,
+    /** Trimmed text of at most `max` characters; absent/blank → null. */
+    text(field, max) {
+      const value = query[field];
+      if (value == null) return null;
+      if (typeof value !== "string") return fail(field, "Send this parameter once, as text.");
+      const trimmed = value.trim();
+      if (length(trimmed) > max) return fail(field, `Use at most ${max} characters.`);
+      return trimmed === "" ? null : trimmed;
+    },
+    /** Whole number in [min, max]; absent/blank → fallback. `clamp` turns values above max into max. */
+    int(field, { min, max, fallback, clamp = false }) {
+      const value = query[field];
+      if (value == null || value === "") return fallback;
+      const message = `Must be a whole number from ${min} to ${max}.`;
+      if (typeof value !== "string" || !/^\d+$/.test(value)) return fail(field, message);
+      const n = Number(value);
+      if (n < min || (n > max && !clamp)) return fail(field, message);
+      return Math.min(n, max);
+    },
+    /** One of `options`; absent/blank → null. */
+    oneOf(field, options) {
+      const value = reader.text(field, 40);
+      if (value != null && !options.includes(value)) return fail(field, `Must be one of: ${options.join(", ")}.`);
+      return value ?? null;
+    },
+    done() {
+      if (Object.keys(errors).length) throw validationError(errors);
+    },
+  };
+  return reader;
+}

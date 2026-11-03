@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLoaderData, useNavigate } from "react-router";
 import { catalogApi } from "../../api/client.js";
+import { useAuth } from "../../auth/useAuth.js";
 import { AsyncView } from "../../components/Await/AsyncView.jsx";
 import { CardGridSkeleton, Skeleton } from "../../components/Skeleton/Skeleton.jsx";
 import { Reveal } from "../../components/Reveal/Reveal.jsx";
@@ -20,7 +21,7 @@ export function loader() {
   return {
     sections: soft(catalogApi.sections(), null),
     genres: soft(catalogApi.genres()),
-    latest: soft(catalogApi.latest(24)),
+    latest: soft(catalogApi.latest({ limit: 24 })),
     trending: soft(catalogApi.trending(undefined, 12)),
     topAnime: soft(catalogApi.topRated("anime", 12)),
     topManga: soft(catalogApi.topRated("manga", 12)),
@@ -169,6 +170,9 @@ export function Component() {
             ) : null
           }
         </AsyncView>
+        <AsyncView resolve={data.sections} fallback={null}>
+          {(sections) => (sections && sections.every((s) => !s.videoCount) ? <EmptyCatalog /> : null)}
+        </AsyncView>
       </section>
 
       <ContinueRow />
@@ -232,5 +236,27 @@ export function Component() {
       </AsyncView>
 
     </>
+  );
+}
+
+/**
+ * Nothing is published yet. Series only appear once they have an episode or chapter, so a fresh
+ * install looks empty: tell visitors to come back, and point admins at "Add video".
+ */
+function EmptyCatalog() {
+  const { t } = useT();
+  const { isAdmin } = useAuth();
+  return (
+    <div className={`card stack ${styles.empty}`} role="status">
+      <h2>{t("home.empty.title")}</h2>
+      <p className="muted">{isAdmin ? t("home.empty.admin") : t("home.empty.visitor")}</p>
+      {isAdmin && (
+        <p>
+          <Link className="btn btn-primary" to="/admin?tab=add">
+            {t("home.empty.addVideo")}
+          </Link>
+        </p>
+      )}
+    </div>
   );
 }

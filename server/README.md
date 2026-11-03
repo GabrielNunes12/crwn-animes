@@ -37,8 +37,9 @@ changes; above 50,000 URLs `/sitemap.xml` becomes a sitemap index of
 |---|---|
 | `npm start` | Start the API (`src/index.js`). |
 | `npm run dev` | Same, with `node --watch`. |
-| `npm test` | All tests (`node --test`): classifier, auth, sessions, admin, ratings, catalog, search, SEO/sitemap, GDPR, headers. In-memory DB, fake YouTube lookups, a temporary fake `client/dist` (`createApp({ config: { clientDist } })`). |
+| `npm test` | All tests (`node --test`): classifier, auth, sessions, admin, ratings, catalog, search, pagination/seasons, SEO/sitemap, GDPR, headers. In-memory DB, fake YouTube lookups, a temporary fake `client/dist` (`createApp({ config: { clientDist } })`). |
 | `npm run make-admin -- someone@example.com` | Promote an existing account to admin. |
+| `node src/scripts/bench-admin-lists.js [50000]` | Times the paginated admin lists and `/api/latest` over HTTP on a throwaway database with that many videos (p50/p95). |
 
 ## Environment
 
@@ -57,11 +58,21 @@ See [`.env.example`](.env.example) — each variable is documented there.
   letters/digits of every script kept), kept up to date by the repository on create/patch; `GET /api/search` and
   `GET /api/:section/series?q=` match it with `instr()`. Counts, newest `publishedAt` and ratings per (series, section)
   come from `series_stats`, which SQLite triggers keep current (no per-request aggregation).
+- Paging (v1.3): `/api/latest?offset=&section=`, `GET /api/admin/series` and `GET /api/admin/videos` answer
+  `{ items, total }` (`limit` 1–100, default 50). Order is stable with an id tiebreak (series: name, id; videos:
+  `created_at` desc, id desc). Admin series `q` = the `/api/search` matching; admin videos `q` matches
+  `videos.title_search` (title through `searchNormalize()`, set on insert) or a series whose normalised name contains
+  it (names cached until the catalog changes). Each video filter combination has its own prepared statement so the
+  `videos_created` / `videos_status_created` indexes serve order, filters and count (p95 ≤ ~17 ms at 50k videos).
+  Query parameters go through `queryReader()` (`src/validation.js`): one 400 listing every bad field.
+- Series pages: `GET /api/:section/series/:slug?season=N` → `{ series, videos, seasons }` (`seasons` = seasons with
+  published videos there, `[]` when none; unknown season → empty `videos`; not 1–99 → 400).
 - `src/genres.js` — one stored spelling per genre (first one used wins; compared with `toLocaleLowerCase("pt-BR")`).
   `/api/genres`, genre pages and the sitemap list genres of series with a published, available video.
 - `src/seo.js` — page resolution (200/301/404) + `<head>` rendering, sitemap and robots.txt.
 - `src/db.js` — schema + migrations (`PRAGMA user_version`; an entry is SQL or a JS function: 4–5 `search_text`, 6 genre spellings, 7 manga chapters
-  are always season 1, 8 `series_stats` / `rating_totals` / `catalog_version` + triggers. `catalog_version` keys the
+  are always season 1, 8 `series_stats` / `rating_totals` / `catalog_version` + triggers, 9 `videos.title_search` +
+  admin list indexes. `catalog_version` keys the
   in-memory genre and sitemap caches.); `src/retention.js` — cleanup and YouTube health-check jobs.
 
 ## Data we store and why

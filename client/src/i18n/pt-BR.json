@@ -159,7 +159,13 @@
     "trending": "Em alta",
     "topAnime": "Animes mais bem avaliados",
     "topManga": "Mangás mais bem avaliados",
-    "genres": "Explorar por gênero"
+    "genres": "Explorar por gênero",
+    "empty": {
+      "title": "Nenhum episódio publicado ainda",
+      "visitor": "O catálogo está sendo montado. Volte em breve!",
+      "admin": "Uma série só aparece no site depois de ter pelo menos um episódio ou capítulo publicado. Cole um link do YouTube em Admin → Adicionar vídeo para publicar o primeiro.",
+      "addVideo": "Adicionar o primeiro vídeo"
+    }
   },
   "section": {
     "kicker": "Explorar",
@@ -214,7 +220,22 @@
     "startReading": "Começar a ler",
     "continue": "Continuar: {label}",
     "noVideos": "Nada publicado aqui ainda.",
-    "progress": "{percent}% assistido"
+    "progress": "{percent}% assistido",
+    "watchedShort": "{watched}/{total} assistidos",
+    "readShort": "{watched}/{total} lidos",
+    "watchedOf": "{watched} de {total} assistidos",
+    "readOf": "{watched} de {total} lidos",
+    "allWatched": "Você assistiu tudo",
+    "allRead": "Você leu tudo",
+    "seasons": "Temporadas",
+    "episodesUnavailable": {
+      "one": "{count} episódio está indisponível no momento.",
+      "other": "{count} episódios estão indisponíveis no momento."
+    },
+    "chaptersUnavailable": {
+      "one": "{count} capítulo está indisponível no momento.",
+      "other": "{count} capítulos estão indisponíveis no momento."
+    }
   },
   "watch": {
     "play": "Reproduzir: {title}",
@@ -386,7 +407,22 @@
     "clearConfirm": "Limpar",
     "historyCleared": "Histórico apagado.",
     "loggedOutTitle": "Você não entrou na sua conta",
-    "loggedOutText": "Entre para alterar seu perfil, baixar seus dados ou excluir sua conta."
+    "loggedOutText": "Entre para alterar seu perfil, baixar seus dados ou excluir sua conta.",
+    "progress": {
+      "title": "Seu progresso neste dispositivo",
+      "text": "Leve seu histórico para outro navegador: exporte aqui e importe o arquivo lá. O arquivo nunca sai dos seus dispositivos.",
+      "export": "Exportar histórico",
+      "import": "Importar histórico",
+      "importHint": "Um arquivo crwn-animes-progress.json de até 1 MB. Vale a posição mais recente de cada vídeo.",
+      "exported": {
+        "one": "{count} vídeo exportado.",
+        "other": "{count} vídeos exportados."
+      },
+      "imported": "Importados: {imported}. Ignorados: {skipped}.",
+      "tooLarge": "Esse arquivo passa de 1 MB. Nada foi importado.",
+      "invalid": "Esse arquivo não é um histórico do Crwn Animes. Nada foi importado.",
+      "storage": "Não foi possível salvar o histórico importado — o armazenamento do navegador está cheio? Nada foi importado."
+    }
   },
   "notFound": {
     "title": "Página não encontrada",
@@ -568,7 +604,16 @@
       },
       "none": "Nenhuma série ainda.",
       "deleteTitle": "Excluir {name}?",
-      "deleteText": "Isso exclui a série, todos os vídeos dela e as avaliações. Não dá para desfazer."
+      "deleteText": "Isso exclui a série, todos os vídeos dela e as avaliações. Não dá para desfazer.",
+      "episodes": {
+        "one": "{count} episódio",
+        "other": "{count} episódios"
+      },
+      "chapters": {
+        "one": "{count} capítulo",
+        "other": "{count} capítulos"
+      },
+      "hidden": "Fora do site: ainda sem episódios publicados"
     },
     "add": {
       "title": "Adicionar um vídeo",
@@ -656,6 +701,25 @@
       "newUrl": "Novo link do YouTube",
       "replace": "Trocar",
       "replaced": "Link de {title} trocado."
+    },
+    "list": {
+      "searchPlaceholder": "Buscar…",
+      "searchVideos": "Buscar vídeos por título ou série",
+      "searchSeries": "Buscar séries",
+      "results": {
+        "one": "{count} resultado",
+        "other": "{count} resultados"
+      },
+      "resultsFor": {
+        "one": "{count} resultado para “{q}”",
+        "other": "{count} resultados para “{q}”"
+      },
+      "noResults": "Nada encontrado para “{q}”.",
+      "pagination": "Páginas",
+      "previous": "Página anterior",
+      "next": "Próxima página",
+      "pageOf": "Página {page} de {pages}",
+      "pageSuffix": ", página {page} de {pages}"
     }
   },
   "genre": {

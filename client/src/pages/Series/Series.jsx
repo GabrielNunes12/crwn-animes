@@ -1,4 +1,5 @@
-import { Link, useLoaderData } from "react-router";
+import { useEffect } from "react";
+import { Link, useLoaderData, useSearchParams } from "react-router";
 import { catalogApi } from "../../api/client.js";
 import { AsyncView } from "../../components/Await/AsyncView.jsx";
 import { Skeleton } from "../../components/Skeleton/Skeleton.jsx";
@@ -9,22 +10,29 @@ import { useTitle } from "../../hooks/useTitle.js";
 import { useT } from "../../i18n/useT.js";
 import { truncateWords, videoLabel } from "../../lib/format.js";
 import { genreHref } from "../../lib/search.js";
-import { entryCompleted, formatTime, resumePosition } from "../../lib/progress.js";
+import { formatTime, pruneSeriesProgress, resumePosition, seriesProgress } from "../../lib/progress.js";
+import { pickSeason, seasonsOf } from "../../lib/seasons.js";
 import styles from "./Series.module.css";
 
 export function loader({ params, request, section }) {
+  // Every season at once: "watched N of M" and the Continue target span the whole
+  // series, and switching seasons (?season=) then needs no request.
   return { section, data: catalogApi.series(section, params.slug, { signal: request.signal }) };
 }
 
-function groupBySeason(videos) {
-  const map = new Map();
-  for (const v of videos) {
-    const s = v.season ?? 1;
-    if (!map.has(s)) map.set(s, []);
-    map.get(s).push(v);
-  }
-  return [...map.entries()].sort(([a], [b]) => a - b);
+/** Changing only `?season=` filters what is already loaded — don't refetch. */
+export function shouldRevalidate({ currentUrl, nextUrl, defaultShouldRevalidate }) {
+  if (currentUrl.pathname !== nextUrl.pathname) return defaultShouldRevalidate;
+  const strip = (url) => {
+    const p = new URLSearchParams(url.search);
+    p.delete("season");
+    return p.toString();
+  };
+  return strip(currentUrl) === strip(nextUrl) ? false : defaultShouldRevalidate;
 }
+
+/** Rows past this index skip the reveal animation (one observer per row adds up on long lists). */
+const REVEAL_ROWS = 12;
 
 function SeriesSkeleton() {
   return (
@@ -47,18 +55,98 @@ function SeriesSkeleton() {
   );
 }
 
-function SeriesView({ section, series, videos }) {
+function EpisodeRow({ video: v, entry: p, done, index }) {
+  const { t } = useT();
+  const pct = p?.d > 0 ? Math.min(100, Math.round((p.t / p.d) * 100)) : 0;
+  const unavailable = v.availability === "unavailable";
+  const content = (
+    <>
+      <span className={styles.thumb}>
+        <LazyImage src={v.thumbnailUrl} alt="" ratio="16 / 9" width={160} height={90} />
+        {pct > 0 && !done && <span className={styles.bar} style={{ "--p": `${pct}%` }} />}
+      </span>
+      <span className={styles.text}>
+        <span className={styles.epLabel}>
+          {videoLabel(t, v)}
+          {v.isNew && <span className="badge badge-new">{t("common.new")}</span>}
+        </span>
+        <span className={styles.epTitle}>{v.title}</span>
+        {unavailable ? (
+          <span className={styles.unavail}>{t("common.unavailable")}</span>
+        ) : (
+          p && !done && resumePosition(p) > 0 && <span className="hint">{t("watch.resumeAt", { time: formatTime(p.t) })}</span>
+        )}
+      </span>
+      <span className={styles.state}>
+        {done ? (
+          <span className={styles.check} title={t("common.watched")}>
+            <span aria-hidden="true">✓</span>
+            <span className="visually-hidden">{t("common.watched")}</span>
+          </span>
+        ) : null}
+      </span>
+    </>
+  );
+  const Row = index < REVEAL_ROWS ? Reveal : "li";
+  const revealProps = index < REVEAL_ROWS ? { as: "li", index: index % 8 } : {};
+  return (
+    <Row {...revealProps} className={styles.row} data-unavailable={unavailable || undefined} data-done={done || undefined}>
+      {unavailable || !v.route ? (
+        <div className={`${styles.item} ${styles.disabled}`} aria-disabled="true">
+          {content}
+        </div>
+      ) : (
+        <Link to={v.route} className={styles.item}>
+          {content}
+        </Link>
+      )}
+    </Row>
+  );
+}
+
+function SeasonNav({ seasons, active }) {
+  const { t } = useT();
+  const [params] = useSearchParams();
+  const href = (n) => {
+    const p = new URLSearchParams(params);
+    p.set("season", String(n));
+    return `?${p}`;
+  };
+  return (
+    <nav aria-label={t("series.seasons")} className={styles.seasonNav}>
+      <ul role="list">
+        {seasons.map((n) => (
+          <li key={n}>
+            <Link to={href(n)} preventScrollReset aria-current={n === active ? "true" : undefined}>
+              {t("common.season", { n: String(n) })}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
+
+function SeriesView({ section, series, videos, seasons: apiSeasons }) {
   const { t } = useT();
   const progress = useProgressMap();
+  const [params] = useSearchParams();
   useTitle(
     t("meta.series.title", { name: series.name, section: t(`common.${section}`) }),
     truncateWords(series.synopsis || t(`meta.series.fallback.${section}`, { name: series.name })),
   );
-  const seasons = groupBySeason(videos);
-  const playable = videos.filter((v) => v.availability !== "unavailable" && v.route);
-  const nextUp = playable.find((v) => !entryCompleted(progress[v.youtubeVideoId])) ?? playable[0];
-  const started = nextUp && progress[nextUp.youtubeVideoId];
   const isManga = section === "manga";
+  // This page knows every published episode: drop local entries for episodes that no
+  // longer exist, so the series cards (which only know videoCount) agree with it.
+  useEffect(() => {
+    pruneSeriesProgress(section, series.slug, videos);
+  }, [section, series.slug, videos]);
+  const sp = seriesProgress(videos, progress);
+  const seasons = seasonsOf(apiSeasons, videos);
+  const multi = seasons.length > 1;
+  const season = pickSeason(seasons, params.get("season"), sp.target);
+  const shown = multi ? videos.filter((v) => (v.season ?? 1) === season) : videos;
+  const pct = sp.total ? Math.round((sp.watched / sp.total) * 100) : 0;
 
   return (
     <div className={styles.page}>
@@ -91,16 +179,31 @@ function SeriesView({ section, series, videos }) {
             )}
             {series.synopsis && <p className={styles.synopsis}>{series.synopsis}</p>}
             <p className="muted">{t(isManga ? "common.chapters" : "common.episodes", { count: videos.length })}</p>
-            {nextUp && (
-              <div className="cluster">
-                <Link to={nextUp.route} className="btn btn-primary">
-                  <span aria-hidden="true">▶</span>{" "}
-                  {started
-                    ? t("series.continue", { label: videoLabel(t, nextUp) })
-                    : t(isManga ? "series.startReading" : "series.startWatching")}
-                </Link>
+            {sp.touched && sp.total > 0 && (
+              <div className={styles.watchedOf}>
+                <p>{t(isManga ? "series.readOf" : "series.watchedOf", { watched: sp.watched, total: sp.total })}</p>
+                <span className={styles.meter} style={{ "--p": `${pct}%` }} aria-hidden="true" />
               </div>
             )}
+            {sp.allWatched && (
+              <p className={styles.allDone}>
+                {t(isManga ? "series.allRead" : "series.allWatched")} <span aria-hidden="true">✓</span>
+              </p>
+            )}
+            {!sp.allWatched && !sp.target && sp.unavailableLeft > 0 && (
+              <p className={styles.unavailNote}>{t(isManga ? "series.chaptersUnavailable" : "series.episodesUnavailable", { count: sp.unavailableLeft })}</p>
+            )}
+            {!sp.allWatched &&
+              sp.target && (
+                <div className="cluster">
+                  <Link to={sp.target.route} className="btn btn-primary" data-resume={sp.resume || undefined}>
+                    <span aria-hidden="true">▶</span>{" "}
+                    {sp.touched
+                      ? t("series.continue", { label: videoLabel(t, sp.target) })
+                      : t(isManga ? "series.startReading" : "series.startWatching")}
+                  </Link>
+                </div>
+              )}
           </div>
         </div>
 
@@ -109,65 +212,25 @@ function SeriesView({ section, series, videos }) {
             {t(isManga ? "series.chapters" : "series.episodes")}
           </h2>
           {videos.length === 0 && <p className="card">{t("series.noVideos")}</p>}
-          {seasons.map(([season, list]) => (
-            <section key={season} className={styles.season} aria-labelledby={seasons.length > 1 ? `season-${season}` : undefined}>
-              {seasons.length > 1 && (
-                <h3 id={`season-${season}`} className={styles.seasonTitle}>
-                  {t("common.season", { n: season })}
+          {multi && <SeasonNav seasons={seasons} active={season} />}
+          {videos.length > 0 && (
+            <section className={styles.season} aria-labelledby={multi ? "season-title" : undefined}>
+              {multi && (
+                <h3 id="season-title" className={styles.seasonTitle}>
+                  {t("common.season", { n: String(season) })}
                 </h3>
               )}
-              <ol className={styles.list} role="list">
-                {list.map((v, i) => {
-                  const p = progress[v.youtubeVideoId];
-                  const done = entryCompleted(p);
-                  const pct = p?.d > 0 ? Math.min(100, Math.round((p.t / p.d) * 100)) : 0;
-                  const unavailable = v.availability === "unavailable";
-                  const label = videoLabel(t, v);
-                  const content = (
-                    <>
-                      <span className={styles.thumb}>
-                        <LazyImage src={v.thumbnailUrl} alt="" ratio="16 / 9" width={160} height={90} />
-                        {pct > 0 && !done && <span className={styles.bar} style={{ "--p": `${pct}%` }} />}
-                      </span>
-                      <span className={styles.text}>
-                        <span className={styles.epLabel}>
-                          {label}
-                          {v.isNew && <span className="badge badge-new">{t("common.new")}</span>}
-                        </span>
-                        <span className={styles.epTitle}>{v.title}</span>
-                        {unavailable ? (
-                          <span className={styles.unavail}>{t("common.unavailable")}</span>
-                        ) : (
-                          p && !done && resumePosition(p) > 0 && <span className="hint">{t("watch.resumeAt", { time: formatTime(p.t) })}</span>
-                        )}
-                      </span>
-                      <span className={styles.state}>
-                        {done ? (
-                          <span className={styles.check} title={t("common.watched")}>
-                            <span aria-hidden="true">✓</span>
-                            <span className="visually-hidden">{t("common.watched")}</span>
-                          </span>
-                        ) : null}
-                      </span>
-                    </>
-                  );
-                  return (
-                    <Reveal as="li" key={v.id} index={i % 8} data-unavailable={unavailable || undefined} data-done={done || undefined}>
-                      {unavailable || !v.route ? (
-                        <div className={`${styles.item} ${styles.disabled}`} aria-disabled="true">
-                          {content}
-                        </div>
-                      ) : (
-                        <Link to={v.route} className={styles.item}>
-                          {content}
-                        </Link>
-                      )}
-                    </Reveal>
-                  );
-                })}
-              </ol>
+              {shown.length === 0 ? (
+                <p className="card">{t("series.noVideos")}</p>
+              ) : (
+                <ol className={styles.list} role="list">
+                  {shown.map((v, i) => (
+                    <EpisodeRow key={v.id} video={v} entry={progress[v.youtubeVideoId]} done={sp.isWatched(v)} index={i} />
+                  ))}
+                </ol>
+              )}
             </section>
-          ))}
+          )}
         </section>
       </div>
     </div>
@@ -178,7 +241,7 @@ export function Component() {
   const { section, data } = useLoaderData();
   return (
     <AsyncView resolve={data} fallback={<SeriesSkeleton />}>
-      {({ series, videos }) => <SeriesView section={section} series={series} videos={videos} />}
+      {({ series, videos, seasons }) => <SeriesView section={section} series={series} videos={videos ?? []} seasons={seasons} />}
     </AsyncView>
   );
 }

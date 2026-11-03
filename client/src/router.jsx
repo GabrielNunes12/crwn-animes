@@ -6,12 +6,13 @@ import { PageSkeleton } from "./components/Skeleton/Skeleton.jsx";
 
 export const SECTIONS = ["anime", "manga"];
 
-/** Lazy route module (exports Component and optionally loader), with `section` injected into the loader. */
+/** Lazy route module (exports Component and optionally loader / shouldRevalidate), with `section` injected into the loader. */
 function page(importer, extra) {
   return async () => {
     const mod = await importer();
     const route = { Component: mod.Component };
     if (mod.loader) route.loader = extra ? (args) => mod.loader({ ...args, ...extra }) : mod.loader;
+    if (mod.shouldRevalidate) route.shouldRevalidate = mod.shouldRevalidate;
     return route;
   };
 }

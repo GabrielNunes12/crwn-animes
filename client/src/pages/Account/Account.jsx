@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { authApi, meApi } from "../../api/client.js";
 import { useAuth } from "../../auth/useAuth.js";
@@ -10,7 +10,7 @@ import { useProgressMap } from "../../hooks/useProgress.js";
 import { useTitle } from "../../hooks/useTitle.js";
 import { useT } from "../../i18n/useT.js";
 import { MIN_PASSWORD } from "../../lib/password.js";
-import { clearProgress } from "../../lib/progress.js";
+import { clearProgress, EXPORT_FILENAME, exportProgress, importProgress, MAX_IMPORT_BYTES } from "../../lib/progress.js";
 import { SingleKeyToggle } from "../../components/ShortcutsDialog/SingleKeyToggle.jsx";
 import styles from "./Account.module.css";
 
@@ -218,24 +218,103 @@ function DataCard() {
   );
 }
 
+function downloadJSON(filename, data) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+async function readFileText(file) {
+  if (typeof file.text === "function") return file.text();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file);
+  });
+}
+
+const IMPORT_ERRORS = { tooLarge: "account.progress.tooLarge", invalid: "account.progress.invalid", storage: "account.progress.storage" };
+
 function DeviceCard() {
   const { t } = useT();
+  const id = useId();
   const progress = useProgressMap();
   const count = Object.keys(progress).length;
   const [open, setOpen] = useState(false);
-  const [message, setMessage] = useState("");
+  const [status, setStatus] = useState({ message: "", error: false });
+  const [busy, setBusy] = useState(false);
+
+  function onExport() {
+    downloadJSON(EXPORT_FILENAME, exportProgress());
+    setStatus({ message: t("account.progress.exported", { count }), error: false });
+  }
+
+  async function onImport(e) {
+    const input = e.currentTarget;
+    const file = input.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    let result;
+    if (file.size > MAX_IMPORT_BYTES) {
+      result = { ok: false, error: "tooLarge" };
+    } else {
+      try {
+        result = importProgress(await readFileText(file), { size: file.size });
+      } catch {
+        result = { ok: false, error: "invalid" };
+      }
+    }
+    // Let the same file be picked again.
+    input.value = "";
+    setBusy(false);
+    setStatus(
+      result.ok
+        ? { message: t("account.progress.imported", { imported: result.imported, skipped: result.skipped }), error: false }
+        : { message: t(IMPORT_ERRORS[result.error] ?? "account.progress.invalid"), error: true },
+    );
+  }
+
   return (
     <section className="card stack" aria-labelledby="device-title">
       <h2 id="device-title">{t("account.device")}</h2>
       <p className="hint">{t("account.deviceText")}</p>
+      <h3 id={`${id}-progress`} className={styles.subTitle}>
+        {t("account.progress.title")}
+      </h3>
       <p>{t("account.historyCount", { count })}</p>
-      <div>
+      <p className="hint">{t("account.progress.text")}</p>
+      <div className="cluster">
+        <button type="button" className="btn" onClick={onExport} disabled={!count}>
+          <span aria-hidden="true">⤓</span> {t("account.progress.export")}
+        </button>
+        <label className={`btn ${styles.fileBtn}`} data-busy={busy || undefined}>
+          <span aria-hidden="true">⤒</span> <span id={`${id}-import`}>{t("account.progress.import")}</span>
+          <input
+            type="file"
+            accept="application/json,.json"
+            className="visually-hidden"
+            onChange={onImport}
+            disabled={busy}
+            aria-labelledby={`${id}-import`}
+            aria-describedby={`${id}-import-hint`}
+          />
+        </label>
         <button type="button" className="btn" onClick={() => setOpen(true)} disabled={!count}>
           {t("account.clearHistory")}
         </button>
       </div>
-      <p role="status" aria-live="polite" className={styles.ok}>
-        {message}
+      <p id={`${id}-import-hint`} className="hint">
+        {t("account.progress.importHint")}
+      </p>
+      <p role="status" aria-live="polite" className={status.error ? "field-error" : styles.ok}>
+        {status.message}
       </p>
       <hr />
       <SingleKeyToggle />
@@ -246,7 +325,7 @@ function DeviceCard() {
         onConfirm={() => {
           clearProgress();
           setOpen(false);
-          setMessage(t("account.historyCleared"));
+          setStatus({ message: t("account.historyCleared"), error: false });
         }}
         onClose={() => setOpen(false)}
       >

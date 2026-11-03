@@ -13,4 +13,19 @@
     color: var(--success);
     font-size: var(--step--1);
   }
+  .subTitle {
+    font-size: var(--step-0);
+  }
+  .fileBtn {
+    cursor: pointer;
+  }
+  .fileBtn:has(input:focus-visible) {
+    outline: 2px solid var(--secondary);
+    outline-offset: 2px;
+  }
+  .fileBtn:has(input:disabled),
+  .fileBtn[data-busy] {
+    opacity: 0.55;
+    cursor: progress;
+  }
 }

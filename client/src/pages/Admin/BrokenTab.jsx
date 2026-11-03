@@ -1,8 +1,10 @@
-import { useEffect, useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { adminApi } from "../../api/client.js";
 import { CardGridSkeleton } from "../../components/Skeleton/Skeleton.jsx";
 import { useT } from "../../i18n/useT.js";
 import { ErrorText, VideoSummary } from "./shared.jsx";
+import { ListEmpty, ListHeading, ListSearch, Pager } from "./ListControls.jsx";
+import { useAdminList } from "./useAdminList.js";
 import styles from "./Admin.module.css";
 
 function ReplaceForm({ video, onReplaced }) {
@@ -36,29 +38,21 @@ function ReplaceForm({ video, onReplaced }) {
   );
 }
 
+const fetchBroken = (params, opts) => adminApi.videos({ ...params, availability: "unavailable" }, opts);
+
 export function BrokenTab() {
   const { t } = useT();
-  const [videos, setVideos] = useState(null);
-  const [error, setError] = useState(null);
+  const headingRef = useRef(null);
+  const list = useAdminList(fetchBroken, { focusRef: headingRef });
   const [check, setCheck] = useState({ busy: false, message: "", error: null });
-
-  useEffect(() => {
-    let alive = true;
-    adminApi
-      .videos({ availability: "unavailable" })
-      .then((list) => alive && setVideos(list))
-      .catch((err) => alive && setError(err));
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   async function runCheck() {
     setCheck({ busy: true, message: "", error: null });
     try {
       const { checked, unavailable } = await adminApi.healthCheck();
-      setVideos(unavailable);
-      setCheck({ busy: false, message: t("admin.broken.checked", { checked, count: unavailable.length }), error: null });
+      // The check returns every unavailable video; re-read the current page.
+      list.reload();
+      setCheck({ busy: false, message: t("admin.broken.checked", { checked, count: unavailable?.length ?? 0 }), error: null });
     } catch (err) {
       setCheck({ busy: false, message: "", error: err });
     }
@@ -67,7 +61,9 @@ export function BrokenTab() {
   return (
     <section className="stack" aria-labelledby="broken-title">
       <div className="section-head">
-        <h2 id="broken-title">{t("admin.broken.title", { count: videos?.length ?? 0 })}</h2>
+        <ListHeading list={list} id="broken-title" ref={headingRef}>
+          {t("admin.broken.title", { count: list.total })}
+        </ListHeading>
         <button type="button" className="btn" onClick={runCheck} disabled={check.busy}>
           {check.busy ? t("admin.broken.checking") : t("admin.broken.run")}
         </button>
@@ -76,23 +72,25 @@ export function BrokenTab() {
       <p role="status" aria-live="polite" className={check.message ? "alert alert-info" : "visually-hidden"}>
         {check.message}
       </p>
-      <ErrorText error={check.error || error} />
-      {!videos && !error && <CardGridSkeleton count={2} />}
-      {videos?.length === 0 && <p className="card muted">{t("admin.broken.none")}</p>}
-      <ul className={styles.rows} role="list">
-        {videos?.map((v) => (
+      <ListSearch list={list} label={t("admin.list.searchVideos")} />
+      <ErrorText error={check.error || list.error} />
+      {!list.loaded && !list.error && <CardGridSkeleton count={2} />}
+      <ListEmpty list={list}>{t("admin.broken.none")}</ListEmpty>
+      <ul className={styles.rows} role="list" aria-busy={list.loading || undefined} data-stale={(list.loading && list.loaded) || undefined}>
+        {list.items.map((v) => (
           <li key={v.id} className={styles.videoRow}>
             <VideoSummary video={v} />
             <ReplaceForm
               video={v}
               onReplaced={(updated) => {
-                setVideos((list) => list.filter((x) => x.id !== updated.id));
+                list.removeItem(updated.id);
                 setCheck({ busy: false, message: t("admin.broken.replaced", { title: updated.title }), error: null });
               }}
             />
           </li>
         ))}
       </ul>
+      <Pager list={list} />
     </section>
   );
 }

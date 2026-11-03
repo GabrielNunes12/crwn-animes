@@ -28,8 +28,9 @@ export function Component() {
 
   useEffect(() => {
     let alive = true;
+    // Every series (all pages) for the series pickers; the Series tab pages its own list.
     adminApi
-      .series()
+      .allSeries()
       .then((list) => {
         if (!alive) return;
         setSeries(list);
@@ -63,7 +64,7 @@ export function Component() {
         active={tab}
         onChange={(id) => setParams({ tab: id }, { replace: true })}
       >
-        {tab === "series" && <SeriesTab series={series} genres={genres} reloadSeries={reloadSeries} />}
+        {tab === "series" && <SeriesTab genres={genres} reloadSeries={reloadSeries} reloadKey={seriesVersion} />}
         {tab === "add" && <AddVideoTab series={series} />}
         {tab === "bulk" && <BulkTab series={series} />}
         {tab === "pending" && <VideoListTab key="pending" status="pending" series={series} />}

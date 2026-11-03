@@ -4,7 +4,7 @@ import { notFound, validationError } from "../errors.js";
 import { SEARCH_SORTS, publicVideo } from "../repository.js";
 import { searchNeedle } from "../search.js";
 import { publicCache } from "../middleware/security.js";
-import { idParam, limitParam } from "../validation.js";
+import { idParam, limitParam, queryReader } from "../validation.js";
 
 const TRENDING_DAYS = 7;
 
@@ -15,43 +15,23 @@ function sectionFilter(value) {
   return value;
 }
 
-const SEARCH_Q_MAX = 80;
+export const SEARCH_Q_MAX = 80;
 const SEARCH_GENRE_MAX = 100;
 const SEARCH_LIMIT_MAX = 50;
 const SEARCH_OFFSET_MAX = 100_000;
-
-/** Reads text query parameters into `errors` (repeated → 400, too long → 400, blank → null). */
-const textReader = (query, errors) => (field, max) => {
-  const value = query[field];
-  if (value == null) return null;
-  if (typeof value !== "string") return void (errors[field] = "Send this parameter once, as text.");
-  const trimmed = value.trim();
-  if ([...trimmed].length > max) return void (errors[field] = `Use at most ${max} characters.`);
-  return trimmed === "" ? null : trimmed;
-};
+const LATEST_OFFSET_MAX = 10_000;
+const SEASON_MAX = 99;
 
 /** GET /api/search query → repo.search() arguments; one 400 listing every bad field. */
 function readSearchQuery(query) {
-  const errors = {};
-  const text = textReader(query, errors);
-  const int = (field, { min, max, fallback }) => {
-    const value = query[field];
-    if (value == null || value === "") return fallback;
-    if (typeof value !== "string" || !/^\d{1,9}$/.test(value) || Number(value) < min || Number(value) > max) {
-      return void (errors[field] = `Must be a whole number from ${min} to ${max}.`);
-    }
-    return Number(value);
-  };
-
-  const q = text("q", SEARCH_Q_MAX);
-  const genre = text("genre", SEARCH_GENRE_MAX);
-  const section = text("section", 10);
-  if (section != null && !SECTIONS.includes(section)) errors.section = `Must be one of: ${SECTIONS.join(", ")}.`;
-  const sort = text("sort", 20);
-  if (sort != null && !SEARCH_SORTS.includes(sort)) errors.sort = `Must be one of: ${SEARCH_SORTS.join(", ")}.`;
-  const limit = int("limit", { min: 1, max: SEARCH_LIMIT_MAX, fallback: 20 });
-  const offset = int("offset", { min: 0, max: SEARCH_OFFSET_MAX, fallback: 0 });
-  if (Object.keys(errors).length) throw validationError(errors);
+  const r = queryReader(query);
+  const q = r.text("q", SEARCH_Q_MAX);
+  const genre = r.text("genre", SEARCH_GENRE_MAX);
+  const section = r.oneOf("section", SECTIONS);
+  const sort = r.oneOf("sort", SEARCH_SORTS);
+  const limit = r.int("limit", { min: 1, max: SEARCH_LIMIT_MAX, fallback: 20 });
+  const offset = r.int("offset", { min: 0, max: SEARCH_OFFSET_MAX, fallback: 0 });
+  r.done();
 
   const needle = searchNeedle(q);
   return { needle, section, genre, sort: sort ?? (needle != null ? "relevance" : "az"), limit, offset };
@@ -91,8 +71,14 @@ export function catalogRoutes({ repo }) {
     res.json(filters ? repo.search({ ...query, ...filters }) : { items: [], total: 0 });
   });
 
+  // limit above 50 is clamped (as before v1.3); offset and section are validated.
   get("/latest", (req, res) => {
-    res.json(list(repo.listLatest(limitParam(req.query.limit))));
+    const r = queryReader(req.query);
+    const limit = r.int("limit", { min: 1, max: 50, fallback: 12, clamp: true });
+    const offset = r.int("offset", { min: 0, max: LATEST_OFFSET_MAX, fallback: 0 });
+    const section = r.oneOf("section", SECTIONS);
+    r.done();
+    res.json(list(repo.listLatest({ limit, offset, section })));
   });
 
   get("/top-rated", (req, res) => {
@@ -131,11 +117,10 @@ export function catalogRoutes({ repo }) {
   get("/:section/series", (req, res) => {
     const { section } = req.params;
     if (!SECTIONS.includes(section)) throw notFound("Unknown section.");
-    const errors = {};
-    const text = textReader(req.query, errors);
-    const q = text("q", SEARCH_Q_MAX);
-    const genre = text("genre", SEARCH_GENRE_MAX);
-    if (Object.keys(errors).length) throw validationError(errors);
+    const r = queryReader(req.query);
+    const q = r.text("q", SEARCH_Q_MAX);
+    const genre = r.text("genre", SEARCH_GENRE_MAX);
+    r.done();
     const filters = resolveFilters(repo, { needle: searchNeedle(q), genre });
     res.json(filters ? repo.listSeriesInSection(section, filters.genre, filters.needle) : []);
   });
@@ -143,9 +128,18 @@ export function catalogRoutes({ repo }) {
   get("/:section/series/:slug", (req, res) => {
     const { section, slug } = req.params;
     if (!SECTIONS.includes(section)) throw notFound("Unknown section.");
+    const r = queryReader(req.query);
+    const season = r.int("season", { min: 1, max: SEASON_MAX, fallback: null });
+    r.done();
     const series = repo.getSeries(slug);
     if (!series) throw notFound("Series not found.");
-    res.json({ series, videos: list(repo.listPublishedInSeries(series.id, section)) });
+    // seasons: every season with a published video here (manga chapters are all season 1).
+    // An unknown season is not an error: it just has no videos.
+    res.json({
+      series,
+      videos: list(repo.listPublishedInSeries(series.id, section, season)),
+      seasons: repo.publishedSeasons(series.id, section),
+    });
   });
 
   return router;

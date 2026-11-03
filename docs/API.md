@@ -281,3 +281,36 @@ searchable in it (only emoji or punctuation) matches nothing: `{ items: [], tota
 | Genre page (both sections, sortable) | `/genre/:genre` |
 
 Plus a ⌘K / Ctrl+K command palette (ARIA combobox) with instant, debounced results from `/api/search`.
+
+---
+
+# v1.3 additions (cycle 3 — pagination, seasons, progress portability)
+
+## Pagination
+| Method & path | Change |
+|---|---|
+| `GET /api/latest?limit=12&offset=0&section=` | adds `offset` (0–10000) and optional `section`; still returns `Video[]` |
+| `GET /api/admin/videos?status=&availability=&q=&limit=50&offset=0` | **now returns `{ items: Video[], total }`**, newest first; `q` matches the video title or series name (accent-insensitive, ≤ 80 chars); `limit` 1–100 (default 50); blank filters mean "no filter" |
+| `GET /api/admin/series?q=&limit=50&offset=0` | **now returns `{ items: (Series & { videoCounts: { anime, manga } })[], total }`**; `videoCounts` are published videos per section (a series with none is not shown on the site yet); `q` uses the same matching as `/api/search`; `limit` 1–100 |
+
+Ordering is stable (ties broken by id) so paging never repeats or skips an item.
+
+## Seasons on series pages
+`GET /api/:section/series/:slug?season=N` → `{ series, videos, seasons }`:
+- `seasons: number[]` — every season that has published videos in that section (ascending; manga is `[1]` when it
+  has chapters; `[]` when the series has no published videos in that section).
+- With `season`, `videos` only holds that season; without it, every published video (unchanged).
+- Unknown season → `200` with `videos: []`; invalid value → `400 VALIDATION_ERROR`.
+
+## Watch progress portability (client only — nothing new is stored on the server)
+- `/account` → "Export watch history" downloads `crwn-animes-progress.json`
+  (`{ "version": 1, "exportedAt": ISO, "entries": { [youtubeVideoId]: { t, d, at, route, title, thumb } } }`);
+  "Import watch history" merges a file (newest `at` wins per video; validates shape, size ≤ 1 MB,
+  ignores unknown keys and bad entries, keeps the 200-entry cap). Works logged out. An entry is only
+  accepted when its key is an 11-character YouTube ID and its `route` is one of our own front-end routes;
+  `thumb` is kept only when it starts with `https://i.ytimg.com/` (else `null`), so a crafted file can never
+  make the page request another site.
+- Series pages and series cards show "watched N of M" from local progress; series page has a
+  "Continue" button that opens the first unwatched episode (or resumes the in-progress one).
+- Long episode lists render with `content-visibility: auto` (no JS virtualisation library), grouped by
+  season with `?season=` tabs on the series page.

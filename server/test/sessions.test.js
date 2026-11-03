@@ -144,8 +144,8 @@ describe("permissions", () => {
     assert.equal(me.body.user.role, "admin");
     const res = await admin.get("/api/admin/videos");
     assert.equal(res.status, 200);
-    assert.ok(res.body[0].classification, "admin responses include classification");
-    assert.ok(res.body[0].overrides);
+    assert.ok(res.body.items[0].classification, "admin responses include classification");
+    assert.ok(res.body.items[0].overrides);
   });
 
   test("ADMIN_EMAILS applies on login too", async () => {

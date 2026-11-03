@@ -68,6 +68,26 @@
     font-size: 0.75rem;
     font-weight: 700;
   }
+  /* "3/12 watched" on series cards (local progress only). */
+  .seriesProgress {
+    position: absolute;
+    inset-block-end: var(--space-2);
+    inset-inline-end: var(--space-2);
+    padding: 0.1em 0.55em;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-pill);
+    background: var(--glass);
+    backdrop-filter: blur(8px);
+    color: var(--text);
+    font-size: 0.75rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .seriesProgress[data-complete] {
+    border-color: transparent;
+    background: var(--success-fill);
+    color: var(--on-accent);
+  }
   .progress {
     position: absolute;
     inset-inline: 0;
