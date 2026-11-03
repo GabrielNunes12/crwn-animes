@@ -3,13 +3,16 @@ import { promisify } from "node:util";
 
 const scryptAsync = promisify(scrypt);
 
-// scrypt cost: N = 2^15, r = 8, p = 1 (~32 MiB, ~100 ms). Stored with the hash
-// so the parameters can be raised later without breaking old passwords.
-const N = 2 ** 15;
+// scrypt cost: N = 2^17, r = 8, p = 1 (128 MiB, a few hundred ms; OWASP's
+// recommendation). The parameters are stored with each hash, so older hashes
+// keep working and are upgraded on the next successful login (needsRehash).
+// Node runs scrypt on the libuv thread pool (4 threads by default), which caps
+// how many hashes, and so how much memory, can be in flight at once.
+const N = 2 ** 17;
 const R = 8;
 const P = 1;
 const KEY_LENGTH = 64;
-const maxmem = (n, r) => 128 * n * r * 2;
+const maxmem = (n, r) => 128 * n * r + 16 * 1024 * 1024;
 
 /** -> "scrypt$N$r$p$<salt base64>$<hash base64>" */
 export async function hashPassword(password) {
@@ -27,6 +30,12 @@ export async function verifyPassword(password, stored) {
   if (![n, r, p].every(Number.isInteger) || expected.length === 0) return false;
   const actual = await scryptAsync(String(password), salt, expected.length, { N: n, r, p, maxmem: maxmem(n, r) });
   return timingSafeEqual(actual, expected);
+}
+
+/** True when `stored` was made with weaker parameters than today's. */
+export function needsRehash(stored) {
+  const [scheme, n, r, p] = String(stored ?? "").split("$");
+  return scheme !== "scrypt" || Number(n) < N || Number(r) < R || Number(p) < P;
 }
 
 let dummyHash;

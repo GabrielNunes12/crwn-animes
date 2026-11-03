@@ -1,8 +1,16 @@
 import { createApp } from "./app.js";
+import { assertSafeConfig } from "./config.js";
 import { loadEnvConfig, openConfiguredDatabase } from "./env.js";
 import { startHealthChecks, startRetention } from "./retention.js";
 
-const config = loadEnvConfig();
+let config;
+try {
+  config = loadEnvConfig();
+  assertSafeConfig(config);
+} catch (error) {
+  console.error(`Refusing to start: ${error.message}`);
+  process.exit(1);
+}
 const db = openConfiguredDatabase(config);
 const app = createApp({ db, config });
 

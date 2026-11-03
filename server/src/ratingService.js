@@ -17,6 +17,8 @@ export function createRatingService({ db, now = () => new Date() }) {
       INSERT INTO ratings (user_id, video_id, score, reaction, updated_at) VALUES (@userId, @videoId, @score, @reaction, @now)
       ON CONFLICT (user_id, video_id) DO UPDATE SET score = excluded.score, reaction = excluded.reaction, updated_at = excluded.updated_at`),
     remove: db.prepare("DELETE FROM ratings WHERE user_id = ? AND video_id = ?"),
+    allOfUser: db.prepare("SELECT video_id, score, updated_at FROM ratings WHERE user_id = ?"),
+    removeAllOfUser: db.prepare("DELETE FROM ratings WHERE user_id = ?"),
     activityAdd: db.prepare(`
       INSERT INTO rating_activity (video_id, day, count, score_sum) VALUES (@videoId, @day, 1, @score)
       ON CONFLICT (video_id, day) DO UPDATE SET count = count + 1, score_sum = score_sum + excluded.score_sum`),
@@ -67,6 +69,12 @@ export function createRatingService({ db, now = () => new Date() }) {
     remove: db.transaction((userId, videoId) => {
       forget(q.mine.get(userId, videoId), videoId);
       q.remove.run(userId, videoId);
+    }),
+
+    /** Account deletion: drops every rating of the user and takes them out of the trending counts. */
+    removeAllForUser: db.transaction((userId) => {
+      for (const row of q.allOfUser.all(userId)) forget(row, row.video_id);
+      q.removeAllOfUser.run(userId);
     }),
 
     /** Raw rows for the GDPR export. */

@@ -3,7 +3,8 @@ import nodemailer from "nodemailer";
 // Sends the few e-mails the site needs. With SMTP_HOST set, mail goes out
 // through SMTP. Without it (local development, tests) messages are kept in an
 // in-memory outbox (the last 50, exposed at GET /api/dev/outbox outside
-// production) and links are printed to the console. Recipients are never logged.
+// production) and, outside production, links are printed to the console.
+// Recipients are never logged (index.js refuses to start in production without SMTP).
 
 export const LOCALES = ["pt-BR", "en"];
 export const DEFAULT_LOCALE = "pt-BR";
@@ -170,7 +171,8 @@ export function createMailer(config, { log = console.log } = {}) {
     async send({ to, subject, text, html }) {
       outbox.push({ to, subject, text, html, sentAt: new Date().toISOString() });
       if (outbox.length > OUTBOX_SIZE) outbox.splice(0, outbox.length - OUTBOX_SIZE);
-      const link = text.match(/https?:\/\/\S+[?&]token=\S+/)?.[0];
+      // A tokenised link is a password-equivalent: only print it in development.
+      const link = config.isProduction ? null : text.match(/https?:\/\/\S+[?&]token=\S+/)?.[0];
       log(`[mail] (no SMTP configured) "${subject}"${link ? `\n[mail] link: ${link}` : ""}`);
     },
   };

@@ -10,6 +10,7 @@ export function authRoutes({ auth, config }) {
   const limitLogin = limit("login");
   const limitResend = limit("resend-verification");
   const limitForgot = limit("forgot-password");
+  const limitReset = limit("reset-password");
 
   /** Rotates the session (drops the one in the cookie, if any) and sends { user }. */
   const signIn = (req, res, row, status = 200) => {
@@ -79,7 +80,7 @@ export function authRoutes({ auth, config }) {
     res.status(202).json({ message: "If this e-mail has an account, we sent a link to reset the password." });
   });
 
-  router.post("/reset-password", async (req, res) => {
+  router.post("/reset-password", limitReset, async (req, res) => {
     const v = validator(bodyOf(req));
     const token = v.token();
     const password = v.password();

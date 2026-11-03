@@ -4,7 +4,7 @@ import helmet from "helmet";
 import fs from "node:fs";
 import path from "node:path";
 import { createAuthService } from "./authService.js";
-import { loadConfig } from "./config.js";
+import { loadConfig, parseTrustProxy } from "./config.js";
 import { HttpError, notFound } from "./errors.js";
 import { createMailer } from "./mail.js";
 import { noStore, requireJsonBody } from "./middleware/security.js";
@@ -26,7 +26,7 @@ const CSP_DIRECTIVES = {
   defaultSrc: ["'self'"],
   scriptSrc: ["'self'", "https://www.youtube.com", "https://s.ytimg.com"],
   frameSrc: ["https://www.youtube-nocookie.com", "https://www.youtube.com"],
-  imgSrc: ["'self'", "data:", "https://i.ytimg.com"],
+  imgSrc: ["'self'", "data:", "https:"], // series covers can live on any https host
   styleSrc: ["'self'", "'unsafe-inline'"],
   fontSrc: ["'self'"],
   connectSrc: ["'self'"],
@@ -67,12 +67,12 @@ export function createApp({ db, config: overrides = {}, mailer, fetchVideoInfo =
 
   const repo = createRepository(db);
   const videos = createVideoService({ repo, fetchVideoInfo });
-  const auth = createAuthService({ db, config, mailer });
   const ratings = createRatingService({ db });
+  const auth = createAuthService({ db, config, mailer, beforeDeleteUser: ratings.removeAllForUser });
 
   const app = express();
   app.locals.services = { repo, videos, auth, ratings, mailer, config };
-  app.set("trust proxy", config.trustProxy);
+  app.set("trust proxy", parseTrustProxy(config.trustProxy)); // throws on "true"/garbage
   app.set("etag", "weak");
 
   app.use(
@@ -92,7 +92,8 @@ export function createApp({ db, config: overrides = {}, mailer, fetchVideoInfo =
   app.use("/api/auth", authRoutes({ auth, config }));
   app.use("/api/me", meRoutes({ auth, ratings, config }));
   app.use("/api/admin", adminRoutes({ repo, videos }));
-  if (!config.isProduction) app.use("/api/dev", devRoutes({ mailer }));
+  // The dev outbox only exists when e-mails are not really sent.
+  if (!config.isProduction && !config.smtp) app.use("/api/dev", devRoutes({ mailer }));
   app.use("/api", ratingRoutes({ repo, ratings }));
   app.use("/api", catalogRoutes({ repo }));
   app.use("/api", () => {
@@ -112,8 +113,14 @@ export function createApp({ db, config: overrides = {}, mailer, fetchVideoInfo =
       })
     );
     // Client-side routes (/anime/one-piece/episode/5, ...) all get index.html.
+    // A missing asset or any other path with a file extension is a real 404:
+    // answering it with index.html would hide broken deploys and break caches.
     app.use((req, res, next) => {
       if (req.method !== "GET" && req.method !== "HEAD") return next();
+      if (req.path.startsWith("/assets/") || path.extname(req.path) !== "") {
+        res.set("Cache-Control", "no-cache");
+        return res.status(404).type("text/plain").send("Not found");
+      }
       res.set("Cache-Control", "no-cache");
       res.sendFile(indexHtml);
     });

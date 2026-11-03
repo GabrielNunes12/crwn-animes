@@ -23,6 +23,9 @@ export function createUserRepository(db) {
     setRole: db.prepare("UPDATE users SET role = ? WHERE id = ?"),
     setDisplayName: db.prepare("UPDATE users SET display_name = ? WHERE id = ?"),
     setPassword: db.prepare("UPDATE users SET password_hash = ? WHERE id = ?"),
+    replaceRegistration: db.prepare(
+      "UPDATE users SET display_name = ?, password_hash = ?, privacy_accepted_at = ? WHERE id = ? AND email_verified_at IS NULL"
+    ),
     deleteUser: db.prepare("DELETE FROM users WHERE id = ?"),
 
     insertSession: db.prepare("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)"),
@@ -48,6 +51,9 @@ export function createUserRepository(db) {
     setRole: (id, role) => q.setRole.run(role, id),
     setDisplayName: (id, displayName) => q.setDisplayName.run(displayName, id),
     setPassword: (id, passwordHash) => q.setPassword.run(passwordHash, id),
+    /** A new sign-up for a still-unverified e-mail replaces the pending one. */
+    replaceRegistration: (id, { displayName, passwordHash, now }) =>
+      q.replaceRegistration.run(displayName, passwordHash, now, id).changes > 0,
     /** Sessions, e-mail tokens and ratings go with it (ON DELETE CASCADE). */
     deleteUser: (id) => q.deleteUser.run(id).changes > 0,
 
@@ -59,6 +65,8 @@ export function createUserRepository(db) {
 
     createEmailToken: (tokenHash, userId, purpose, expiresAt) => q.insertToken.run(tokenHash, userId, purpose, expiresAt),
     deleteEmailTokens: (userId, purpose) => q.deleteTokensOfUser.run(userId, purpose),
+    /** The user id a live token belongs to, without using it up. */
+    peekEmailToken: (tokenHash, purpose, now) => q.tokenRow.get(tokenHash, purpose, now)?.user_id ?? null,
     /** Returns the token's user id and deletes every token of that purpose for the user (single use). */
     consumeEmailToken: db.transaction((tokenHash, purpose, now) => {
       const row = q.tokenRow.get(tokenHash, purpose, now);

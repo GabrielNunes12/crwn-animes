@@ -90,7 +90,7 @@ export function Component() {
             />
           </div>
           <div data-field="consent" className="field">
-            <label className="checkbox">
+            <label className="checkbox" style={{ fontWeight: 400 }}>
               <input
                 type="checkbox"
                 checked={form.consent}

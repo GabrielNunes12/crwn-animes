@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { rateLimit } from "../middleware/rateLimit.js";
 import { clearSessionCookie, requireUser, setSessionCookie } from "../middleware/session.js";
 import { toIso } from "../repository.js";
 import { videoRoute } from "../routing.js";
@@ -8,6 +9,13 @@ import { bodyOf, validator } from "../validation.js";
 export function meRoutes({ auth, ratings, config }) {
   const router = Router();
   router.use(requireUser);
+
+  // Both routes check a password with scrypt: limit per IP and per account
+  // (a stolen session must not allow brute-forcing the current password).
+  const guard = (name) => [
+    rateLimit({ ...config.rateLimit, name: `${name}-ip` }),
+    rateLimit({ ...config.rateLimit, name: `${name}-user`, key: (req) => `user:${req.user.id}` }),
+  ];
 
   router.get("/export", (req, res) => {
     const u = req.user;
@@ -47,7 +55,7 @@ export function meRoutes({ auth, ratings, config }) {
     res.json({ user: auth.toUser(auth.updateDisplayName(req.user.id, displayName)) });
   });
 
-  router.post("/password", async (req, res) => {
+  router.post("/password", guard("change-password"), async (req, res) => {
     const v = validator(bodyOf(req));
     const currentPassword = v.password("currentPassword", { checkStrength: false });
     const newPassword = v.password("newPassword");
@@ -59,7 +67,7 @@ export function meRoutes({ auth, ratings, config }) {
     res.json({ user: auth.toUser(row) });
   });
 
-  router.delete("/", async (req, res) => {
+  router.delete("/", guard("delete-account"), async (req, res) => {
     const v = validator(bodyOf(req));
     const password = v.password("password", { checkStrength: false });
     v.done();
