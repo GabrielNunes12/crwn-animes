@@ -32,7 +32,9 @@ describe("catalog", () => {
 
   test("genres", async () => {
     const res = await srv.client().get("/api/genres");
-    assert.deepEqual(res.body, ["Adventure", "Comedy", "Drama", "Fantasy", "Shonen"]);
+    // Only genres of series with a published, available video ("Drama" is only
+    // used by seeded series without videos).
+    assert.deepEqual(res.body, ["Adventure", "Comedy", "Fantasy", "Shonen"]);
   });
 
   test("series list: genre and q filters, unknown section 404", async () => {

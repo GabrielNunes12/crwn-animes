@@ -15,24 +15,25 @@ function sectionFilter(value) {
   return value;
 }
 
-const queryString = (value) => (typeof value === "string" && value.trim() !== "" ? value.trim() : null);
-
 const SEARCH_Q_MAX = 80;
 const SEARCH_GENRE_MAX = 100;
 const SEARCH_LIMIT_MAX = 50;
 const SEARCH_OFFSET_MAX = 100_000;
 
+/** Reads text query parameters into `errors` (repeated → 400, too long → 400, blank → null). */
+const textReader = (query, errors) => (field, max) => {
+  const value = query[field];
+  if (value == null) return null;
+  if (typeof value !== "string") return void (errors[field] = "Send this parameter once, as text.");
+  const trimmed = value.trim();
+  if ([...trimmed].length > max) return void (errors[field] = `Use at most ${max} characters.`);
+  return trimmed === "" ? null : trimmed;
+};
+
 /** GET /api/search query → repo.search() arguments; one 400 listing every bad field. */
 function readSearchQuery(query) {
   const errors = {};
-  const text = (field, max) => {
-    const value = query[field];
-    if (value == null) return null;
-    if (typeof value !== "string") return void (errors[field] = "Send this parameter once, as text.");
-    const trimmed = value.trim();
-    if ([...trimmed].length > max) return void (errors[field] = `Use at most ${max} characters.`);
-    return trimmed === "" ? null : trimmed;
-  };
+  const text = textReader(query, errors);
   const int = (field, { min, max, fallback }) => {
     const value = query[field];
     if (value == null || value === "") return fallback;
@@ -53,7 +54,19 @@ function readSearchQuery(query) {
   if (Object.keys(errors).length) throw validationError(errors);
 
   const needle = searchNeedle(q);
-  return { needle, section, genre, sort: sort ?? (needle ? "relevance" : "az"), limit, offset };
+  return { needle, section, genre, sort: sort ?? (needle != null ? "relevance" : "az"), limit, offset };
+}
+
+/**
+ * Text and genre filters both match nothing when the q has no searchable
+ * character ("鬼" is searchable, "😀" or "%" is not) or the genre is unknown.
+ * Otherwise the genre is swapped for its stored spelling ("AÇÃO" -> "Ação").
+ */
+function resolveFilters(repo, { needle, genre }) {
+  if (needle === "") return null;
+  if (genre == null) return { needle, genre: null };
+  const canonical = repo.canonicalGenre(genre);
+  return canonical ? { needle, genre: canonical } : null;
 }
 
 // Public, read-only catalog. Responses never include admin-only fields.
@@ -73,7 +86,9 @@ export function catalogRoutes({ repo }) {
   // Accent/case-insensitive search over series name + aliases, one item per
   // (series, section) that has a published video. Empty q browses everything.
   get("/search", (req, res) => {
-    res.json(repo.search(readSearchQuery(req.query)));
+    const query = readSearchQuery(req.query);
+    const filters = resolveFilters(repo, query);
+    res.json(filters ? repo.search({ ...query, ...filters }) : { items: [], total: 0 });
   });
 
   get("/latest", (req, res) => {
@@ -116,7 +131,13 @@ export function catalogRoutes({ repo }) {
   get("/:section/series", (req, res) => {
     const { section } = req.params;
     if (!SECTIONS.includes(section)) throw notFound("Unknown section.");
-    res.json(repo.listSeriesInSection(section, queryString(req.query.genre), searchNeedle(queryString(req.query.q))));
+    const errors = {};
+    const text = textReader(req.query, errors);
+    const q = text("q", SEARCH_Q_MAX);
+    const genre = text("genre", SEARCH_GENRE_MAX);
+    if (Object.keys(errors).length) throw validationError(errors);
+    const filters = resolveFilters(repo, { needle: searchNeedle(q), genre });
+    res.json(filters ? repo.listSeriesInSection(section, filters.genre, filters.needle) : []);
   });
 
   get("/:section/series/:slug", (req, res) => {

@@ -3,7 +3,7 @@
 // Crawlers and link previews get index.html from the Express server with the
 // page's <head> already filled in, so these checks request the API's own
 // origin (API_ORIGIN — it serves this run's client build, see
-// e2e/api-server.mjs), never `vite preview`. The browser runs with JavaScript
+// CLIENT_DIST in playwright.config.js), never `vite preview`. The browser runs with JavaScript
 // disabled: what is asserted is exactly what the server sent, not what React
 // renders afterwards. Canonical URLs are absolute, built from APP_URL, which
 // the e2e API gets as the client's baseURL.

@@ -85,8 +85,8 @@ export default defineConfig({
     },
     {
       name: "api",
-      // server/src/index.js, but serving e2e/.client-dist (see api-server.mjs)
-      command: "node ../e2e/api-server.mjs",
+      // The real server entry point, serving the bundle this run built (CLIENT_DIST).
+      command: "node src/index.js",
       cwd: path.join(root, "server"),
       url: `http://localhost:${API_PORT}/api/auth/me`,
       reuseExistingServer: false,
@@ -96,6 +96,7 @@ export default defineConfig({
       env: {
         NODE_ENV: "test",
         PORT: String(API_PORT),
+        CLIENT_DIST: path.join(root, "e2e", ".client-dist"),
         DATABASE_FILE: databaseFile,
         APP_URL: baseURL,
         CLIENT_ORIGIN: baseURL,

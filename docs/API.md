@@ -230,15 +230,19 @@ static `<title>`), with **every value HTML-escaped**:
   escaped as `<\/`. Series pages: `TVSeries`/`CreativeWorkSeries` JSON-LD with `name`, `description`, `image`, `genre`.
 - `<meta name="robots" content="noindex">` on `/admin*`, `/account`, `/login`, `/register`, `/check-email`,
   `/verify-email`, `/forgot-password`, `/reset-password`, `/search`.
-- Unknown section/series/episode, or an unpublished/unavailable-but-unknown path → **HTTP 404** with the SPA
+- `/index.html` → **301** to `/`. Manga chapters are always season 1.
+- Unknown section/series/episode/genre, a series page with no published video in that section, or a genre with no published series → **HTTP 404** with the SPA
   shell (title "Página não encontrada · Crwn Animes", `noindex`). Non-canonical watch URLs
   (`/episode/01`, `/season/1/episode/2`) → **301** to the canonical route.
+- Canonical URLs always use `APP_URL` (never the request Host). In production the server refuses to start unless
+  `APP_URL` is an `https://` URL.
 - Pages: home, `/anime`, `/manga`, `/genre/:genre`, series, episode/chapter, `/privacy` get real titles and
   descriptions (pt-BR copy; synopsis truncated to 160 chars on a word boundary).
 
 | Method & path | Success |
 |---|---|
 | `GET /sitemap.xml` | `200 application/xml` — home, `/anime`, `/manga`, every genre page, every series page that has published videos (per section), every published **available** episode/chapter; `<lastmod>` from `publishedAt`/`updatedAt`. Cached `public, max-age=3600`. |
+| `GET /sitemap-<n>.xml` | Only when the site has more than 50,000 URLs: `/sitemap.xml` then becomes a sitemap index pointing at `/sitemap-1.xml` … `/sitemap-N.xml` (≤ 50,000 URLs each). Otherwise 404. Generated XML is cached in memory until the catalog changes. |
 | `GET /robots.txt` | `200 text/plain` — `Disallow: /admin`, `/account`, `/api/`; `Sitemap: ${APP_URL}/sitemap.xml`. |
 
 ## Search & browse
@@ -264,8 +268,11 @@ Matching ignores case and accents and works on series name + aliases ("pokemon" 
 type SearchItem = SeriesListItem & { section: Section; latestPublishedAt: string | null };
 ```
 
-`GET /api/genres` stays as is. The existing `GET /api/:section/series?q=` now uses the same
-accent-insensitive matching.
+`GET /api/genres` now lists only genres of series with ≥ 1 published, available video (genre spelling is
+canonicalised to the first-seen form; comparisons are case-insensitive with pt-BR rules). The existing
+`GET /api/:section/series?q=` uses the same accent-insensitive matching and the same 80-char limit.
+Letters of every script are kept for matching ("鬼滅" finds "鬼滅の刃"); a non-empty `q` with nothing
+searchable in it (only emoji or punctuation) matches nothing: `{ items: [], total: 0 }`.
 
 ## Front-end routes added
 | Page | Path |

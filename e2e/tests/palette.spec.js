@@ -21,6 +21,23 @@ const options = (page) => dialog(page).getByRole("listbox", { name: "Sugestões"
 const trigger = (page) => page.getByRole("banner").getByRole("button", { name: "Busca rápida" });
 
 /** Opens the home page and waits until the app (and its keyboard listener) is up. */
+/**
+ * toBeFocused(), but on failure the error names the element that actually has focus,
+ * so a rare CI failure can be diagnosed from the log alone.
+ */
+async function expectFocused(page, locator) {
+  try {
+    await expect(locator).toBeFocused();
+  } catch (error) {
+    const active = await page.evaluate(() => {
+      const el = document.activeElement;
+      return el ? `${el.outerHTML.slice(0, 160)} (connected: ${el.isConnected})` : "none";
+    });
+    error.message += `\nFocused element instead: ${active}`;
+    throw error;
+  }
+}
+
 async function openHome(page) {
   await page.goto("/");
   await expect(trigger(page)).toBeVisible();
@@ -79,7 +96,7 @@ test.describe("command palette", () => {
       await combobox(page).fill("pal");
       await page.keyboard.press("Escape");
       await expect(dialog(page)).toBeHidden();
-      await expect(trigger(page)).toBeFocused();
+      await expectFocused(page, trigger(page));
     });
 
     await test.step("reopening starts empty", async () => {
@@ -100,7 +117,7 @@ test.describe("command palette", () => {
       await expect(combobox(page)).toBeFocused();
       await page.keyboard.press("Escape");
       await expect(dialog(page)).toBeHidden();
-      await expect(siteSearch).toBeFocused();
+      await expectFocused(page, siteSearch);
       await expect(siteSearch).toHaveValue("abc");
     });
   });

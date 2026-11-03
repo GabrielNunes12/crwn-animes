@@ -12,6 +12,7 @@
 // surprises): the template is split once and the tags are concatenated.
 import fs from "node:fs";
 import { SECTIONS } from "./classifier.js";
+import { genreKey } from "./genres.js";
 import { videoRoute } from "./routing.js";
 import { SLUG_RE } from "./validation.js";
 
@@ -64,12 +65,16 @@ function splitTemplate(html) {
 
 /**
  * Reads the built index.html once and keeps it; re-reads it when the file's
- * mtime or size changes (a new deploy). If the file disappears, the last good
+ * mtime or size changes (a new deploy). The file is stat()ed at most once per
+ * `checkEveryMs` (every call when 0). If the file disappears, the last good
  * copy keeps being served.
  */
-export function createTemplate(file) {
+export function createTemplate(file, { checkEveryMs = 0, now = Date.now } = {}) {
   let cache = null;
+  let checkedAt = -Infinity;
   return () => {
+    if (cache && now() - checkedAt < checkEveryMs) return cache.parts;
+    checkedAt = now();
     let stat;
     try {
       stat = fs.statSync(file);
@@ -175,7 +180,9 @@ export function resolvePage(repo, pathname) {
     });
   }
   if (seg.length === 2 && first === "genre") {
-    const genre = repo.listGenres().find((g) => g.toLowerCase() === second.toLowerCase());
+    // Only genres with a published, available series have a page (same list as /api/genres and the sitemap).
+    const key = genreKey(second);
+    const genre = repo.listGenres().find((g) => genreKey(g) === key);
     if (!genre) return notFoundPage();
     return page({
       headline: `${genre} · Animes e mangás`,
@@ -318,7 +325,11 @@ export function renderPage(template, pageData, appUrl) {
 
 // ---------------------------------------------------------------- sitemap / robots
 
-export function sitemapXml(repo, appUrl) {
+/** The sitemap protocol's limit of URLs per file. */
+export const SITEMAP_MAX_URLS = 50_000;
+
+/** Every URL the sitemap lists, as { loc, lastmod }. */
+function sitemapUrls(repo, appUrl) {
   const urls = [];
   const add = (path, lastmod) => urls.push({ loc: appUrl + path, lastmod });
   add("/", repo.latestPublishedAt());
@@ -327,13 +338,42 @@ export function sitemapXml(repo, appUrl) {
   const { series, videos } = repo.sitemapEntries();
   for (const s of series) add(s.route, s.lastmod);
   for (const v of videos) if (v.route) add(v.route, v.lastmod);
+  return urls;
+}
 
-  const lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'];
-  for (const { loc, lastmod } of urls) {
-    lines.push(`  <url><loc>${escapeXml(loc)}</loc>${lastmod ? `<lastmod>${escapeXml(lastmod)}</lastmod>` : ""}</url>`);
-  }
+const XML_HEAD = '<?xml version="1.0" encoding="UTF-8"?>';
+const SITEMAP_NS = "http://www.sitemaps.org/schemas/sitemap/0.9";
+const lastmodTag = (lastmod) => (lastmod ? `<lastmod>${escapeXml(lastmod)}</lastmod>` : "");
+const newest = (urls) => urls.reduce((max, u) => (u.lastmod && (!max || u.lastmod > max) ? u.lastmod : max), null);
+
+function urlset(urls) {
+  const lines = [XML_HEAD, `<urlset xmlns="${SITEMAP_NS}">`];
+  for (const { loc, lastmod } of urls) lines.push(`  <url><loc>${escapeXml(loc)}</loc>${lastmodTag(lastmod)}</url>`);
   lines.push("</urlset>", "");
   return lines.join("\n");
+}
+
+/**
+ * The sitemap files, rebuilt only when the catalog changes:
+ *   up to `maxUrls` URLs:  /sitemap.xml is the <urlset>, no child files;
+ *   more:                  /sitemap.xml is a <sitemapindex> of /sitemap-1.xml … /sitemap-N.xml
+ *                          (each <= maxUrls URLs).
+ * get(0) is /sitemap.xml, get(n) is /sitemap-n.xml; null when it doesn't exist.
+ */
+export function createSitemap({ repo, appUrl, maxUrls = SITEMAP_MAX_URLS }) {
+  const build = repo.untilCatalogChanges(() => {
+    const urls = sitemapUrls(repo, appUrl);
+    if (urls.length <= maxUrls) return [urlset(urls)];
+    const chunks = [];
+    for (let i = 0; i < urls.length; i += maxUrls) chunks.push(urls.slice(i, i + maxUrls));
+    const index = [XML_HEAD, `<sitemapindex xmlns="${SITEMAP_NS}">`];
+    chunks.forEach((chunk, i) => {
+      index.push(`  <sitemap><loc>${escapeXml(`${appUrl}/sitemap-${i + 1}.xml`)}</loc>${lastmodTag(newest(chunk))}</sitemap>`);
+    });
+    index.push("</sitemapindex>", "");
+    return [index.join("\n"), ...chunks.map(urlset)];
+  });
+  return { get: (n) => build()[n] ?? null };
 }
 
 export function robotsTxt(appUrl) {

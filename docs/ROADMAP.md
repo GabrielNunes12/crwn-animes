@@ -16,8 +16,8 @@ Ground rules that never change:
 - [x] GitHub Actions CI running server tests, client lint/test/build and e2e on every PR
 
 ## Next
-- [ ] SEO: server-rendered `<title>`/description/OpenGraph per series and episode, canonical URLs, `sitemap.xml`, VideoObject JSON-LD
-- [ ] Unified accent-insensitive search across anime + manga (reuse `normalize()`), ⌘K command palette, genre pages with sort (top/new/A–Z)
+- [x] SEO: server-rendered `<title>`/description/OpenGraph per series and episode, canonical URLs, `sitemap.xml`, VideoObject JSON-LD
+- [x] Unified accent-insensitive search across anime + manga (reuse `normalize()`), ⌘K command palette, genre pages with sort (top/new/A–Z)
 - [ ] Pagination for `/latest` and admin lists; virtualised long episode lists; `?season=` filter
 - [ ] Admin series board: drag to reorder/renumber episodes, season tabs, draft preview, 7-day trash with restore instead of hard deletes
 - [ ] PWA: manifest, service worker caching the app shell and catalog, offline page; proxy thumbnails same-origin

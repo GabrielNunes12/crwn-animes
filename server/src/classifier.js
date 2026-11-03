@@ -204,8 +204,15 @@ export function classify(info, seriesList, overrides = {}) {
     }
   }
 
-  // 3. Season (manga chapters have no seasons)
-  const season = overrides.season ?? (section === "manga" ? 1 : extractSeason(remainder) ?? 1);
+  // 3. Season. Manga chapters have no seasons (/manga/:slug/chapter/:n), so
+  // they are always season 1, even if an admin set another one.
+  let season;
+  if (section === "manga") {
+    season = 1;
+    if (overrides.season != null && overrides.season !== 1) reasons.push("manga chapters have no seasons: season override ignored");
+  } else {
+    season = overrides.season ?? extractSeason(remainder) ?? 1;
+  }
 
   // 4. Episode / chapter number
   let number = null;

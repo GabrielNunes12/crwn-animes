@@ -375,6 +375,7 @@ export function openDatabase(file = ":memory:", { seedCatalog = true, migrateTo 
   db.pragma("busy_timeout = 5000");
   migrate(db, migrateTo);
   db.pragma("foreign_keys = ON");
-  if (seedCatalog) seed(db);
+  // The seed matches the latest schema, so a partly migrated database is never seeded.
+  if (seedCatalog && migrateTo >= MIGRATIONS.length) seed(db);
   return db;
 }

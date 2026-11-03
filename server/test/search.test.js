@@ -3,8 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { after, before, describe, test } from "node:test";
-import { openDatabase } from "../src/db.js";
-import { searchText } from "../src/search.js";
+import { SCHEMA_VERSION, openDatabase } from "../src/db.js";
+import { searchNormalize, searchText } from "../src/search.js";
 import { addVideo, signUp, startServer } from "./helpers.js";
 
 const slugs = (res) => res.body.items.map((i) => i.slug);
@@ -124,12 +124,22 @@ describe("search: matching, filters, both sections", () => {
       const res = await c.get(`/api/search?q=${encodeURIComponent(q)}`);
       assert.equal(res.status, 200, q);
     }
-    assert.equal((await c.get("/api/search?q=%25")).body.total, 5, "only punctuation: browse everything");
     assert.equal((await c.get("/api/search?q=o%25e")).body.total, 0, "% is not a wildcard");
+    // A q with nothing searchable in it matches nothing (it does not browse everything).
+    for (const q of ["%", "%%", "😀", "!!!", "—"]) {
+      const res = await c.get(`/api/search?q=${encodeURIComponent(q)}`);
+      assert.deepEqual(res.body, { items: [], total: 0 }, q);
+      assert.deepEqual((await c.get(`/api/anime/series?q=${encodeURIComponent(q)}`)).body, [], q);
+    }
   });
 
-  test("GET /api/:section/series?q= uses the same matching", async () => {
+  test("GET /api/:section/series?q= uses the same matching and limits", async () => {
     const c = srv.client();
+    const long = await c.get(`/api/anime/series?q=${"a".repeat(81)}`);
+    assert.equal(long.status, 400);
+    assert.ok(long.body.error.details.q);
+    assert.equal((await c.get("/api/anime/series?q=a&q=b")).status, 400);
+    assert.equal((await c.get(`/api/anime/series?q=${"a".repeat(80)}`)).status, 200);
     assert.deepEqual((await c.get("/api/anime/series?q=pokemon")).body.map((s) => s.slug), ["pokemon"]);
     assert.deepEqual((await c.get("/api/anime/series?q=Pocket")).body.map((s) => s.slug), ["pokemon"]);
     assert.deepEqual((await c.get("/api/anime/series?q=jjk&genre=fantasy")).body.map((s) => s.slug), ["jujutsu-kaisen"]);
@@ -243,22 +253,40 @@ describe("search_text migration", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "crwn-search-"));
     const file = path.join(dir, "old.db");
     try {
-      // Build a version-3 database: the current schema minus search_text.
-      const old = openDatabase(file, { seedCatalog: false });
-      old.exec("ALTER TABLE series DROP COLUMN search_text");
-      old.pragma("user_version = 3");
+      const old = openDatabase(file, { seedCatalog: false, migrateTo: 3 });
       old.prepare("INSERT INTO series (slug, name, aliases) VALUES (?, ?, ?)").run("pokemon", "Pokémon", JSON.stringify(["Pocket Monsters"]));
       old.prepare("INSERT INTO series (slug, name, aliases) VALUES (?, ?, ?)").run("broken", "Broken", "not json");
+      old.prepare("INSERT INTO series (slug, name, aliases) VALUES (?, ?, ?)").run("aot", "進撃の巨人", JSON.stringify(["Shingeki", 1, null]));
       old.close();
 
       const db = openDatabase(file);
       try {
         const rows = db.prepare("SELECT slug, search_text FROM series ORDER BY slug").all();
         assert.deepEqual(rows, [
+          { slug: "aot", search_text: "|進撃の巨人|shingeki|" },
           { slug: "broken", search_text: "|broken|" },
           { slug: "pokemon", search_text: "|pokemon|pocket monsters|" },
         ]);
-        assert.equal(db.pragma("user_version", { simple: true }), 4);
+        assert.equal(db.pragma("user_version", { simple: true }), SCHEMA_VERSION);
+      } finally {
+        db.close();
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("migration 5 re-normalises v1.2.0 search_text (non-Latin names were dropped)", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "crwn-search-"));
+    const file = path.join(dir, "v4.db");
+    try {
+      const old = openDatabase(file, { seedCatalog: false, migrateTo: 4 });
+      // What the first v1.2 normaliser stored: only [a-z0-9] survived.
+      old.prepare("INSERT INTO series (slug, name, aliases, search_text) VALUES (?, ?, ?, ?)").run("kny", "鬼滅の刃", JSON.stringify(["Kimetsu"]), "|kimetsu|");
+      old.close();
+      const db = openDatabase(file);
+      try {
+        assert.equal(db.prepare("SELECT search_text FROM series WHERE slug = 'kny'").get().search_text, "|鬼滅の刃|kimetsu|");
       } finally {
         db.close();
       }
@@ -274,6 +302,35 @@ describe("search_text migration", () => {
       assert.equal(db.prepare("SELECT search_text FROM series WHERE slug = 'jujutsu-kaisen'").get().search_text, searchText("Jujutsu Kaisen", ["JJK"]));
     } finally {
       db.close();
+    }
+  });
+});
+
+describe("search: letters of every script", () => {
+  test("searchNormalize strips accents and case, keeps non-Latin letters, folds full-width", () => {
+    assert.equal(searchNormalize("Pokémon!"), "pokemon");
+    assert.equal(searchNormalize("ＰＯＫＥＭＯＮ"), "pokemon");
+    assert.equal(searchNormalize("Ataque dos Titãs — 2ª temporada"), "ataque dos titas 2a temporada");
+    assert.equal(searchNormalize("鬼滅の刃"), "鬼滅の刃");
+    assert.equal(searchNormalize("진격의 거인"), searchNormalize("진격의 거인"));
+    assert.equal(searchNormalize("😀 % —"), "");
+    assert.equal(searchText("Kimetsu", ["鬼滅の刃", 42, null]), "|kimetsu|鬼滅の刃|");
+  });
+
+  test("Japanese names and aliases are findable", async () => {
+    const srv = await startServer();
+    try {
+      srv.services.repo.createSeries({ slug: "kimetsu", name: "Kimetsu no Yaiba", aliases: ["鬼滅の刃"] });
+      srv.services.repo.createSeries({ slug: "shingeki", name: "進撃の巨人", aliases: ["Attack on Titan"] });
+      await publish(srv, 1, "kimetsu");
+      await publish(srv, 2, "shingeki");
+      const c = srv.client();
+      assert.deepEqual(slugs(await c.get(`/api/search?q=${encodeURIComponent("鬼滅")}`)), ["kimetsu"]);
+      assert.deepEqual(slugs(await c.get(`/api/search?q=${encodeURIComponent("進撃の巨人")}`)), ["shingeki"]);
+      assert.deepEqual((await c.get(`/api/anime/series?q=${encodeURIComponent("巨人")}`)).body.map((s) => s.slug), ["shingeki"]);
+      assert.deepEqual((await c.get(`/api/search?q=${encodeURIComponent("😀")}`)).body, { items: [], total: 0 });
+    } finally {
+      await srv.close();
     }
   });
 });

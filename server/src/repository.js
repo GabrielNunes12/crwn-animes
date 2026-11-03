@@ -1,4 +1,5 @@
 import { seriesRoute, videoRoute } from "./routing.js";
+import { canonicalGenres, genreKey, genreSpellings, sortGenres } from "./genres.js";
 import { NEEDLE_MATCH, NEEDLE_RANK, searchText } from "./search.js";
 
 const parseJson = (text, fallback) => {
@@ -72,35 +73,22 @@ export function publicVideo(video) {
   return rest;
 }
 
-// GET /api/search: one row per (series, section) with >= 1 published video.
-// Ratings count published videos of that section only, like the section list;
-// `bayes` is the /top-rated Bayesian average (C*m + sum) / (C + n).
-const SEARCH_HITS = `
-  WITH pub AS (
-    SELECT series_id, section, COUNT(*) AS video_count, MAX(published_at) AS latest_published_at
-    FROM videos
-    WHERE status = 'published' AND series_id IS NOT NULL AND section IS NOT NULL
-      AND (@section IS NULL OR section = @section)
-    GROUP BY series_id, section
-  ), rs AS (
-    SELECT v.series_id, v.section, AVG(r.score) AS avg_score, COUNT(*) AS n, SUM(r.score) AS total
-    FROM ratings r JOIN videos v ON v.id = r.video_id
-    WHERE v.status = 'published' AND (@section IS NULL OR v.section = @section)
-    GROUP BY v.series_id, v.section
-  ), site AS (SELECT AVG(score) AS m FROM ratings),
-  hits AS (
-    SELECT s.*, pub.section AS section, pub.video_count, pub.latest_published_at,
-      rs.avg_score AS rating_avg, COALESCE(rs.n, 0) AS rating_count,
-      CASE WHEN rs.n > 0 THEN (@c * site.m + rs.total) / (@c + rs.n) END AS bayes,
-      ${NEEDLE_RANK} AS match_rank
-    FROM pub
-    JOIN series s ON s.id = pub.series_id
-    LEFT JOIN rs ON rs.series_id = pub.series_id AND rs.section = pub.section
-    CROSS JOIN site
-    WHERE ${NEEDLE_MATCH}
-      AND (@genre IS NULL OR EXISTS (
-        SELECT 1 FROM json_each(s.genres) g WHERE lower(g.value) = lower(@genre)))
-  )`;
+// GET /api/search: one row per (series, section) with >= 1 published video,
+// read from series_stats (kept current by triggers, see db.js migration 8), so
+// nothing is aggregated per request. Ratings count published videos of that
+// section only, like the section list; `bayes` is the /top-rated Bayesian
+// average (C*m + sum) / (C + n), m = site-wide mean (@m). `total` comes from
+// the same statement (window count before LIMIT/OFFSET).
+const SEARCH_SELECT = `
+  SELECT s.id, s.slug, s.name, s.synopsis, s.aliases, s.genres, s.cover_url,
+    st.section, st.video_count, st.latest_published_at, st.rating_n AS rating_count,
+    CASE WHEN st.rating_n > 0 THEN CAST(st.rating_sum AS REAL) / st.rating_n END AS rating_avg,
+    CASE WHEN st.rating_n > 0 THEN (@c * @m + st.rating_sum) / (@c + st.rating_n) END AS bayes,
+    ${NEEDLE_RANK} AS match_rank,
+    COUNT(*) OVER () AS total
+  FROM series_stats st JOIN series s ON s.id = st.series_id
+  WHERE (@section IS NULL OR st.section = @section) AND ${NEEDLE_MATCH}
+    AND (@genre IS NULL OR EXISTS (SELECT 1 FROM json_each(s.genres) g WHERE g.value = @genre))`;
 
 // Fixed ORDER BY per sort (never built from user input). Ties end on name,
 // then anime before manga, then id, so pages never overlap.
@@ -133,28 +121,31 @@ export function createRepository(db) {
       WHERE id = @id`),
     deleteSeries: db.prepare("DELETE FROM series WHERE id = ?"),
     // Rating of a series in one section = average of every rating given to
-    // its published videos in that section.
+    // its published videos in that section (precomputed in series_stats).
     seriesInSection: db.prepare(`
-      SELECT s.*, COUNT(v.id) AS video_count, rs.avg_score AS rating_avg, rs.n AS rating_count
-      FROM series s
-      JOIN videos v ON v.series_id = s.id
-      LEFT JOIN (
-        SELECT v2.series_id, AVG(r.score) AS avg_score, COUNT(*) AS n
-        FROM ratings r JOIN videos v2 ON v2.id = r.video_id
-        WHERE v2.status = 'published' AND v2.section = @section
-        GROUP BY v2.series_id
-      ) rs ON rs.series_id = s.id
-      WHERE v.status = 'published' AND v.section = @section AND ${NEEDLE_MATCH}
-        AND (@genre IS NULL OR EXISTS (
-          SELECT 1 FROM json_each(s.genres) g WHERE lower(g.value) = lower(@genre)))
-      GROUP BY s.id ORDER BY s.name COLLATE NOCASE`),
-    searchCount: db.prepare(`${SEARCH_HITS} SELECT COUNT(*) AS n FROM hits`),
+      SELECT s.*, st.video_count, st.rating_n AS rating_count,
+        CASE WHEN st.rating_n > 0 THEN CAST(st.rating_sum AS REAL) / st.rating_n END AS rating_avg
+      FROM series_stats st JOIN series s ON s.id = st.series_id
+      WHERE st.section = @section AND ${NEEDLE_MATCH}
+        AND (@genre IS NULL OR EXISTS (SELECT 1 FROM json_each(s.genres) g WHERE g.value = @genre))
+      ORDER BY s.name COLLATE NOCASE, s.id`),
     search: Object.fromEntries(
       Object.entries(SEARCH_ORDER).map(([sort, order]) => [
         sort,
-        db.prepare(`${SEARCH_HITS} SELECT * FROM hits ORDER BY ${order} LIMIT @limit OFFSET @offset`),
+        db.prepare(`${SEARCH_SELECT} ORDER BY ${order} LIMIT @limit OFFSET @offset`),
       ])
     ),
+    // Only needed when OFFSET is past the end (no row carries the window count).
+    searchCount: db.prepare(`SELECT COUNT(*) AS n FROM (${SEARCH_SELECT})`),
+    siteRating: db.prepare("SELECT n, total FROM rating_totals WHERE id = 1"),
+    catalogVersion: db.prepare("SELECT version FROM catalog_version WHERE id = 1").pluck(),
+    seriesGenres: db.prepare("SELECT id, genres FROM series WHERE id IS NOT @excludeId ORDER BY id"),
+    // Genres worth a page: series with a published video YouTube still serves.
+    listedSeriesGenres: db.prepare(`
+      SELECT s.id, s.genres FROM series s
+      WHERE EXISTS (SELECT 1 FROM videos v
+        WHERE v.series_id = s.id AND v.status = 'published' AND v.availability = 'ok')
+      ORDER BY s.id`),
     // ---- server-rendered pages (src/seo.js) and the sitemap ----
     seriesSectionStats: db.prepare(`
       SELECT COUNT(*) AS video_count, MAX(published_at) AS latest_published_at FROM videos
@@ -253,12 +244,29 @@ export function createRepository(db) {
     overrides: JSON.stringify(p.overrides ?? {}),
   });
 
-  const seriesParams = (s) => ({
+  const genreRows = (stmt, params = {}) => stmt.all(params).map((r) => ({ genres: parseJson(r.genres, []) }));
+
+  /** Memoises fn() until the catalog changes (catalog_version is bumped by triggers on series/videos). */
+  const untilCatalogChanges = (fn) => {
+    let cached = null;
+    return () => {
+      const version = q.catalogVersion.get();
+      if (!cached || cached.version !== version) cached = { version, value: fn() };
+      return cached.value;
+    };
+  };
+  // genreKey -> canonical spelling, over every series (canonicalising input).
+  const allGenreSpellings = untilCatalogChanges(() => genreSpellings(genreRows(q.seriesGenres, { excludeId: null })));
+  // Sorted canonical genres of series with a published, available video.
+  const listedGenres = untilCatalogChanges(() => sortGenres(genreSpellings(genreRows(q.listedSeriesGenres)).values()));
+
+  /** Column values for a series; genres take the spelling other series already use. */
+  const seriesParams = (s, excludeId = null) => ({
     slug: s.slug,
     name: s.name,
     synopsis: s.synopsis ?? null,
     aliases: JSON.stringify(s.aliases ?? []),
-    genres: JSON.stringify(s.genres ?? []),
+    genres: JSON.stringify(canonicalGenres(s.genres ?? [], genreSpellings(genreRows(q.seriesGenres, { excludeId })))),
     coverUrl: s.coverUrl ?? null,
     searchText: searchText(s.name, s.aliases ?? []),
   });
@@ -286,22 +294,19 @@ export function createRepository(db) {
     },
     /** Replaces every column with `series` (callers merge the patch first). */
     updateSeries: (id, series) => {
-      q.updateSeries.run({ id, ...seriesParams(series) });
+      q.updateSeries.run({ id, ...seriesParams(series, id) });
       return toSeries(q.seriesById.get(id));
     },
     /** Videos (and through them ratings) go with it: ON DELETE CASCADE. */
     deleteSeries: (id) => q.deleteSeries.run(id).changes > 0,
-    /** Every genre used by any series (first spelling wins, case-insensitive), sorted. */
-    listGenres: () => {
-      const genres = new Map();
-      for (const row of q.allSeries.all()) {
-        for (const genre of parseJson(row.genres, [])) {
-          if (typeof genre === "string" && !genres.has(genre.toLowerCase())) genres.set(genre.toLowerCase(), genre);
-        }
-      }
-      return [...genres.values()].sort((a, b) => a.localeCompare(b));
-    },
-    /** `needle` comes from searchNeedle() (null = no text filter). */
+    /** Bumped by triggers on every series/video change; keys in-memory caches. */
+    catalogVersion: () => q.catalogVersion.get(),
+    untilCatalogChanges,
+    /** Canonical genres of series with >= 1 published, available video, sorted (cached). */
+    listGenres: () => listedGenres(),
+    /** The stored spelling of `genre` (any case), or null when no series uses it. */
+    canonicalGenre: (genre) => allGenreSpellings().get(genreKey(genre)) ?? null,
+    /** `needle` comes from searchNeedle() (null = no text filter); `genre` must be canonical. */
     listSeriesInSection: (section, genre = null, needle = null) =>
       q.seriesInSection.all({ section, genre, needle }).map((row) => ({
         ...toSeries(row),
@@ -309,11 +314,14 @@ export function createRepository(db) {
         route: seriesRoute(section, row.slug),
         rating: ratingAverage(row.rating_avg, row.rating_count),
       })),
-    /** { items: SearchItem[], total } — see GET /api/search. */
+    /** { items: SearchItem[], total } — see GET /api/search. `genre` must be canonical. */
     search: ({ needle = null, section = null, genre = null, sort, limit, offset, c = 5, minCount = 3 }) => {
-      const params = { needle, section, genre, c, minCount, limit, offset };
-      const { n: total } = q.searchCount.get(params);
-      const items = q.search[sort].all(params).map((row) => ({
+      const site = q.siteRating.get();
+      const m = site && site.n > 0 ? site.total / site.n : 0;
+      const params = { needle, section, genre, c, m, minCount, limit, offset };
+      const rows = q.search[sort].all(params);
+      const total = rows.length ? rows[0].total : offset > 0 ? q.searchCount.get(params).n : 0;
+      const items = rows.map((row) => ({
         ...toSeries(row),
         videoCount: row.video_count,
         route: seriesRoute(row.section, row.slug),

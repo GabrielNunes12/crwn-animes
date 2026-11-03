@@ -3,8 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { after, before, describe, test } from "node:test";
-import { truncate } from "../src/seo.js";
-import { addVideo, startServer } from "./helpers.js";
+import { createTemplate, truncate } from "../src/seo.js";
+import { addVideo, startServer, vid } from "./helpers.js";
 
 const EVIL = `</script><script>alert(1)</script> & "x"`;
 const EVIL_GENRE = `<b>Evil</b> & Co`;
@@ -339,24 +339,45 @@ describe("server-rendered SEO meta", () => {
     }
   });
 
-  test("the template is read once and re-read when the file changes", async () => {
-    const file = path.join(dir, "index.html");
-    fs.writeFileSync(file, TEMPLATE.replace('<div id="root"></div>', '<div id="root"></div><!-- v2 -->'));
-    const future = new Date(Date.now() + 60_000);
-    fs.utimesSync(file, future, future);
-    try {
-      const res = await get("/anime");
-      assert.match(res.text, /<!-- v2 -->/);
-      assert.deepEqual(head(res.text).titles, ["Animes · Crwn Animes"]);
-    } finally {
-      fs.writeFileSync(file, TEMPLATE);
-    }
+  test("/index.html is never served raw: 301 to /", async () => {
+    const res = await raw(srv, "/index.html?x=1");
+    assert.equal(res.status, 301);
+    assert.equal(res.headers.get("location"), "/?x=1");
+    assert.equal(res.headers.get("cache-control"), "no-cache");
   });
 
   test("HEAD works like GET without a body", async () => {
     const res = await fetch(`${srv.base}/anime/one-piece`, { method: "HEAD" });
     assert.equal(res.status, 200);
     assert.equal(await res.text(), "");
+  });
+});
+
+describe("index.html template cache", () => {
+  test("read once, re-read when mtime changes, stat()ed at most every checkEveryMs", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "crwn-tpl-"));
+    const file = path.join(dir, "index.html");
+    let clock = 1_000;
+    try {
+      fs.writeFileSync(file, "<head><title>v1</title></head>");
+      const template = createTemplate(file, { checkEveryMs: 5000, now: () => clock });
+      assert.equal(template().after, "</head>");
+      const first = template();
+      fs.writeFileSync(file, "<head><title>v2</title></head><!-- v2 -->");
+      const future = new Date(Date.now() + 60_000);
+      fs.utimesSync(file, future, future);
+      clock += 4_999;
+      assert.equal(template(), first, "within checkEveryMs: no stat, cached copy");
+      clock += 2;
+      assert.equal(template().after, "</head><!-- v2 -->", "mtime changed: re-read");
+      fs.rmSync(file);
+      clock += 10_000;
+      assert.equal(template().after, "</head><!-- v2 -->", "file gone: last good copy");
+      const always = createTemplate(path.join(dir, "missing.html"));
+      assert.throws(() => always(), /ENOENT/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -378,6 +399,7 @@ describe("sitemap.xml and robots.txt", () => {
     // No client/dist: both are still served. An "&" in APP_URL must be escaped.
     srv = await startServer({ config: { appUrl: "https://crwn.example/a&b" } });
     srv.services.repo.createSeries({ slug: "sol", name: "Sol", genres: ["Slice of Life & Drama"] });
+    await addVideo(srv, 9, "x", { section: "anime", seriesSlug: "sol", number: 1 });
     v = {
       op1: await addVideo(srv, 1, "One Piece Episode 1"),
       opS2: await addVideo(srv, 2, "One Piece 2nd Season Episode 3"),
@@ -422,11 +444,17 @@ describe("sitemap.xml and robots.txt", () => {
       assert.ok(paths.includes(p), p);
     }
     assert.equal(paths.includes("/anime/bleach/episode/7"), false, "unavailable video excluded");
-    assert.equal(paths.some((p) => p.startsWith("/anime/sol")), false, "series without published videos excluded");
+    assert.equal(paths.some((p) => p.startsWith("/anime/naruto-shippuden")), false, "series without published videos excluded");
+    assert.equal(paths.includes("/genre/Drama"), false, "genre used only by series without videos excluded");
     assert.equal(new Set(paths).size, paths.length, "no duplicates");
     // Pending videos have no route, so nothing beyond the published ones is listed.
     const watchPages = paths.filter((p) => /\/(episode|chapter)\//.test(p));
-    assert.deepEqual(watchPages.sort(), ["/anime/one-piece/episode/1", "/anime/one-piece/season/2/episode/3", "/manga/one-piece/chapter/1100"]);
+    assert.deepEqual(watchPages.sort(), [
+      "/anime/one-piece/episode/1",
+      "/anime/one-piece/season/2/episode/3",
+      "/anime/sol/episode/1",
+      "/manga/one-piece/chapter/1100",
+    ]);
 
     const lastmod = Object.fromEntries(locs.map((m) => [m[1].replaceAll("&amp;", "&").slice(base.length), m[2]]));
     assert.equal(lastmod["/anime/one-piece/episode/1"], srv.services.repo.getVideo(v.op1.id).publishedAt);
@@ -443,6 +471,37 @@ describe("sitemap.xml and robots.txt", () => {
     }
   });
 
+  test("built once per catalog change", async () => {
+    const { repo } = srv.services;
+    const original = repo.sitemapEntries;
+    let builds = 0;
+    repo.sitemapEntries = () => {
+      builds++;
+      return original();
+    };
+    try {
+      await srv.client().get("/sitemap.xml");
+      const before = builds;
+      const first = (await srv.client().get("/sitemap.xml")).text;
+      assert.equal(builds, before, "cached");
+      const user = srv.db
+        .prepare("INSERT INTO users (email, display_name, password_hash, privacy_accepted_at, created_at) VALUES ('r@x.co', 'R', 'x', 'x', 'x')")
+        .run().lastInsertRowid;
+      assert.equal(srv.db.prepare("INSERT INTO ratings (user_id, video_id, score, updated_at) VALUES (?, ?, 5, 'x')").run(user, v.op1.id).changes, 1);
+      await srv.client().get("/sitemap.xml");
+      assert.equal(builds, before, "ratings do not invalidate it");
+      await addVideo(srv, 20, "One Piece Episode 20");
+      const after = (await srv.client().get("/sitemap.xml")).text;
+      assert.equal(builds, before + 1, "a new video does");
+      assert.ok(!first.includes("/anime/one-piece/episode/20<"));
+      assert.ok(after.includes("/anime/one-piece/episode/20<"));
+      srv.services.repo.setAvailability(srv.services.repo.getVideoByYoutubeId(vid(20)).id, "unavailable");
+      assert.ok(!(await srv.client().get("/sitemap.xml")).text.includes("/anime/one-piece/episode/20<"), "so does availability");
+    } finally {
+      repo.sitemapEntries = original;
+    }
+  });
+
   test("robots.txt", async () => {
     const res = await srv.client().get("/robots.txt");
     assert.equal(res.status, 200);
@@ -451,5 +510,53 @@ describe("sitemap.xml and robots.txt", () => {
     assert.ok(lines.includes("User-agent: *"));
     for (const p of ["/admin", "/account", "/api/"]) assert.ok(lines.includes(`Disallow: ${p}`), p);
     assert.ok(lines.includes("Sitemap: https://crwn.example/a&b/sitemap.xml"));
+  });
+});
+
+describe("sitemap index above the per-file URL limit", () => {
+  let srv;
+  before(async () => {
+    srv = await startServer({ config: { appUrl: "https://crwn.example", sitemapMaxUrls: 5 } });
+    for (let n = 1; n <= 6; n++) await addVideo(srv, n, `One Piece Episode ${n}`);
+  });
+  after(() => srv.close());
+
+  test("/sitemap.xml becomes a <sitemapindex> of /sitemap-<n>.xml files with <= limit URLs each", async () => {
+    const c = srv.client();
+    const index = await c.get("/sitemap.xml");
+    assert.equal(index.status, 200);
+    assert.equal(index.headers.get("content-type"), "application/xml; charset=utf-8");
+    assert.match(index.text, /^<\?xml version="1\.0" encoding="UTF-8"\?>\n<sitemapindex xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/);
+    const children = [...index.text.matchAll(/<sitemap><loc>([^<]+)<\/loc>(?:<lastmod>[^<]+<\/lastmod>)?<\/sitemap>/g)].map((m) => m[1]);
+    // home, /anime, /manga, 3 genres (Shonen, Adventure, Comedy), /anime/one-piece, 6 episodes = 13 URLs
+    assert.deepEqual(children, ["https://crwn.example/sitemap-1.xml", "https://crwn.example/sitemap-2.xml", "https://crwn.example/sitemap-3.xml"]);
+
+    const all = [];
+    for (const [i, url] of children.entries()) {
+      const res = await c.get(new URL(url).pathname);
+      assert.equal(res.status, 200, url);
+      assert.equal(res.headers.get("cache-control"), "public, max-age=3600");
+      assert.match(res.text, /<urlset xmlns=/);
+      const locs = [...res.text.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+      assert.ok(locs.length <= 5 && locs.length > 0, `${url}: ${locs.length}`);
+      if (i < 2) assert.equal(locs.length, 5);
+      all.push(...locs);
+    }
+    assert.equal(all.length, 13);
+    assert.equal(new Set(all).size, 13);
+    assert.ok(all.includes("https://crwn.example/anime/one-piece/episode/6"));
+    for (const p of ["/sitemap-4.xml", "/sitemap-0.xml", "/sitemap-01.xml", "/sitemap-x.xml"]) {
+      assert.equal((await c.get(p)).status, 404, p);
+    }
+  });
+
+  test("below the limit there are no child files", async () => {
+    const small = await startServer();
+    try {
+      assert.match((await small.client().get("/sitemap.xml")).text, /<urlset /);
+      assert.equal((await small.client().get("/sitemap-1.xml")).status, 404);
+    } finally {
+      await small.close();
+    }
   });
 });

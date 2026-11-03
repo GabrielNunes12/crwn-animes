@@ -221,7 +221,9 @@ describe("4. changing the password kills pending reset links", () => {
 describe("5. production safety", () => {
   test("production without SMTP is refused; the dev outbox needs dev mode and no SMTP", async () => {
     assert.throws(() => assertSafeConfig(loadConfig({ NODE_ENV: "production" })), /SMTP_HOST/);
-    assert.doesNotThrow(() => assertSafeConfig(loadConfig({ NODE_ENV: "production", SMTP_HOST: "smtp.example.com" })));
+    assert.doesNotThrow(() =>
+      assertSafeConfig(loadConfig({ NODE_ENV: "production", SMTP_HOST: "smtp.example.com", APP_URL: "https://crwn.example" }))
+    );
     assert.doesNotThrow(() => assertSafeConfig(loadConfig({})));
 
     const run = spawnSync(process.execPath, ["src/index.js"], {
@@ -236,6 +238,31 @@ describe("5. production safety", () => {
     await withServer({ config: { smtp: { host: "smtp.example.com", port: 587 } } }, async (srv) => {
       assert.equal((await srv.client().get("/api/dev/outbox")).status, 404);
     });
+  });
+
+  test("production needs an https APP_URL", () => {
+    const prod = { NODE_ENV: "production", SMTP_HOST: "smtp.example.com" };
+    for (const APP_URL of [undefined, "", "http://crwn.example", "crwn.example", "ftp://crwn.example"]) {
+      assert.throws(() => assertSafeConfig(loadConfig({ ...prod, APP_URL })), /APP_URL/, String(APP_URL));
+    }
+    assert.doesNotThrow(() => assertSafeConfig(loadConfig({ ...prod, APP_URL: "https://crwn.example/" })));
+    assert.doesNotThrow(() => assertSafeConfig(loadConfig({ APP_URL: "http://localhost:5173" })), "development may use http");
+
+    const run = spawnSync(process.execPath, ["src/index.js"], {
+      cwd: SERVER_DIR,
+      env: { ...process.env, NODE_ENV: "production", SMTP_HOST: "smtp.example.com", APP_URL: "", PORT: "0", DATABASE_FILE: ":memory:" },
+      encoding: "utf8",
+      timeout: 10_000,
+    });
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /Refusing to start: .*APP_URL/);
+  });
+
+  test("CLIENT_DIST is resolved from server/ (default ../client/dist)", () => {
+    assert.equal(loadConfig({}).clientDist, path.resolve(SERVER_DIR, "../client/dist"));
+    assert.equal(loadConfig({ CLIENT_DIST: "" }).clientDist, path.resolve(SERVER_DIR, "../client/dist"));
+    assert.equal(loadConfig({ CLIENT_DIST: "../e2e/.client-dist" }).clientDist, path.resolve(SERVER_DIR, "../e2e/.client-dist"));
+    assert.equal(loadConfig({ CLIENT_DIST: "/srv/www" }).clientDist, "/srv/www");
   });
 
   test("tokenised links are printed in development only", async () => {

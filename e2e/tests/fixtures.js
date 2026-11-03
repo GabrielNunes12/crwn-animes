@@ -14,7 +14,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 export const ADMIN_STATE = path.resolve(here, "../.auth/admin.json");
 /**
  * The API's own origin. It also serves the e2e client build with the
- * server-rendered SEO head (see e2e/api-server.mjs); `vite preview` (baseURL)
+ * server-rendered SEO head (see CLIENT_DIST in playwright.config.js); `vite preview` (baseURL)
  * only serves the static bundle, so SEO checks must request this origin.
  */
 export const API_ORIGIN = `http://localhost:${Number(process.env.E2E_API_PORT || 4517)}`;
