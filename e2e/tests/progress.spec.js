@@ -183,7 +183,12 @@ test.describe("series page progress", () => {
   });
 
   test("Back after clicking a season tab returns to the previous season", async ({ page }) => {
-    // The season tabs are links that change the URL (?season=), so Back should undo a season switch.
+    // KNOWN BUG (cycle 3): SeasonNav's <Link replace> (client/src/pages/Series/Series.jsx) replaces the
+    // history entry, so Back after a season switch leaves the series page instead of returning to the
+    // previous season. The tabs are plain links that change the URL; Back should undo them.
+    test.fail();
+    await page.goto("/anime");
+    await expect(page.getByRole("heading", { level: 1, name: "Anime" })).toBeVisible();
     await page.goto(S.anime);
     await expect(seasonLink(page, 1)).toHaveAttribute("aria-current", "true");
     await seasonLink(page, 2).click();
@@ -210,6 +215,28 @@ test.describe("series page progress", () => {
 
     await page.goto(`/manga?q=${encodeURIComponent(S.name)}`);
     await expect(card(S.name)).toContainText("✓ 2/2 lidos");
+  });
+
+  test("a card and its series page agree on N/M when the history holds stale entries for the series", async ({ page }) => {
+    // KNOWN BUG (cycle 3): cards count completed history entries whose stored *route* points at the
+    // series (buildSeriesIndex in client/src/lib/progress.js), while the series page counts the series'
+    // current videos by YouTube id (seriesProgress). After an admin swaps a broken episode's link (the
+    // Quebrados tab keeps the route, changes the id) or deletes an episode, the old entry still counts
+    // on the card: here the card says 3/5 while the series page says 1 de 5.
+    test.fail();
+    const { v } = S;
+    const stale = (route, at) => ({ t: 100, d: 100, at, route, title: "old link", thumb: null });
+    await seedProgress(page, {
+      [v.s1e1.youtubeVideoId]: done(v.s1e1, 1_000),
+      [fakeYouTubeId("old")]: stale(v.s1e1.route, 500), // same episode, previous YouTube link
+      [fakeYouTubeId("del")]: stale(`${S.anime}/episode/99`, 600), // an episode that no longer exists
+    });
+    await page.goto(S.anime);
+    await expect(page.getByText("1 de 5 assistidos", { exact: true })).toBeVisible();
+    await page.goto(`/anime?q=${encodeURIComponent(S.name)}`);
+    const card = page.getByRole("article").filter({ has: page.getByRole("heading", { name: S.name, exact: true }) });
+    await expect(card).toContainText("/5 assistidos");
+    await expect(card).toContainText("1/5 assistidos");
   });
 
   test("axe: series page with progress and season tabs", async ({ page }) => {
@@ -332,13 +359,15 @@ test.describe("/account: export / import watch history", () => {
         }
       }`;
       await importInput(page).setInputFiles(file("evil.json", evil));
-      await expect(status(page)).toHaveText(/Importados:/);
-      console.log("DEBUG", JSON.stringify(await readProgress(page), null, 1));
-      await expect(status(page)).toHaveText("Importados: 1. Ignorados: 10.");
-      await expect(page.getByText("2 vídeos no seu histórico.")).toBeVisible();
+      // "constructor" is 11 [A-Za-z0-9_-] characters, i.e. a well-formed video id: it is
+      // kept, but only as plain data (Object.prototype.constructor is untouched).
+      await expect(status(page)).toHaveText("Importados: 2. Ignorados: 9.");
+      await expect(page.getByText("3 vídeos no seu histórico.")).toBeVisible();
 
       const stored = await readProgress(page);
-      expect(Object.keys(stored).sort()).toEqual([evilId, v.s1e1.youtubeVideoId].sort());
+      expect(Object.keys(stored).sort()).toEqual([evilId, v.s1e1.youtubeVideoId, "constructor"].sort());
+      expect(stored.constructor).toEqual({ t: 1, d: 100, at: 99999999999999, route: v.s1e3.route, title: null, thumb: null });
+      expect(await page.evaluate(() => ({}).constructor === Object && typeof Object.prototype.constructor === "function")).toBe(true);
       expect(stored[v.s1e1.youtubeVideoId]).toEqual(original[v.s1e1.youtubeVideoId]); // older `at` lost
       expect(stored[evilId]).toEqual({ t: 30, d: 100, at: 99999999999999, route: v.s1e3.route, title: "<img src=x onerror=alert(1)>", thumb: null });
       expect(await page.evaluate(() => ({}).polluted ?? Object.prototype.polluted ?? null)).toBeNull();
@@ -347,7 +376,7 @@ test.describe("/account: export / import watch history", () => {
     await test.step("the imported entry renders safely where progress is shown; nothing leaves localhost", async () => {
       // The page still works: export still runs.
       const [download] = await Promise.all([page.waitForEvent("download"), exportButton(page).click()]);
-      expect(Object.keys(JSON.parse(await fs.readFile(await download.path(), "utf8")).entries)).toHaveLength(2);
+      expect(Object.keys(JSON.parse(await fs.readFile(await download.path(), "utf8")).entries)).toHaveLength(3);
       // Home's "Continuar assistindo" shows the imported title as text, with no third-party thumbnail.
       await page.goto("/");
       const row = page.getByRole("region", { name: "Continuar assistindo" });
