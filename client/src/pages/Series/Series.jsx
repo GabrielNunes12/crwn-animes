@@ -7,7 +7,8 @@ import { Reveal } from "../../components/Reveal/Reveal.jsx";
 import { useProgressMap } from "../../hooks/useProgress.js";
 import { useTitle } from "../../hooks/useTitle.js";
 import { useT } from "../../i18n/useT.js";
-import { videoLabel } from "../../lib/format.js";
+import { truncateWords, videoLabel } from "../../lib/format.js";
+import { genreHref } from "../../lib/search.js";
 import { entryCompleted, formatTime, resumePosition } from "../../lib/progress.js";
 import styles from "./Series.module.css";
 
@@ -49,7 +50,10 @@ function SeriesSkeleton() {
 function SeriesView({ section, series, videos }) {
   const { t } = useT();
   const progress = useProgressMap();
-  useTitle(series.name);
+  useTitle(
+    t("meta.series.title", { name: series.name, section: t(`common.${section}`) }),
+    truncateWords(series.synopsis || t(`meta.series.fallback.${section}`, { name: series.name })),
+  );
   const seasons = groupBySeason(videos);
   const playable = videos.filter((v) => v.availability !== "unavailable" && v.route);
   const nextUp = playable.find((v) => !entryCompleted(progress[v.youtubeVideoId])) ?? playable[0];
@@ -78,7 +82,7 @@ function SeriesView({ section, series, videos }) {
               <ul className="cluster" role="list" aria-label={t("common.genres")}>
                 {series.genres.map((g) => (
                   <li key={g}>
-                    <Link className="chip" to={`/${section}?genre=${encodeURIComponent(g)}`}>
+                    <Link className="chip" to={genreHref(g)}>
                       {g}
                     </Link>
                   </li>

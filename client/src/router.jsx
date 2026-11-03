@@ -39,6 +39,7 @@ export const routes = [
           { path: "anime/:slug/season/:season/episode/:number", lazy: page(watchPage, { section: "anime" }) },
           { path: "manga/:slug/chapter/:number", lazy: page(watchPage, { section: "manga" }) },
           { path: "search", lazy: page(() => import("./pages/Search/Search.jsx")) },
+          { path: "genre/:genre", lazy: page(() => import("./pages/Genre/Genre.jsx")) },
           { path: "login", lazy: page(() => import("./pages/Auth/Login.jsx")) },
           { path: "register", lazy: page(() => import("./pages/Auth/Register.jsx")) },
           { path: "check-email", lazy: page(() => import("./pages/Auth/CheckEmail.jsx")) },

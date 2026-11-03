@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createI18n } from "../i18n/core.js";
-import { videoLabel } from "./format.js";
+import { truncateWords, videoLabel } from "./format.js";
 
 describe("videoLabel", () => {
   const { t } = createI18n("pt-BR");
@@ -14,5 +14,15 @@ describe("videoLabel", () => {
   it("labels manga chapters and later seasons", () => {
     expect(videoLabel(t, { section: "manga", number: 1120, season: 1 })).toContain("1120");
     expect(videoLabel(t, { section: "anime", number: 3, season: 2 })).toMatch(/2.*·.*3/);
+  });
+});
+
+describe("truncateWords", () => {
+  it("keeps short text and cuts long text on a word boundary with an ellipsis", () => {
+    expect(truncateWords("  A  short\nsynopsis. ")).toBe("A short synopsis.");
+    const long = "Palavra ".repeat(40).trim();
+    const out = truncateWords(long, 160);
+    expect(out.length).toBeLessThanOrEqual(160);
+    expect(out.endsWith("Palavra…")).toBe(true);
   });
 });

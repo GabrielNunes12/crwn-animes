@@ -43,6 +43,19 @@ export function assertSafeConfig(config) {
       "NODE_ENV=production needs SMTP_HOST: without it e-mails (verification, password reset) would never reach users."
     );
   }
+  if (config.isProduction) {
+    let url = null;
+    try {
+      url = config.appUrlSet === false ? null : new URL(config.appUrl);
+    } catch {
+      url = null;
+    }
+    if (!url || url.protocol !== "https:") {
+      throw new Error(
+        "NODE_ENV=production needs APP_URL set to the site's public https:// address: it is used for canonical URLs, the sitemap and e-mail links."
+      );
+    }
+  }
 }
 
 /** Reads every setting from environment variables (see .env.example). */
@@ -55,6 +68,7 @@ export function loadConfig(env = process.env) {
     databaseFile: env.DATABASE_FILE || "./data/crwn-animes.db",
     clientOrigins: env.CLIENT_ORIGIN ? list(env.CLIENT_ORIGIN) : ["http://localhost:5173"],
     appUrl: (env.APP_URL || "http://localhost:5173").replace(/\/+$/, ""),
+    appUrlSet: Boolean(env.APP_URL),
     adminEmails: list(env.ADMIN_EMAILS).map((email) => email.toLowerCase()),
     trustProxy: parseTrustProxy(env.TRUST_PROXY),
     rateLimit: { max: int(env.RATE_LIMIT_MAX, 10), windowMs: 15 * 60 * 1000 },
@@ -68,6 +82,8 @@ export function loadConfig(env = process.env) {
         }
       : null,
     mailFrom: env.MAIL_FROM || "Crwn Animes <no-reply@localhost>",
-    clientDist: path.resolve(SERVER_DIR, "../client/dist"),
+    sitemapMaxUrls: 50_000, // per sitemap file (protocol limit); tests lower it
+    // Built React app served in production; relative paths resolve from server/.
+    clientDist: path.resolve(SERVER_DIR, env.CLIENT_DIST || "../client/dist"),
   };
 }

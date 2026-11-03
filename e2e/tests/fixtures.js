@@ -5,12 +5,19 @@
 // and slow/flaky in CI anyway) and any other third-party host are cut off;
 // images are answered with a 1x1 PNG so thumbnails and covers still "load".
 // Every request that was cut off is recorded in `externalRequests`.
+import AxeBuilder from "@axe-core/playwright";
 import { test as base, expect, request as playwrightRequest } from "@playwright/test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const ADMIN_STATE = path.resolve(here, "../.auth/admin.json");
+/**
+ * The API's own origin. It also serves the e2e client build with the
+ * server-rendered SEO head (see CLIENT_DIST in playwright.config.js); `vite preview` (baseURL)
+ * only serves the static bundle, so SEO checks must request this origin.
+ */
+export const API_ORIGIN = `http://localhost:${Number(process.env.E2E_API_PORT || 4517)}`;
 export const ADMIN = { email: "admin@e2e.test", password: "admin-e2e-password-123", displayName: "E2E Admin" };
 
 const TINY_PNG = Buffer.from(
@@ -150,10 +157,52 @@ export async function ensureVideo(admin, { youtubeId, title, ...overrides }) {
   throw new Error(`POST /api/admin/videos → ${res.status()} ${await res.text()}`);
 }
 
+/**
+ * Runs `fn(admin)` with a fresh API client logged in as admin@e2e.test, for
+ * test.beforeAll() seeding (the test-scoped `admin` fixture is not available there).
+ */
+export async function asAdmin(testInfo, fn) {
+  const ctx = await playwrightRequest.newContext({ baseURL: testInfo.project.use.baseURL, storageState: ADMIN_STATE });
+  try {
+    return await fn(ctx);
+  } finally {
+    await ctx.dispose();
+  }
+}
+
+/**
+ * Creates a series (idempotent) and places each video explicitly in it:
+ * videos = [{ youtubeId, title, section, number, season? }]. Fails unless every
+ * video ends up published. Safe to run concurrently from several workers.
+ */
+export async function seedSeries(admin, series, videos = []) {
+  const created = await ensureSeries(admin, series);
+  const placed = [];
+  for (const { youtubeId, title, section, number, season = 1 } of videos) {
+    const video = await ensureVideo(admin, { youtubeId, title, section, seriesSlug: series.slug, season, number });
+    expect(video.status, `${youtubeId} (${title}) must be published, got ${JSON.stringify(video.classification?.reasons)}`).toBe("published");
+    placed.push(video);
+  }
+  return { series: created, videos: placed };
+}
+
 /** The logged-in user's name as shown in the header's account menu. */
 export const headerUser = (page, displayName) => page.getByRole("banner").getByText(displayName, { exact: true });
 /** The header's "Entrar" link (only shown when logged out). */
 export const headerLogin = (page) => page.getByRole("banner").getByRole("link", { name: "Entrar", exact: true });
+
+/** axe-core with the WCAG 2.x A/AA + best-practice rule sets the suite checks. */
+export const axe = (page) => new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"]);
+
+/** Runs axe and fails on serious/critical violations, with a readable message. */
+export async function expectNoSeriousViolations(page, name, builder = axe(page)) {
+  const results = await builder.analyze();
+  const serious = results.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
+  const report = serious
+    .map((v) => `[${v.impact}] ${v.id}: ${v.help}\n${v.nodes.slice(0, 5).map((n) => `    ${n.target.join(" ")} — ${n.failureSummary?.split("\n").slice(0, 2).join(" ")}`).join("\n")}`)
+    .join("\n");
+  expect(serious, `${name}: serious/critical axe violations\n${report}`).toEqual([]);
+}
 
 export const test = base.extend({
   // Every context (and so every page) gets the network guard.

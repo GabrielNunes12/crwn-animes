@@ -1,10 +1,12 @@
-import { useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Outlet, ScrollRestoration, useLocation, useNavigation } from "react-router";
 import { Header } from "./Header.jsx";
 import { Footer } from "./Footer.jsx";
 import { ShortcutsDialog } from "../ShortcutsDialog/ShortcutsDialog.jsx";
+import { CommandPalette } from "../CommandPalette/CommandPalette.jsx";
 import { useShortcuts } from "../../hooks/useShortcuts.js";
 import { useT } from "../../i18n/useT.js";
+import { isPaletteShortcut } from "../../lib/platform.js";
 import styles from "./Layout.module.css";
 
 export function Layout() {
@@ -12,7 +14,27 @@ export function Layout() {
   const location = useLocation();
   const navigation = useNavigation();
   const [helpOpen, setHelpOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const searchRef = useRef(null);
+
+  // ⌘K / Ctrl+K is a modifier shortcut: it works even while typing and is not
+  // affected by the "single-key shortcuts" switch. It stays out of the way of
+  // other open modal dialogs.
+  const onPaletteKey = useEffectEvent((e) => {
+    if (!isPaletteShortcut(e) || e.defaultPrevented) return;
+    if (paletteOpen) {
+      e.preventDefault();
+      return;
+    }
+    if (document.querySelector("dialog[open]")) return;
+    e.preventDefault();
+    setPaletteOpen(true);
+  });
+  useEffect(() => {
+    const onKey = (e) => onPaletteKey(e);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   useShortcuts({
     "?": () => setHelpOpen(true),
@@ -27,7 +49,7 @@ export function Layout() {
         {t("nav.skip")}
       </a>
       <div className={styles.progress} data-active={navigation.state !== "idle"} aria-hidden="true" />
-      <Header searchRef={searchRef} />
+      <Header searchRef={searchRef} onOpenPalette={() => setPaletteOpen(true)} />
       <main id="main" className={styles.main} tabIndex={-1}>
         {notice && (
           <div className="container">
@@ -45,6 +67,7 @@ export function Layout() {
       </main>
       <Footer onShowShortcuts={() => setHelpOpen(true)} />
       <ShortcutsDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <ScrollRestoration />
     </div>
   );

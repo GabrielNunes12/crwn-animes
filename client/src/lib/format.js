@@ -16,3 +16,17 @@ export function sectionLabel(t, section) {
 export function seriesRoute(section, slug) {
   return `/${section}/${slug}`;
 }
+
+/**
+ * Meta-description copy: whitespace collapsed, cut to `max` characters on a word
+ * boundary with a trailing "…" (the server truncates synopses the same way).
+ */
+export function truncateWords(text, max = 160) {
+  const s = String(text ?? "").replace(/\s+/g, " ").trim();
+  const chars = [...s]; // count code points, like the server
+  if (chars.length <= max) return s;
+  const cut = chars.slice(0, max - 1).join("");
+  const space = cut.lastIndexOf(" ");
+  const head = (space > max / 2 ? cut.slice(0, space) : cut).replace(/[\s.,;:!?—–-]+$/u, "");
+  return `${head}…`;
+}

@@ -1,7 +1,6 @@
 // Journeys 7 and 8: axe-core on the main pages (serious/critical violations
 // fail the test) and a phone-sized smoke test for horizontal overflow.
-import AxeBuilder from "@axe-core/playwright";
-import { test, expect, ADMIN_STATE, createUser, ensureSeries, ensureVideo, uniqueEmail } from "./fixtures.js";
+import { test, expect, ADMIN_STATE, createUser, ensureSeries, ensureVideo, expectNoSeriousViolations, uniqueEmail } from "./fixtures.js";
 
 const SERIES = { name: "Axe Saga", slug: "axe-saga", aliases: ["Saga Axe"], genres: ["Fantasy"], synopsis: "Uma série para testes de acessibilidade." };
 const EPISODE_ROUTE = "/anime/axe-saga/episode/1";
@@ -11,18 +10,6 @@ test.beforeEach(async ({ admin }) => {
   await ensureVideo(admin, { youtubeId: "axeSagaEp01", title: "Axe Saga Episode 1" });
   await ensureVideo(admin, { youtubeId: "axeSagaEp02", title: "Axe Saga Episode 2" });
 });
-
-const axe = (page) => new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"]);
-
-/** Runs axe and fails on serious/critical violations, with a readable message. */
-async function expectNoSeriousViolations(page, name, builder = axe(page)) {
-  const results = await builder.analyze();
-  const serious = results.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
-  const report = serious
-    .map((v) => `[${v.impact}] ${v.id}: ${v.help}\n${v.nodes.slice(0, 5).map((n) => `    ${n.target.join(" ")} — ${n.failureSummary?.split("\n").slice(0, 2).join(" ")}`).join("\n")}`)
-    .join("\n");
-  expect(serious, `${name}: serious/critical axe violations\n${report}`).toEqual([]);
-}
 
 const PAGES = [
   { name: "home", path: "/", ready: (page) => page.getByRole("heading", { level: 1 }) },

@@ -1,0 +1,121 @@
+@layer components {
+  dialog.palette {
+    inline-size: min(40rem, calc(100vw - 2rem));
+    margin-block-start: min(12vh, 6rem);
+    padding: 0;
+    overflow: hidden;
+  }
+  .field {
+    position: relative;
+    display: flex;
+    align-items: center;
+    border-block-end: 1px solid var(--border);
+  }
+  .icon {
+    position: absolute;
+    inset-inline-start: var(--space-4);
+    color: var(--muted);
+    pointer-events: none;
+  }
+  .input {
+    flex: 1;
+    min-inline-size: 0;
+    min-block-size: 3.5rem;
+    padding: 0.75rem 4rem 0.75rem 3.25rem;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    font-size: var(--step-1);
+  }
+  .input::placeholder {
+    color: var(--muted);
+  }
+  .input:focus-visible {
+    outline: 2px solid var(--secondary);
+    outline-offset: -2px;
+    border-radius: 0;
+  }
+  .esc {
+    position: absolute;
+    inset-inline-end: var(--space-4);
+    color: var(--muted);
+    pointer-events: none;
+  }
+  .list {
+    max-block-size: min(60vh, 28rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    margin: 0;
+    padding: var(--space-2);
+    list-style: none;
+    transition: opacity var(--dur-fast);
+  }
+  .list:empty {
+    display: none;
+  }
+  .list[data-stale] {
+    opacity: 0.65;
+  }
+  .option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-block-size: 2.75rem;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+  .option[aria-selected="true"] {
+    background: var(--primary-soft);
+    box-shadow: inset 3px 0 0 var(--primary);
+  }
+  @media (forced-colors: active) {
+    .option[aria-selected="true"] {
+      outline: 2px solid Highlight;
+    }
+  }
+  .thumb {
+    flex: none;
+    inline-size: 2.5rem;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+  .text {
+    display: grid;
+    min-inline-size: 0;
+  }
+  .name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sub {
+    color: var(--muted);
+    font-size: var(--step--1);
+  }
+  .allIcon {
+    flex: none;
+    display: grid;
+    place-items: center;
+    inline-size: 2.5rem;
+    color: var(--muted);
+    font-size: var(--step-1);
+  }
+  .status {
+    padding: var(--space-3) var(--space-4) 0;
+    color: var(--muted);
+    font-size: var(--step--1);
+  }
+  .status:empty {
+    padding: 0;
+  }
+  .help {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    color: var(--muted);
+    font-size: var(--step--1);
+  }
+}

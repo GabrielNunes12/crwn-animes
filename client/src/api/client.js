@@ -101,6 +101,9 @@ export const catalogApi = {
     apiFetch(`/${enc(section)}/series`, { ...opts, query: { genre, q } }),
   series: (section, slug, opts) => apiFetch(`/${enc(section)}/series/${enc(slug)}`, opts),
   video: (id, opts) => apiFetch(`/videos/${enc(id)}`, opts),
+  /** GET /api/search → { items: SearchItem[], total }. Empty params are omitted. */
+  search: ({ q, section, genre, sort, limit, offset } = {}, opts) =>
+    apiFetch("/search", { ...opts, query: { q: q?.trim() || undefined, section, genre, sort, limit, offset } }),
 };
 
 // -------------------------------------------------------------- ratings

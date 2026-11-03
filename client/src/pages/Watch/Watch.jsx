@@ -11,6 +11,7 @@ import { useShortcuts } from "../../hooks/useShortcuts.js";
 import { useTitle } from "../../hooks/useTitle.js";
 import { useT } from "../../i18n/useT.js";
 import { videoLabel } from "../../lib/format.js";
+import { watchMeta } from "../../lib/meta.js";
 import { AUTOPLAY_KEY, getBool, setBool } from "../../lib/prefs.js";
 import { entryCompleted } from "../../lib/progress.js";
 import { resolveWatch } from "./resolveWatch.js";
@@ -43,7 +44,7 @@ function WatchView({ section, video, series, prev, next, videos }) {
   const [showAutoNext, setShowAutoNext] = useState(false);
   const isManga = section === "manga";
   const label = videoLabel(t, video);
-  useTitle(`${series?.name ?? video.seriesName} · ${label}`);
+  useTitle(...watchMeta(t, video, series));
 
   const goNext = () => next?.route && navigate(next.route, { state: { autoplay: true } });
   const goPrev = () => prev?.route && navigate(prev.route);

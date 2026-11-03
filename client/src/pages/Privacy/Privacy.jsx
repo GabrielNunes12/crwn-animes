@@ -10,7 +10,7 @@ const RIGHTS = ["access", "rectify", "erase", "object", "complain"];
 
 export function Component() {
   const { t } = useT();
-  useTitle(t("privacy.title"));
+  useTitle(t("privacy.title"), t("meta.privacy"));
 
   return (
     <article className={`container ${styles.page}`}>

@@ -6,6 +6,7 @@ import { Reveal } from "../../components/Reveal/Reveal.jsx";
 import { SeriesCard } from "../../components/Cards/SeriesCard.jsx";
 import { useTitle } from "../../hooks/useTitle.js";
 import { useT } from "../../i18n/useT.js";
+import { genreHref } from "../../lib/search.js";
 import styles from "./Section.module.css";
 
 export function loader({ request, section }) {
@@ -33,7 +34,7 @@ export function Component() {
   const { section, genre, q, series, genres } = useLoaderData();
   const { t } = useT();
   const title = t(`common.${section}`);
-  useTitle(title);
+  useTitle(t(`meta.section.${section}.title`), t(`meta.section.${section}.description`));
   const other = section === "anime" ? "manga" : "anime";
 
   return (
@@ -85,6 +86,7 @@ export function Component() {
           {genre && <span className="badge">{genre}</span>}
           <Link to={`/${section}`}>{t("section.clear")}</Link>
           <Link to={hrefWith(other, { genre, q })}>{t("section.tryOther", { section: t(`common.${other}`) })}</Link>
+          {genre && <Link to={genreHref(genre)}>{t("section.genreEverywhere", { genre })}</Link>}
         </p>
       )}
 

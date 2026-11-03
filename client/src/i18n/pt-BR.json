@@ -138,7 +138,8 @@
     "close": "Fechar diálogos",
     "note": "Os atalhos são ignorados enquanto você digita em um campo.",
     "singleKey": "Atalhos de uma tecla (T, /, ?)",
-    "singleKeyHint": "Desative se você usa entrada por voz ou aperta teclas sem querer. Shift+N / Shift+P continuam funcionando."
+    "singleKeyHint": "Desative se você usa entrada por voz ou aperta teclas sem querer. Shift+N / Shift+P e Ctrl+K / ⌘K continuam funcionando.",
+    "palette": "Busca rápida (funciona até enquanto você digita)"
   },
   "home": {
     "eyebrow": "🌸 Anime e mangá, episódio por episódio",
@@ -174,13 +175,36 @@
     "clear": "Limpar filtros",
     "tryOther": "Tentar em {section}",
     "empty": "Nenhuma série corresponde a esses filtros.",
-    "listHeading": "Todas as séries de {section}"
+    "listHeading": "Todas as séries de {section}",
+    "genreEverywhere": "Ver {genre} em anime e mangá"
   },
   "search": {
     "title": "Busca",
     "resultsFor": "Resultados para “{q}”",
-    "prompt": "Digite o nome de uma série (ou um título alternativo) na busca.",
-    "empty": "Nada encontrado. Tente um nome mais curto ou alternativo."
+    "empty": "Nada encontrado. Tente um nome mais curto, um título alternativo ou menos filtros.",
+    "formLabel": "Buscar e filtrar séries",
+    "queryLabel": "Nome ou título alternativo",
+    "sectionLabel": "Seção",
+    "sectionAll": "Todas",
+    "genreLabel": "Gênero",
+    "allGenres": "Todos os gêneros",
+    "sortLabel": "Ordenar por",
+    "sort": {
+      "relevance": "Relevância",
+      "top": "Mais bem avaliadas",
+      "new": "Mais recentes",
+      "az": "A–Z"
+    },
+    "count": {
+      "one": "{count} resultado",
+      "other": "{count} resultados"
+    },
+    "showing": "Mostrando {shown} de {total}",
+    "loadMore": "Carregar mais",
+    "moreLoaded": {
+      "one": "Mais {count} resultado carregado. Mostrando {shown} de {total}.",
+      "other": "Mais {count} resultados carregados. Mostrando {shown} de {total}."
+    }
   },
   "series": {
     "coverAlt": "Capa de {name}",
@@ -633,5 +657,64 @@
       "replace": "Trocar",
       "replaced": "Link de {title} trocado."
     }
+  },
+  "genre": {
+    "kicker": "Gênero",
+    "subtitle": "Todas as séries de {genre}, de anime e de mangá.",
+    "onlyIn": "Só {section}",
+    "empty": "Ainda não há séries de {genre}."
+  },
+  "palette": {
+    "open": "Busca rápida",
+    "title": "Busca rápida",
+    "inputLabel": "Buscar anime e mangá",
+    "results": "Sugestões",
+    "hint": "Digite o nome de uma série ou um título alternativo.",
+    "count": {
+      "one": "{count} série encontrada",
+      "other": "{count} séries encontradas"
+    },
+    "none": "Nada encontrado para “{q}”.",
+    "error": "Não foi possível buscar agora.",
+    "seeAll": "Ver todos os resultados para “{q}”",
+    "helpMove": "navegar",
+    "helpOpen": "abrir",
+    "helpClose": "fechar"
+  },
+  "meta": {
+    "default": "Episódios de anime e capítulos de mangá do YouTube, organizados por série e temporada. Assista, avalie e reaja no Crwn Animes.",
+    "homeTitle": "Episódios de anime e capítulos de mangá",
+    "notFound": "Esta página não existe no Crwn Animes.",
+    "section": {
+      "anime": {
+        "title": "Animes",
+        "description": "Todas as séries de anime do Crwn Animes, com episódios organizados por temporada. Assista, avalie e reaja."
+      },
+      "manga": {
+        "title": "Mangás",
+        "description": "Todas as séries de mangá do Crwn Animes, com capítulos em vídeo em ordem. Assista, avalie e reaja."
+      }
+    },
+    "genre": {
+      "title": "{genre} · Animes e mangás",
+      "description": "Séries de anime e mangá do gênero {genre} no Crwn Animes. Ordene por nota, novidades ou A–Z."
+    },
+    "series": {
+      "title": "{name} — {section}",
+      "fallback": {
+        "anime": "Assista aos episódios de {name} no Crwn Animes, organizados por temporada.",
+        "manga": "Assista aos capítulos de {name} em vídeo no Crwn Animes, em ordem."
+      }
+    },
+    "video": {
+      "title": "{series} — {where}",
+      "seasonEpisode": "Temporada {season}, Episódio {n}",
+      "lead": {
+        "anime": "Assista ao episódio {n} de {series} no Crwn Animes.",
+        "animeSeason": "Assista ao episódio {n} da temporada {season} de {series} no Crwn Animes.",
+        "manga": "Assista ao capítulo {n} de {series} em vídeo no Crwn Animes."
+      }
+    },
+    "privacy": "Quais dados o Crwn Animes guarda, por quê e por quanto tempo, e como exportar ou apagar sua conta (LGPD / RGPD)."
   }
 }

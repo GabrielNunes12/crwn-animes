@@ -138,7 +138,8 @@
     "close": "Close dialogs",
     "note": "Shortcuts are ignored while you type in a field.",
     "singleKey": "Single-key shortcuts (T, /, ?)",
-    "singleKeyHint": "Turn off if you use speech input or press keys by accident. Shift+N / Shift+P keep working."
+    "singleKeyHint": "Turn off if you use speech input or press keys by accident. Shift+N / Shift+P and Ctrl+K / ⌘K keep working.",
+    "palette": "Quick search (works even while typing)"
   },
   "home": {
     "eyebrow": "🌸 Anime & manga, episode by episode",
@@ -174,13 +175,36 @@
     "clear": "Clear filters",
     "tryOther": "Try {section}",
     "empty": "No series match these filters.",
-    "listHeading": "All {section} series"
+    "listHeading": "All {section} series",
+    "genreEverywhere": "See {genre} in anime and manga"
   },
   "search": {
     "title": "Search",
     "resultsFor": "Results for “{q}”",
-    "prompt": "Type a series name (or an alternative title) in the search box.",
-    "empty": "Nothing found. Try a shorter or alternative name."
+    "empty": "Nothing found. Try a shorter name, an alternative title or fewer filters.",
+    "formLabel": "Search and filter series",
+    "queryLabel": "Name or alternative title",
+    "sectionLabel": "Section",
+    "sectionAll": "All",
+    "genreLabel": "Genre",
+    "allGenres": "All genres",
+    "sortLabel": "Sort by",
+    "sort": {
+      "relevance": "Relevance",
+      "top": "Top rated",
+      "new": "Newest",
+      "az": "A–Z"
+    },
+    "count": {
+      "one": "{count} result",
+      "other": "{count} results"
+    },
+    "showing": "Showing {shown} of {total}",
+    "loadMore": "Load more",
+    "moreLoaded": {
+      "one": "{count} more result loaded. Showing {shown} of {total}.",
+      "other": "{count} more results loaded. Showing {shown} of {total}."
+    }
   },
   "series": {
     "coverAlt": "Cover of {name}",
@@ -633,5 +657,64 @@
       "replace": "Replace",
       "replaced": "Replaced the link for {title}."
     }
+  },
+  "genre": {
+    "kicker": "Genre",
+    "subtitle": "Every {genre} series, anime and manga.",
+    "onlyIn": "Only {section}",
+    "empty": "No {genre} series yet."
+  },
+  "palette": {
+    "open": "Quick search",
+    "title": "Quick search",
+    "inputLabel": "Search anime and manga",
+    "results": "Suggestions",
+    "hint": "Type a series name or an alternative title.",
+    "count": {
+      "one": "{count} series found",
+      "other": "{count} series found"
+    },
+    "none": "Nothing found for “{q}”.",
+    "error": "Search is unavailable right now.",
+    "seeAll": "See all results for “{q}”",
+    "helpMove": "move",
+    "helpOpen": "open",
+    "helpClose": "close"
+  },
+  "meta": {
+    "default": "Anime episodes and manga chapters from YouTube, organised by series and season. Watch, rate and react on Crwn Animes.",
+    "homeTitle": "Anime episodes and manga chapters",
+    "notFound": "This page doesn't exist on Crwn Animes.",
+    "section": {
+      "anime": {
+        "title": "Anime",
+        "description": "Every anime series on Crwn Animes, with episodes organised by season. Watch, rate and react."
+      },
+      "manga": {
+        "title": "Manga",
+        "description": "Every manga series on Crwn Animes, with video chapters in order. Watch, rate and react."
+      }
+    },
+    "genre": {
+      "title": "{genre} · Anime & manga",
+      "description": "{genre} anime and manga series on Crwn Animes. Sort by rating, newest or A–Z."
+    },
+    "series": {
+      "title": "{name} — {section}",
+      "fallback": {
+        "anime": "Watch the episodes of {name} on Crwn Animes, organised by season.",
+        "manga": "Watch the chapters of {name} on video on Crwn Animes, in order."
+      }
+    },
+    "video": {
+      "title": "{series} — {where}",
+      "seasonEpisode": "Season {season}, Episode {n}",
+      "lead": {
+        "anime": "Watch episode {n} of {series} on Crwn Animes.",
+        "animeSeason": "Watch episode {n} of season {season} of {series} on Crwn Animes.",
+        "manga": "Watch chapter {n} of {series} on video on Crwn Animes."
+      }
+    },
+    "privacy": "What data Crwn Animes keeps, why and for how long, and how to export or delete your account (GDPR / LGPD)."
   }
 }

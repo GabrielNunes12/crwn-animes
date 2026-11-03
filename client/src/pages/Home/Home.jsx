@@ -7,9 +7,10 @@ import { Reveal } from "../../components/Reveal/Reveal.jsx";
 import { VideoCard } from "../../components/Cards/VideoCard.jsx";
 import { ContinueCard } from "../../components/Cards/ContinueCard.jsx";
 import { useProgressMap } from "../../hooks/useProgress.js";
-import { useTitle } from "../../hooks/useTitle.js";
+import { SITE_NAME, useMeta } from "../../hooks/useTitle.js";
 import { useT } from "../../i18n/useT.js";
 import { continueWatching, removeProgress } from "../../lib/progress.js";
+import { genreHref } from "../../lib/search.js";
 import styles from "./Home.module.css";
 
 /** Rows fail soft: a broken row is hidden instead of breaking the page. */
@@ -106,7 +107,7 @@ export function Component() {
   const data = useLoaderData();
   const { t } = useT();
   const progress = useProgressMap();
-  useTitle(null);
+  useMeta({ title: `${SITE_NAME} · ${t("meta.homeTitle")}` });
 
   return (
     <>
@@ -219,7 +220,7 @@ export function Component() {
               <ul className="cluster" role="list">
                 {genres.map((g, i) => (
                   <Reveal as="li" key={g} index={i}>
-                    <Link className="chip" to={`/anime?genre=${encodeURIComponent(g)}`}>
+                    <Link className="chip" to={genreHref(g)}>
                       {g}
                     </Link>
                   </Reveal>

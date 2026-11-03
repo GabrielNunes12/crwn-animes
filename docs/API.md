@@ -210,3 +210,74 @@ type BulkRow = {
   message?: string;
 };
 ```
+
+---
+
+# v1.2 additions (cycle 2 — SEO + search)
+
+## Server-rendered meta for crawlers and link previews (production, when `client/dist` is served)
+
+For every non-`/api` GET that falls back to `index.html`, the server injects into `<head>` (replacing the
+static `<title>`), with **every value HTML-escaped**:
+
+- `<title>`, `<meta name="description">`, `<link rel="canonical" href="${APP_URL}${canonicalPath}">`
+- Open Graph + Twitter: `og:site_name` ("Crwn Animes"), `og:title`, `og:description`, `og:url`, `og:image`
+  (series cover, else episode thumbnail, else none), `og:type` (`website` | `video.tv_show` | `video.episode`),
+  `og:locale` `pt_BR`, `twitter:card` (`summary_large_image` when there is an image, else `summary`).
+- Episode/chapter pages: one `<script type="application/ld+json">` VideoObject: `name`, `description`,
+  `thumbnailUrl`, `uploadDate` (`publishedAt`), `embedUrl` (`https://www.youtube-nocookie.com/embed/<id>`),
+  `isPartOf` (the series as `TVSeries` for anime, `CreativeWorkSeries` for manga). `</` inside JSON is
+  escaped as `<\/`. Series pages: `TVSeries`/`CreativeWorkSeries` JSON-LD with `name`, `description`, `image`, `genre`.
+- `<meta name="robots" content="noindex">` on `/admin*`, `/account`, `/login`, `/register`, `/check-email`,
+  `/verify-email`, `/forgot-password`, `/reset-password`, `/search`.
+- `/index.html` → **301** to `/`. Manga chapters are always season 1.
+- Unknown section/series/episode/genre, a series page with no published video in that section, or a genre with no published series → **HTTP 404** with the SPA
+  shell (title "Página não encontrada · Crwn Animes", `noindex`). Non-canonical watch URLs
+  (`/episode/01`, `/season/1/episode/2`) → **301** to the canonical route.
+- Canonical URLs always use `APP_URL` (never the request Host). In production the server refuses to start unless
+  `APP_URL` is an `https://` URL.
+- Pages: home, `/anime`, `/manga`, `/genre/:genre`, series, episode/chapter, `/privacy` get real titles and
+  descriptions (pt-BR copy; synopsis truncated to 160 chars on a word boundary).
+
+| Method & path | Success |
+|---|---|
+| `GET /sitemap.xml` | `200 application/xml` — home, `/anime`, `/manga`, every genre page, every series page that has published videos (per section), every published **available** episode/chapter; `<lastmod>` from `publishedAt`/`updatedAt`. Cached `public, max-age=3600`. |
+| `GET /sitemap-<n>.xml` | Only when the site has more than 50,000 URLs: `/sitemap.xml` then becomes a sitemap index pointing at `/sitemap-1.xml` … `/sitemap-N.xml` (≤ 50,000 URLs each). Otherwise 404. Generated XML is cached in memory until the catalog changes. |
+| `GET /robots.txt` | `200 text/plain` — `Disallow: /admin`, `/account`, `/api/`; `Sitemap: ${APP_URL}/sitemap.xml`. |
+
+## Search & browse
+
+Matching ignores case and accents and works on series name + aliases ("pokemon" finds "Pokémon",
+"jjk" finds "Jujutsu Kaisen" via its alias). Implemented with a `series.search_text` column
+(`normalize(name + aliases)`), kept up to date on create/patch and filled by a migration.
+
+| Method & path | Success |
+|---|---|
+| `GET /api/search?q=&section=&genre=&sort=&limit=20&offset=0` | `200 { items: SearchItem[], total: number }` |
+
+- `q` optional (≤ 80 chars; empty → browse everything). `section` optional (`anime`/`manga`); `genre`
+  optional (case-insensitive exact genre); `sort` = `relevance` (default when `q` given: exact name match,
+  then prefix, then substring; ties by rating) | `top` (Bayesian rating of the series in that section, as
+  `/top-rated`) | `new` (latest `publishedAt` in that section) | `az` (default when no `q`).
+  `limit` 1–50, `offset` ≥ 0; invalid values → 400 `VALIDATION_ERROR`.
+- Only series with ≥ 1 published video in a section appear; a series published in both sections appears
+  as **two items** (one per section).
+- Public cache headers like other catalog GETs.
+
+```ts
+type SearchItem = SeriesListItem & { section: Section; latestPublishedAt: string | null };
+```
+
+`GET /api/genres` now lists only genres of series with ≥ 1 published, available video (genre spelling is
+canonicalised to the first-seen form; comparisons are case-insensitive with pt-BR rules). The existing
+`GET /api/:section/series?q=` uses the same accent-insensitive matching and the same 80-char limit.
+Letters of every script are kept for matching ("鬼滅" finds "鬼滅の刃"); a non-empty `q` with nothing
+searchable in it (only emoji or punctuation) matches nothing: `{ items: [], total: 0 }`.
+
+## Front-end routes added
+| Page | Path |
+|---|---|
+| Search (filters + sort + "load more") | `/search?q=&section=&genre=&sort=` |
+| Genre page (both sections, sortable) | `/genre/:genre` |
+
+Plus a ⌘K / Ctrl+K command palette (ARIA combobox) with instant, debounced results from `/api/search`.
