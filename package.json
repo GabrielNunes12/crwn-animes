@@ -10,6 +10,7 @@
     "setup": "npm ci --prefix server && npm ci --prefix client",
     "dev": "node scripts/dev.mjs",
     "test": "npm test --prefix server && npm test --prefix client",
+    "e2e": "npm test --prefix e2e --",
     "lint": "npm run lint --prefix client",
     "build": "npm run build --prefix client",
     "start": "npm start --prefix server",
