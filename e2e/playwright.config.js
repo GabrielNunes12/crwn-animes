@@ -4,8 +4,11 @@
 // :4000/:5173 is never reused or disturbed):
 //   - the API (server/) with a fresh SQLite file under os.tmpdir(), the dev
 //     outbox enabled (no SMTP), admin@e2e.test as admin and a huge rate limit;
-//   - the client (client/), built with Vite and served by `vite preview`,
-//     whose /api proxy points at that API (see vite.e2e.config.mjs).
+//   - the client (client/), built with Vite into e2e/.client-dist and served
+//     by `vite preview`, whose /api proxy points at that API (see
+//     vite.e2e.config.mjs). The API also serves that build itself, with the
+//     server-rendered SEO head (docs/API.md v1.2): seo.spec.js requests pages
+//     from the API's own origin (API_ORIGIN in tests/fixtures.js).
 //
 // Run from the repo root with `npm run e2e`, or `npx playwright test` in e2e/.
 import { defineConfig, devices } from "@playwright/test";
@@ -63,9 +66,27 @@ export default defineConfig({
     },
   ],
   webServer: [
+    // The client is built and served FIRST: the API serves that same build
+    // (with its server-rendered SEO tags, for seo.spec.js), so the bundle must
+    // exist before the API starts. Playwright starts web servers in order.
+    {
+      name: "client",
+      // Build once, then serve the bundle with `vite preview` (same /api proxy
+      // as `npm run dev`, but no HMR or dependency re-optimisation reloads).
+      command:
+        "npm run build -- --config ../e2e/vite.e2e.config.mjs --logLevel warn && npm run preview -- --config ../e2e/vite.e2e.config.mjs",
+      cwd: path.join(root, "client"),
+      url: baseURL,
+      reuseExistingServer: false,
+      timeout: 120_000,
+      stdout: "ignore",
+      stderr: "pipe",
+      env: { E2E_API_PORT: String(API_PORT), E2E_CLIENT_PORT: String(CLIENT_PORT), BROWSER: "none" },
+    },
     {
       name: "api",
-      command: "node src/index.js",
+      // server/src/index.js, but serving e2e/.client-dist (see api-server.mjs)
+      command: "node ../e2e/api-server.mjs",
       cwd: path.join(root, "server"),
       url: `http://localhost:${API_PORT}/api/auth/me`,
       reuseExistingServer: false,
@@ -95,20 +116,6 @@ export default defineConfig({
         no_proxy: "localhost,127.0.0.1",
         NODE_NO_WARNINGS: "1",
       },
-    },
-    {
-      name: "client",
-      // Build once, then serve the bundle with `vite preview` (same /api proxy
-      // as `npm run dev`, but no HMR or dependency re-optimisation reloads).
-      command:
-        "npm run build -- --config ../e2e/vite.e2e.config.mjs --logLevel warn && npm run preview -- --config ../e2e/vite.e2e.config.mjs",
-      cwd: path.join(root, "client"),
-      url: baseURL,
-      reuseExistingServer: false,
-      timeout: 120_000,
-      stdout: "ignore",
-      stderr: "pipe",
-      env: { E2E_API_PORT: String(API_PORT), E2E_CLIENT_PORT: String(CLIENT_PORT), BROWSER: "none" },
     },
   ],
 });
