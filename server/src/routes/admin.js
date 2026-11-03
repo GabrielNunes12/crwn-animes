@@ -3,11 +3,26 @@ import { SECTIONS, parseYouTubeId } from "../classifier.js";
 import { HttpError, notFound, validationError } from "../errors.js";
 import { requireAdmin } from "../middleware/session.js";
 import { slugify } from "../routing.js";
-import { bodyOf, idParam, validator } from "../validation.js";
+import { searchNeedle } from "../search.js";
+import { bodyOf, idParam, queryReader, validator } from "../validation.js";
 
 const BULK_MAX = 50;
 const VIDEO_STATUSES = ["published", "pending"];
 const AVAILABILITY = ["ok", "unavailable"];
+const LIST_Q_MAX = 80;
+const LIST_LIMIT_MAX = 100;
+const LIST_OFFSET_MAX = 10_000_000;
+
+/** ?q=&limit=&offset= of the admin lists (plus whatever `extra` reads), one 400 for every bad field. */
+function readListQuery(query, extra = () => ({})) {
+  const r = queryReader(query);
+  const q = r.text("q", LIST_Q_MAX);
+  const limit = r.int("limit", { min: 1, max: LIST_LIMIT_MAX, fallback: 50 });
+  const offset = r.int("offset", { min: 0, max: LIST_OFFSET_MAX, fallback: 0 });
+  const more = extra(r);
+  r.done();
+  return { needle: searchNeedle(q), limit, offset, ...more };
+}
 
 /** Reads the series fields of a POST (all) or PATCH (any subset). */
 function readSeries(body, { partial }) {
@@ -84,8 +99,9 @@ export function adminRoutes({ repo, videos }) {
     new HttpError(409, `A series with slug "${slug}" already exists.`, { slug: "This slug is already used." });
 
   // ---- series ----
+  // { items, total }; q matches name + aliases like /api/search.
   router.get("/series", (req, res) => {
-    res.json(repo.listSeries());
+    res.json(repo.adminSeriesPage(readListQuery(req.query)));
   });
 
   router.post("/series", (req, res) => {
@@ -110,13 +126,13 @@ export function adminRoutes({ repo, videos }) {
   });
 
   // ---- videos ----
+  // { items, total }; q matches the video title or the series name (accent/case-insensitive).
   router.get("/videos", (req, res) => {
-    const { status, availability } = req.query;
-    const errors = {};
-    if (status != null && !VIDEO_STATUSES.includes(status)) errors.status = `Must be one of: ${VIDEO_STATUSES.join(", ")}.`;
-    if (availability != null && !AVAILABILITY.includes(availability)) errors.availability = `Must be one of: ${AVAILABILITY.join(", ")}.`;
-    if (Object.keys(errors).length) throw validationError(errors);
-    res.json(repo.listVideos(status ?? null, availability ?? null));
+    const query = readListQuery(req.query, (r) => ({
+      status: r.oneOf("status", VIDEO_STATUSES),
+      availability: r.oneOf("availability", AVAILABILITY),
+    }));
+    res.json(repo.adminVideosPage(query));
   });
 
   router.post("/videos", async (req, res) => {

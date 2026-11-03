@@ -223,4 +223,36 @@
     align-items: end;
     gap: var(--space-3);
   }
+
+  /* Paginated lists: search + count, Previous / Page x of y / Next. */
+  .listBar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-4);
+  }
+  .listSearch {
+    flex: 1 1 16rem;
+    max-inline-size: 28rem;
+  }
+  .rows[data-stale] {
+    opacity: 0.6;
+    transition: opacity var(--dur-fast);
+  }
+  .pager {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+  .pageOf {
+    color: var(--muted);
+    font-size: var(--step--1);
+    font-variant-numeric: tabular-nums;
+  }
+  /* List headings receive focus after a page change. */
+  h2[tabindex="-1"] {
+    scroll-margin-block-start: calc(var(--header-h, 4rem) + 1rem);
+  }
 }

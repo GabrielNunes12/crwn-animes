@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import { canonicalGenres, genreSpellings } from "./genres.js";
-import { searchText } from "./search.js";
+import { searchNormalize, searchText } from "./search.js";
 import { SEED_SERIES } from "./seed.js";
 
 // series: one row per franchise (One Piece), shared by both sections.
@@ -269,6 +269,23 @@ const MIGRATIONS = [
           OR OLD.published_at IS NOT NEW.published_at OR OLD.updated_at IS NOT NEW.updated_at
           OR OLD.youtube_video_id IS NOT NEW.youtube_video_id
       BEGIN ${BUMP_VERSION} END;
+    `);
+  },
+
+  // 9: admin lists are paginated and searchable (v1.3). title_search is the
+  // source title through searchNormalize() (JS, like series.search_text; set
+  // on insert, titles never change). Indexes give the admin video list
+  // (newest created first, optionally per status) its order without a sort.
+  (db) => {
+    db.exec("ALTER TABLE videos ADD COLUMN title_search TEXT NOT NULL DEFAULT ''");
+    const update = db.prepare("UPDATE videos SET title_search = ? WHERE id = ?");
+    for (const row of db.prepare("SELECT id, source_title FROM videos").all()) {
+      update.run(searchNormalize(row.source_title), row.id);
+    }
+    db.exec(`
+      CREATE INDEX videos_created ON videos (created_at, id, status, availability, series_id, title_search);
+      CREATE INDEX videos_status_created ON videos (status, created_at, id);
+      CREATE INDEX series_name ON series (name COLLATE NOCASE, id);
     `);
   },
 ];

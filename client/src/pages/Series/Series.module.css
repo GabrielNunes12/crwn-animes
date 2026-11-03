@@ -73,11 +73,81 @@
     margin-block-end: var(--space-3);
     color: var(--muted);
   }
+  .watchedOf {
+    display: grid;
+    gap: var(--space-1);
+    inline-size: min(100%, 20rem);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .meter {
+    display: block;
+    block-size: 6px;
+    border-radius: var(--radius-pill);
+    background: linear-gradient(to right, var(--success-fill) var(--p), var(--border) var(--p));
+  }
+  .allDone {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    min-block-size: 2.75rem;
+    padding: 0.55em 1.15em;
+    border-radius: var(--radius-pill);
+    background: var(--success-soft);
+    color: var(--success);
+    font-weight: 700;
+  }
+
+  /* Season picker: a segmented control of links (?season=N). */
+  .seasonNav {
+    margin-block-end: var(--space-4);
+  }
+  .seasonNav ul {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    max-inline-size: 100%;
+    padding: var(--space-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+  }
+  .seasonNav a {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: 2.5rem;
+    padding: 0.4rem 1rem;
+    border-radius: var(--radius-pill);
+    color: var(--muted);
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    transition:
+      background-color var(--dur-fast),
+      color var(--dur-fast);
+  }
+  .seasonNav a:hover {
+    color: var(--text);
+  }
+  .seasonNav a[aria-current="true"] {
+    background: var(--primary-fill);
+    color: var(--on-accent);
+  }
+
   .list {
     container-type: inline-size;
     display: grid;
     gap: var(--space-2);
     padding: 0;
+  }
+  /* Long lists stay cheap: off-screen rows skip layout and paint.
+     The padding/negative margin keeps the hover nudge and focus ring inside the
+     row's paint containment. */
+  .row {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 5.6rem;
+    padding: 6px;
+    margin: -6px;
   }
   .item {
     display: grid;

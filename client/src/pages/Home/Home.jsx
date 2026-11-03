@@ -20,7 +20,7 @@ export function loader() {
   return {
     sections: soft(catalogApi.sections(), null),
     genres: soft(catalogApi.genres()),
-    latest: soft(catalogApi.latest(24)),
+    latest: soft(catalogApi.latest({ limit: 24 })),
     trending: soft(catalogApi.trending(undefined, 12)),
     topAnime: soft(catalogApi.topRated("anime", 12)),
     topManga: soft(catalogApi.topRated("manga", 12)),

@@ -99,6 +99,145 @@ export function continueWatching(limit = 12) {
     .map(([youtubeVideoId, e]) => ({ youtubeVideoId, ...e }));
 }
 
+// ------------------------------------------------- export / import (portability)
+export const EXPORT_FILENAME = "crwn-animes-progress.json";
+export const EXPORT_VERSION = 1;
+/** Import files bigger than this are refused before being read. */
+export const MAX_IMPORT_BYTES = 1024 * 1024;
+
+const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
+// Only our own front-end routes (see docs/API.md) — never an arbitrary URL.
+const ROUTE = /^\/(anime|manga)\/([a-z0-9-]+)\/(?:episode\/\d+|season\/(\d+)\/episode\/\d+|chapter\/\d+)$/;
+// Thumbnails must stay first-party YouTube images: an imported file must not make
+// the browser fetch from arbitrary hosts.
+const THUMB = /^https:\/\/i\.ytimg\.com\/[^\s"'<>]{1,300}$/;
+const MAX_TITLE = 300;
+
+/** `{ version: 1, exportedAt, entries }` — what "Export watch history" downloads. */
+export function exportProgress(now = new Date()) {
+  return { version: EXPORT_VERSION, exportedAt: now.toISOString(), entries: getAllProgress() };
+}
+
+const num = (v) => typeof v === "number" && Number.isFinite(v);
+
+/** A clean copy of one imported entry (unknown keys dropped), or null when it is invalid. */
+export function sanitizeEntry(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const { t, d, at, route = null, title = null, thumb = null } = raw;
+  if (!num(t) || !num(d) || !num(at) || t < 0 || d < 0 || at <= 0) return null;
+  if (d > 0 && t > d + 1) return null;
+  if (route !== null && (typeof route !== "string" || !ROUTE.test(route))) return null;
+  if (title !== null && typeof title !== "string") return null;
+  if (thumb !== null && typeof thumb !== "string") return null;
+  return {
+    t: Math.round(t * 10) / 10,
+    d: Math.round(d * 10) / 10,
+    at: Math.round(at),
+    route,
+    title: title === null ? null : title.slice(0, MAX_TITLE),
+    thumb: thumb !== null && THUMB.test(thumb) ? thumb : null,
+  };
+}
+
+/**
+ * Merges an exported file (its text) into local progress. Never throws.
+ * Newest `at` wins per video; invalid entries are skipped; the 200-entry cap is kept
+ * (entries evicted by the cap count as skipped).
+ * → { ok: true, imported, skipped } | { ok: false, error: "tooLarge" | "invalid" }
+ */
+export function importProgress(text, { size } = {}) {
+  try {
+    const bytes = size ?? new Blob([text ?? ""]).size;
+    if (bytes > MAX_IMPORT_BYTES) return { ok: false, error: "tooLarge" };
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return { ok: false, error: "invalid" };
+    }
+    if (!data || typeof data !== "object" || Array.isArray(data) || data.version !== EXPORT_VERSION) return { ok: false, error: "invalid" };
+    const incoming = data.entries;
+    if (!incoming || typeof incoming !== "object" || Array.isArray(incoming)) return { ok: false, error: "invalid" };
+
+    const all = getAllProgress();
+    const applied = new Set();
+    let seen = 0;
+    for (const [id, raw] of Object.entries(incoming)) {
+      seen += 1;
+      if (!VIDEO_ID.test(id)) continue;
+      const entry = sanitizeEntry(raw);
+      if (!entry) continue;
+      const local = all[id];
+      if (local && (local.at ?? 0) >= entry.at) continue;
+      all[id] = entry;
+      applied.add(id);
+    }
+    const kept = pruneLRU(all);
+    const imported = [...applied].filter((id) => id in kept).length;
+    if (imported > 0) {
+      writeJSON(PROGRESS_KEY, kept);
+      emit();
+    }
+    return { ok: true, imported, skipped: seen - imported };
+  } catch {
+    return { ok: false, error: "invalid" };
+  }
+}
+
+// ------------------------------------------------------ per-series lookups
+/** "/anime/naruto/season/2/episode/3" → { section: "anime", slug: "naruto", season: 2 }, else null. */
+export function parseRoute(route) {
+  const m = typeof route === "string" ? ROUTE.exec(route) : null;
+  return m ? { section: m[1], slug: m[2], season: m[3] ? Number(m[3]) : 1 } : null;
+}
+
+export const seriesKey = (section, slug) => `${section}/${slug}`;
+
+/** { "anime/naruto": { watched, started } } — how many episodes of each series were finished / touched. Pure. */
+export function buildSeriesIndex(entries) {
+  const index = {};
+  for (const e of Object.values(entries ?? {})) {
+    const r = parseRoute(e?.route);
+    if (!r) continue;
+    const key = seriesKey(r.section, r.slug);
+    const row = (index[key] ??= { watched: 0, started: 0 });
+    row.started += 1;
+    if (entryCompleted(e)) row.watched += 1;
+  }
+  return index;
+}
+
+/**
+ * What a series page shows for local progress. Pure.
+ * `videos` are the series' published videos in that section (season, number order).
+ * → { watched, total, target, resume, allWatched }
+ *   target = the in-progress episode (most recently watched) if any, else the first unwatched playable one.
+ */
+export function seriesProgress(videos, entries) {
+  const list = videos ?? [];
+  const map = entries ?? {};
+  const playable = list.filter((v) => v.route && v.availability !== "unavailable");
+  const watched = list.filter((v) => entryCompleted(map[v.youtubeVideoId])).length;
+  const touched = list.some((v) => map[v.youtubeVideoId]);
+  let inProgress = null;
+  for (const v of playable) {
+    const e = map[v.youtubeVideoId];
+    if (resumePosition(e) > 0 && (!inProgress || e.at > map[inProgress.youtubeVideoId].at)) inProgress = v;
+  }
+  const firstUnwatched = playable.find((v) => !entryCompleted(map[v.youtubeVideoId])) ?? null;
+  const target = inProgress ?? firstUnwatched;
+  return {
+    watched,
+    total: list.length,
+    target,
+    /** True when the target has a saved position (the Watch page resumes it). */
+    resume: Boolean(inProgress),
+    /** Any local progress for this series at all. */
+    touched,
+    allWatched: playable.length > 0 && !firstUnwatched,
+  };
+}
+
 export function removeProgress(youtubeVideoId) {
   const all = getAllProgress();
   if (!(youtubeVideoId in all)) return;

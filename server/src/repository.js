@@ -1,6 +1,6 @@
 import { seriesRoute, videoRoute } from "./routing.js";
 import { canonicalGenres, genreKey, genreSpellings, sortGenres } from "./genres.js";
-import { NEEDLE_MATCH, NEEDLE_RANK, searchText } from "./search.js";
+import { NEEDLE_MATCH, NEEDLE_RANK, searchNormalize, searchText } from "./search.js";
 
 const parseJson = (text, fallback) => {
   try {
@@ -107,9 +107,31 @@ const VIDEO_SELECT = `
     (SELECT COUNT(*) FROM ratings r WHERE r.video_id = v.id) AS rating_count
   FROM videos v LEFT JOIN series s ON s.id = v.series_id`;
 
+// Admin video list (GET /api/admin/videos). WHERE is assembled from these
+// fixed fragments (never from user input) so each filter combination gets its
+// own prepared statement whose plan can use an index: "(@x IS NULL OR col = @x)"
+// would defeat it. Order: newest created first, id breaking ties, which the
+// videos_created / videos_status_created indexes serve without sorting.
+const ADMIN_VIDEO_FILTERS = {
+  status: "v.status = @status",
+  availability: "v.availability = @availability",
+  // Normalised title, or one of the series whose normalised name matches
+  // (@seriesIds: JSON array, worked out in JS from the cached series names).
+  needle: "(instr(v.title_search, @needle) > 0 OR v.series_id IN (SELECT value FROM json_each(@seriesIds)))",
+};
+const ADMIN_VIDEO_ORDER = "v.created_at DESC, v.id DESC";
+
+const ADMIN_SERIES_SELECT = `
+  SELECT s.*, COUNT(*) OVER () AS total FROM series s WHERE ${NEEDLE_MATCH}`;
+
 export function createRepository(db) {
   const q = {
     allSeries: db.prepare("SELECT * FROM series ORDER BY name COLLATE NOCASE"),
+    seriesNames: db.prepare("SELECT id, name FROM series ORDER BY id"),
+    // Same matching as /api/search (search_text = name + aliases); name order, id breaks ties.
+    adminSeriesPage: db.prepare(`${ADMIN_SERIES_SELECT}
+      ORDER BY s.name COLLATE NOCASE, s.id LIMIT @limit OFFSET @offset`),
+    adminSeriesCount: db.prepare(`SELECT COUNT(*) AS n FROM series s WHERE ${NEEDLE_MATCH}`),
     seriesBySlug: db.prepare("SELECT * FROM series WHERE slug = ?"),
     seriesById: db.prepare("SELECT * FROM series WHERE id = ?"),
     insertSeries: db.prepare(`
@@ -171,12 +193,18 @@ export function createRepository(db) {
       SELECT section, COUNT(DISTINCT series_id) AS series_count, COUNT(*) AS video_count
       FROM videos WHERE status = 'published' GROUP BY section`),
     publishedInSeries: db.prepare(`${VIDEO_SELECT}
-      WHERE v.status = 'published' AND v.series_id = ? AND v.section = ?
+      WHERE v.status = 'published' AND v.series_id = @seriesId AND v.section = @section
+        AND (@season IS NULL OR v.season = @season)
       ORDER BY v.season, v.number`),
+    // Served by the partial unique index videos_published_slot (series_id, section, season, ...).
+    publishedSeasons: db.prepare(`
+      SELECT DISTINCT season FROM videos
+      WHERE status = 'published' AND series_id = ? AND section = ?
+      ORDER BY season`).pluck(),
     latest: db.prepare(`${VIDEO_SELECT}
       WHERE v.status = 'published' AND v.availability = 'ok'
         AND (@section IS NULL OR v.section = @section)
-      ORDER BY v.published_at DESC, v.id DESC LIMIT @limit`),
+      ORDER BY v.published_at DESC, v.id DESC LIMIT @limit OFFSET @offset`),
     // Bayesian average (C*m + sum) / (C + n): C = @c, m = site-wide mean.
     topRated: db.prepare(`
       WITH stats AS (
@@ -222,9 +250,9 @@ export function createRepository(db) {
       WHERE status = 'published' AND series_id = @seriesId AND section = @section
         AND season = @season AND number = @number AND id IS NOT @excludeId`),
     insertVideo: db.prepare(`
-      INSERT INTO videos (youtube_video_id, source_title, channel, section, series_id, season, number, status,
+      INSERT INTO videos (youtube_video_id, source_title, title_search, channel, section, series_id, season, number, status,
         classification, overrides, published_at, checked_at)
-      VALUES (@youtubeVideoId, @title, @channel, @section, @seriesId, @season, @number, @status,
+      VALUES (@youtubeVideoId, @title, @titleSearch, @channel, @section, @seriesId, @season, @number, @status,
         @classification, @overrides, CASE WHEN @status = 'published' THEN ${NOW_ISO} END, ${NOW_ISO})`),
     updateVideo: db.prepare(`
       UPDATE videos SET section = @section, series_id = @seriesId, season = @season, number = @number,
@@ -270,6 +298,25 @@ export function createRepository(db) {
     coverUrl: s.coverUrl ?? null,
     searchText: searchText(s.name, s.aliases ?? []),
   });
+
+  // [{ id, name }] with the name through searchNormalize(), for the admin video search.
+  const normalisedSeriesNames = untilCatalogChanges(() =>
+    q.seriesNames.all().map((r) => ({ id: r.id, name: searchNormalize(r.name) }))
+  );
+
+  // One prepared statement pair per combination of admin video filters.
+  const adminVideoStatements = new Map();
+  const adminVideoStatement = (keys) => {
+    const key = keys.join(",");
+    if (!adminVideoStatements.has(key)) {
+      const where = keys.length ? `WHERE ${keys.map((k) => ADMIN_VIDEO_FILTERS[k]).join(" AND ")}` : "";
+      adminVideoStatements.set(key, {
+        page: db.prepare(`${VIDEO_SELECT} ${where} ORDER BY ${ADMIN_VIDEO_ORDER} LIMIT @limit OFFSET @offset`),
+        count: db.prepare(`SELECT COUNT(*) AS n FROM videos v ${where}`).pluck(),
+      });
+    }
+    return adminVideoStatements.get(key);
+  };
 
   const getVideo = (id) => {
     const row = q.videoById.get(id);
@@ -359,8 +406,33 @@ export function createRepository(db) {
         videoCount: rows[section]?.video_count ?? 0,
       }));
     },
-    listPublishedInSeries: (seriesId, section) => q.publishedInSeries.all(seriesId, section).map(toVideo),
-    listLatest: (limit, section = null) => q.latest.all({ limit, section }).map(toVideo),
+    /** Published videos of a series in a section (one season when `season` is given). */
+    listPublishedInSeries: (seriesId, section, season = null) =>
+      q.publishedInSeries.all({ seriesId, section, season }).map(toVideo),
+    /** Ascending seasons that have a published video of this series in this section. */
+    publishedSeasons: (seriesId, section) => q.publishedSeasons.all(seriesId, section),
+    listLatest: ({ limit, offset = 0, section = null }) => q.latest.all({ limit, offset, section }).map(toVideo),
+    /** GET /api/admin/series: { items: Series[], total }. `needle` from searchNeedle() (null = all; "" = none). */
+    adminSeriesPage: ({ needle = null, limit, offset }) => {
+      if (needle === "") return { items: [], total: 0 };
+      const rows = q.adminSeriesPage.all({ needle, limit, offset });
+      const total = rows.length ? rows[0].total : offset > 0 ? q.adminSeriesCount.get({ needle }).n : 0;
+      return { items: rows.map(toSeries), total };
+    },
+    /**
+     * GET /api/admin/videos: { items: Video[], total }. `needle` (from searchNeedle()) matches the
+     * normalised video title or series name; null = no text filter, "" = matches nothing.
+     */
+    adminVideosPage: ({ status = null, availability = null, needle = null, limit, offset }) => {
+      if (needle === "") return { items: [], total: 0 };
+      const params = { status, availability, needle, limit, offset };
+      const keys = Object.keys(ADMIN_VIDEO_FILTERS).filter((k) => params[k] != null);
+      if (needle != null) {
+        params.seriesIds = JSON.stringify(normalisedSeriesNames().filter((s) => s.name.includes(needle)).map((s) => s.id));
+      }
+      const stmt = adminVideoStatement(keys);
+      return { items: stmt.page.all(params).map(toVideo), total: stmt.count.get(params) };
+    },
     listTopRated: ({ limit, section = null, c = 5, minCount = 3 }) =>
       q.topRated.all({ limit, section, c, minCount }).map(toVideo),
     /** `since` is the first day (YYYY-MM-DD) that counts. */
@@ -388,6 +460,7 @@ export function createRepository(db) {
       const { lastInsertRowid } = q.insertVideo.run({
         youtubeVideoId,
         title,
+        titleSearch: searchNormalize(title),
         channel: channel ?? null,
         ...placement(rest),
       });

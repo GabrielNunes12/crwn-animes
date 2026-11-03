@@ -214,7 +214,14 @@
     "startReading": "Start reading",
     "continue": "Continue: {label}",
     "noVideos": "Nothing published here yet.",
-    "progress": "{percent}% watched"
+    "progress": "{percent}% watched",
+    "watchedShort": "{watched}/{total} watched",
+    "readShort": "{watched}/{total} read",
+    "watchedOf": "Watched {watched} of {total}",
+    "readOf": "Read {watched} of {total}",
+    "allWatched": "Watched everything",
+    "allRead": "Read everything",
+    "seasons": "Seasons"
   },
   "watch": {
     "play": "Play: {title}",
@@ -386,7 +393,21 @@
     "clearConfirm": "Clear",
     "historyCleared": "Watch history cleared.",
     "loggedOutTitle": "You're not logged in",
-    "loggedOutText": "Log in to change your profile, download your data or delete your account."
+    "loggedOutText": "Log in to change your profile, download your data or delete your account.",
+    "progress": {
+      "title": "Your progress on this device",
+      "text": "Move your watch history to another browser: export it here, then import the file there. The file never leaves your devices.",
+      "export": "Export watch history",
+      "import": "Import watch history",
+      "importHint": "A crwn-animes-progress.json file, up to 1 MB. The newest position of each video wins.",
+      "exported": {
+        "one": "Exported {count} video.",
+        "other": "Exported {count} videos."
+      },
+      "imported": "{imported} imported, {skipped} skipped.",
+      "tooLarge": "That file is larger than 1 MB. Nothing was imported.",
+      "invalid": "That isn't a Crwn Animes watch history file. Nothing was imported."
+    }
   },
   "notFound": {
     "title": "Page not found",
@@ -656,6 +677,24 @@
       "newUrl": "New YouTube link",
       "replace": "Replace",
       "replaced": "Replaced the link for {title}."
+    },
+    "list": {
+      "searchPlaceholder": "Search…",
+      "searchVideos": "Search videos by title or series",
+      "searchSeries": "Search series",
+      "results": {
+        "one": "{count} result",
+        "other": "{count} results"
+      },
+      "resultsFor": {
+        "one": "{count} result for “{q}”",
+        "other": "{count} results for “{q}”"
+      },
+      "noResults": "Nothing matches “{q}”.",
+      "pagination": "Pages",
+      "previous": "Previous page",
+      "next": "Next page",
+      "pageOf": "Page {page} of {pages}"
     }
   },
   "genre": {

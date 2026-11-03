@@ -93,13 +93,22 @@ export const meApi = {
 export const catalogApi = {
   sections: (opts) => apiFetch("/sections", opts),
   genres: (opts) => apiFetch("/genres", opts),
-  latest: (limit = 12, opts) => apiFetch("/latest", { ...opts, query: { limit } }),
+  /**
+   * GET /api/latest → Video[]. `latest({ limit, offset, section })`; a bare number is
+   * still accepted as the limit (`latest(24)`).
+   */
+  latest: (params = {}, opts) => {
+    const { limit = 12, offset, section } = typeof params === "number" ? { limit: params } : (params ?? {});
+    return apiFetch("/latest", { ...opts, query: { limit, offset: offset || undefined, section } });
+  },
   topRated: (section, limit = 12, opts) => apiFetch("/top-rated", { ...opts, query: { section, limit } }),
   trending: (section, limit = 12, opts) => apiFetch("/trending", { ...opts, query: { section, limit } }),
   random: (section) => apiFetch("/random", { query: { section } }),
   seriesList: (section, { genre, q } = {}, opts) =>
     apiFetch(`/${enc(section)}/series`, { ...opts, query: { genre, q } }),
-  series: (section, slug, opts) => apiFetch(`/${enc(section)}/series/${enc(slug)}`, opts),
+  /** `{ series, videos, seasons }`; `season` narrows `videos` to that season (omit it for all). */
+  series: (section, slug, opts, { season } = {}) =>
+    apiFetch(`/${enc(section)}/series/${enc(slug)}`, { ...opts, query: { season } }),
   video: (id, opts) => apiFetch(`/videos/${enc(id)}`, opts),
   /** GET /api/search → { items: SearchItem[], total }. Empty params are omitted. */
   search: ({ q, section, genre, sort, limit, offset } = {}, opts) =>
@@ -115,12 +124,35 @@ export const ratingsApi = {
 };
 
 // ---------------------------------------------------------------- admin
+/** Admin lists are `{ items, total }` (v1.3). A bare array (older server) is treated as one page. */
+export function toPage(data) {
+  if (Array.isArray(data)) return { items: data, total: data.length };
+  const items = Array.isArray(data?.items) ? data.items : [];
+  const total = Number.isFinite(Number(data?.total)) ? Number(data.total) : items.length;
+  return { items, total };
+}
+
+export const ADMIN_PAGE_MAX = 100;
+
 export const adminApi = {
-  series: () => apiFetch("/admin/series"),
+  /** GET /api/admin/series?q=&limit=&offset= → { items, total } */
+  series: ({ q, limit, offset } = {}, opts) =>
+    apiFetch("/admin/series", { ...opts, query: { q: q?.trim() || undefined, limit, offset: offset || undefined } }).then(toPage),
+  /** Every series (pages through the list 100 at a time) — for the series pickers. */
+  allSeries: async (opts) => {
+    const all = [];
+    for (let offset = 0; ; offset += ADMIN_PAGE_MAX) {
+      const { items, total } = await adminApi.series({ limit: ADMIN_PAGE_MAX, offset }, opts);
+      all.push(...items);
+      if (!items.length || all.length >= total || items.length > ADMIN_PAGE_MAX) return all;
+    }
+  },
   createSeries: (data) => post("/admin/series", data),
   updateSeries: (id, data) => apiFetch(`/admin/series/${enc(id)}`, { method: "PATCH", body: data }),
   deleteSeries: (id) => apiFetch(`/admin/series/${enc(id)}`, { method: "DELETE" }),
-  videos: (query) => apiFetch("/admin/videos", { query }),
+  /** GET /api/admin/videos?status=&availability=&q=&limit=&offset= → { items, total } */
+  videos: ({ q, offset, ...query } = {}, opts) =>
+    apiFetch("/admin/videos", { ...opts, query: { ...query, q: q?.trim() || undefined, offset: offset || undefined } }).then(toPage),
   addVideo: (data) => post("/admin/videos", data),
   bulk: (data) => post("/admin/videos/bulk", data),
   healthCheck: () => post("/admin/videos/health-check"),

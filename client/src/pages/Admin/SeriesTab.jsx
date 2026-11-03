@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { adminApi } from "../../api/client.js";
 import { ChipsInput } from "../../components/ChipsInput/ChipsInput.jsx";
 import { ConfirmDialog } from "../../components/ConfirmDialog/ConfirmDialog.jsx";
 import { TextField } from "../../components/Form/TextField.jsx";
 import { useT } from "../../i18n/useT.js";
 import { ErrorText } from "./shared.jsx";
+import { ListEmpty, ListSearch, Pager } from "./ListControls.jsx";
+import { useAdminList } from "./useAdminList.js";
 import styles from "./Admin.module.css";
 
 const EMPTY = { name: "", slug: "", synopsis: "", genres: [], aliases: [], coverUrl: "" };
@@ -18,8 +20,10 @@ function isHttpUrl(v) {
   }
 }
 
-export function SeriesTab({ series, genres, reloadSeries }) {
+export function SeriesTab({ genres, reloadSeries, reloadKey }) {
   const { t } = useT();
+  const headingRef = useRef(null);
+  const list = useAdminList(adminApi.series, { reloadKey, focusRef: headingRef });
   const [editing, setEditing] = useState(null); // series being edited, or null for "new"
   const [form, setForm] = useState(EMPTY);
   const [state, setState] = useState({ busy: false, error: null, message: "" });
@@ -74,6 +78,7 @@ export function SeriesTab({ series, genres, reloadSeries }) {
     try {
       await adminApi.deleteSeries(toDelete.id);
       if (editing?.id === toDelete.id) reset();
+      list.removeItem(toDelete.id);
       setToDelete(null);
       setDeleteState({ busy: false, error: null });
       setState({ busy: false, error: null, message: t("admin.series.deleted", { name: toDelete.name }) });
@@ -116,10 +121,14 @@ export function SeriesTab({ series, genres, reloadSeries }) {
       </form>
 
       <section aria-labelledby="series-list-title" className="stack">
-        <h2 id="series-list-title">{t("admin.series.all", { count: series.length })}</h2>
-        {series.length === 0 && <p className="muted">{t("admin.series.none")}</p>}
-        <ul className={styles.rows} role="list">
-          {series.map((s) => (
+        <h2 id="series-list-title" ref={headingRef} tabIndex={-1}>
+          {t("admin.series.all", { count: list.total })}
+        </h2>
+        <ListSearch list={list} label={t("admin.list.searchSeries")} />
+        <ErrorText error={list.error} />
+        <ListEmpty list={list}>{t("admin.series.none")}</ListEmpty>
+        <ul className={styles.rows} role="list" aria-busy={list.loading || undefined} data-stale={(list.loading && list.loaded) || undefined}>
+          {list.items.map((s) => (
             <li key={s.id} className={styles.row}>
               <div className={styles.rowMain}>
                 <p className={styles.videoTitle}>{s.name}</p>
@@ -139,6 +148,7 @@ export function SeriesTab({ series, genres, reloadSeries }) {
             </li>
           ))}
         </ul>
+        <Pager list={list} />
       </section>
 
       <ConfirmDialog

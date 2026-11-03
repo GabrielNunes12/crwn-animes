@@ -75,7 +75,7 @@ describe("admin", () => {
     const taken = await admin.patch(`/api/admin/series/${created.id}`, { slug: "one-piece" });
     assert.equal(taken.status, 409);
     assert.equal((await admin.patch("/api/admin/series/99999", { name: "X" })).status, 404);
-    assert.equal((await admin.get("/api/admin/series")).body.find((s) => s.id === created.id).name, "Dandadan");
+    assert.equal((await admin.get("/api/admin/series?limit=100")).body.items.find((s) => s.id === created.id).name, "Dandadan");
   });
 
   test("slot conflict keeps the second video pending; override fixes it", async () => {
@@ -103,7 +103,7 @@ describe("admin", () => {
     assert.ok(unknownSeries.body.error.details.seriesSlug);
 
     const pending = await admin.get("/api/admin/videos?status=pending");
-    assert.ok(pending.body.every((v) => v.status === "pending"));
+    assert.ok(pending.body.items.every((v) => v.status === "pending"));
     assert.equal((await admin.get("/api/admin/videos?status=nope")).status, 400);
   });
 
@@ -246,7 +246,7 @@ describe("admin bulk add, health check and URL swap", () => {
     assert.equal(res.body.unavailable[0].availability, "unavailable");
 
     const filtered = await admin.get("/api/admin/videos?availability=unavailable&status=published");
-    assert.deepEqual(filtered.body.map((v) => v.id), [b.id]);
+    assert.deepEqual(filtered.body.items.map((v) => v.id), [b.id]);
     const latest = await srv.client().get("/api/latest");
     assert.deepEqual(latest.body.map((v) => v.id), [a.id]);
     const page = await srv.client().get("/api/anime/series/one-piece");
