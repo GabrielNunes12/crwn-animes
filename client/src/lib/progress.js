@@ -276,6 +276,31 @@ export function seriesProgress(videos, entries) {
   };
 }
 
+/**
+ * Called by a series page with the FULL published list of that series in that section.
+ * Entries whose route belongs to this series+section but matches no published video are
+ * stale (episode deleted or renumbered): an entry whose YouTube ID still exists is moved
+ * to that video's current route; any other one is removed. Other series are never touched.
+ * Afterwards the cards' route-based counts agree with the page. Returns how many changed.
+ */
+export function pruneSeriesProgress(section, slug, videos) {
+  if (!section || !slug || !Array.isArray(videos) || videos.length === 0) return 0;
+  const routes = new Set(videos.map((v) => v.route).filter(Boolean));
+  const routeById = new Map(videos.filter((v) => v.route).map((v) => [v.youtubeVideoId, v.route]));
+  const all = getAllProgress();
+  let changed = 0;
+  for (const [id, e] of Object.entries(all)) {
+    const r = parseRoute(e?.route);
+    if (!r || r.section !== section || r.slug !== slug || routes.has(e.route)) continue;
+    const moved = routeById.get(id);
+    if (moved) all[id] = { ...e, route: moved };
+    else delete all[id];
+    changed += 1;
+  }
+  if (changed && writeJSON(PROGRESS_KEY, all)) emit();
+  return changed;
+}
+
 export function removeProgress(youtubeVideoId) {
   const all = getAllProgress();
   if (!(youtubeVideoId in all)) return;

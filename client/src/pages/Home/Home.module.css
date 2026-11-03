@@ -130,3 +130,10 @@
     translate: 0.4rem -50%;
   }
 }
+
+.empty {
+  margin-block-start: var(--space-6);
+  padding: var(--space-6);
+  text-align: center;
+  justify-items: center;
+}

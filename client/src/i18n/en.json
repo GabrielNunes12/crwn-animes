@@ -159,7 +159,13 @@
     "trending": "Trending",
     "topAnime": "Top rated anime",
     "topManga": "Top rated manga",
-    "genres": "Browse by genre"
+    "genres": "Browse by genre",
+    "empty": {
+      "title": "No episodes published yet",
+      "visitor": "The catalogue is being put together. Check back soon!",
+      "admin": "A series only shows up on the site once it has at least one published episode or chapter. Paste a YouTube link in Admin → Add video to publish the first one.",
+      "addVideo": "Add the first video"
+    }
   },
   "section": {
     "kicker": "Browse",
@@ -598,7 +604,16 @@
       },
       "none": "No series yet.",
       "deleteTitle": "Delete {name}?",
-      "deleteText": "This deletes the series, all its videos and their ratings. It can't be undone."
+      "deleteText": "This deletes the series, all its videos and their ratings. It can't be undone.",
+      "episodes": {
+        "one": "{count} episode",
+        "other": "{count} episodes"
+      },
+      "chapters": {
+        "one": "{count} chapter",
+        "other": "{count} chapters"
+      },
+      "hidden": "Not on the site yet: no published episodes"
     },
     "add": {
       "title": "Add a video",

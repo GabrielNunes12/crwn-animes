@@ -159,7 +159,13 @@
     "trending": "Em alta",
     "topAnime": "Animes mais bem avaliados",
     "topManga": "Mangás mais bem avaliados",
-    "genres": "Explorar por gênero"
+    "genres": "Explorar por gênero",
+    "empty": {
+      "title": "Nenhum episódio publicado ainda",
+      "visitor": "O catálogo está sendo montado. Volte em breve!",
+      "admin": "Uma série só aparece no site depois de ter pelo menos um episódio ou capítulo publicado. Cole um link do YouTube em Admin → Adicionar vídeo para publicar o primeiro.",
+      "addVideo": "Adicionar o primeiro vídeo"
+    }
   },
   "section": {
     "kicker": "Explorar",
@@ -598,7 +604,16 @@
       },
       "none": "Nenhuma série ainda.",
       "deleteTitle": "Excluir {name}?",
-      "deleteText": "Isso exclui a série, todos os vídeos dela e as avaliações. Não dá para desfazer."
+      "deleteText": "Isso exclui a série, todos os vídeos dela e as avaliações. Não dá para desfazer.",
+      "episodes": {
+        "one": "{count} episódio",
+        "other": "{count} episódios"
+      },
+      "chapters": {
+        "one": "{count} capítulo",
+        "other": "{count} capítulos"
+      },
+      "hidden": "Fora do site: ainda sem episódios publicados"
     },
     "add": {
       "title": "Adicionar um vídeo",

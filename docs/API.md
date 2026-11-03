@@ -291,7 +291,7 @@ Plus a ⌘K / Ctrl+K command palette (ARIA combobox) with instant, debounced res
 |---|---|
 | `GET /api/latest?limit=12&offset=0&section=` | adds `offset` (0–10000) and optional `section`; still returns `Video[]` |
 | `GET /api/admin/videos?status=&availability=&q=&limit=50&offset=0` | **now returns `{ items: Video[], total }`**, newest first; `q` matches the video title or series name (accent-insensitive, ≤ 80 chars); `limit` 1–100 (default 50); blank filters mean "no filter" |
-| `GET /api/admin/series?q=&limit=50&offset=0` | **now returns `{ items: Series[], total }`**; `q` uses the same matching as `/api/search`; `limit` 1–100 |
+| `GET /api/admin/series?q=&limit=50&offset=0` | **now returns `{ items: (Series & { videoCounts: { anime, manga } })[], total }`**; `videoCounts` are published videos per section (a series with none is not shown on the site yet); `q` uses the same matching as `/api/search`; `limit` 1–100 |
 
 Ordering is stable (ties broken by id) so paging never repeats or skips an item.
 

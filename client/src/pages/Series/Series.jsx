@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link, useLoaderData, useSearchParams } from "react-router";
 import { catalogApi } from "../../api/client.js";
 import { AsyncView } from "../../components/Await/AsyncView.jsx";
@@ -9,7 +10,7 @@ import { useTitle } from "../../hooks/useTitle.js";
 import { useT } from "../../i18n/useT.js";
 import { truncateWords, videoLabel } from "../../lib/format.js";
 import { genreHref } from "../../lib/search.js";
-import { formatTime, resumePosition, seriesProgress } from "../../lib/progress.js";
+import { formatTime, pruneSeriesProgress, resumePosition, seriesProgress } from "../../lib/progress.js";
 import { pickSeason, seasonsOf } from "../../lib/seasons.js";
 import styles from "./Series.module.css";
 
@@ -135,6 +136,11 @@ function SeriesView({ section, series, videos, seasons: apiSeasons }) {
     truncateWords(series.synopsis || t(`meta.series.fallback.${section}`, { name: series.name })),
   );
   const isManga = section === "manga";
+  // This page knows every published episode: drop local entries for episodes that no
+  // longer exist, so the series cards (which only know videoCount) agree with it.
+  useEffect(() => {
+    pruneSeriesProgress(section, series.slug, videos);
+  }, [section, series.slug, videos]);
   const sp = seriesProgress(videos, progress);
   const seasons = seasonsOf(apiSeasons, videos);
   const multi = seasons.length > 1;

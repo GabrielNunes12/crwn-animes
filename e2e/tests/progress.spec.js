@@ -234,11 +234,9 @@ test.describe("series page progress", () => {
   });
 
   test("card and series page agree when local history holds an episode that no longer exists", async ({ page }) => {
-    // KNOWN BUG (cycle 3): buildSeriesIndex() (client/src/lib/progress.js) counts every distinct
-    // watched route of the series, including routes of deleted/renumbered episodes, and the card only
-    // caps that at videoCount; seriesProgress() (series page) counts the series' current videos.
-    // Here: card "2/5 assistidos", series page "1 de 5 assistidos".
-    test.fail();
+    // Cards only know videoCount, so a deleted episode's entry may count on a card until the series
+    // page is visited: that page prunes entries for episodes that no longer exist
+    // (pruneSeriesProgress in client/src/lib/progress.js). After the visit both must agree.
     const { v } = S;
     await seedProgress(page, {
       [v.s1e1.youtubeVideoId]: done(v.s1e1, 1_000),

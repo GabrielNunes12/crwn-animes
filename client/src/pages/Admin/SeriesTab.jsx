@@ -136,6 +136,7 @@ export function SeriesTab({ genres, reloadSeries, reloadKey }) {
                   <code>{s.slug}</code>
                   {s.genres?.length ? ` · ${s.genres.join(", ")}` : ""}
                 </p>
+                <SeriesCounts counts={s.videoCounts} />
               </div>
               <div className="cluster">
                 <button type="button" className="btn btn-sm" onClick={() => startEdit(s)}>
@@ -166,4 +167,21 @@ export function SeriesTab({ genres, reloadSeries, reloadKey }) {
       </ConfirmDialog>
     </div>
   );
+}
+
+/**
+ * Published counts per section. A series only appears on the site (home, Anime/Manga pages)
+ * once it has a published video, so series without any are flagged for the admin.
+ */
+function SeriesCounts({ counts }) {
+  const { t } = useT();
+  if (!counts) return null;
+  const { anime = 0, manga = 0 } = counts;
+  if (!anime && !manga) {
+    return <p className="hint"><span className="badge badge-warn">{t("admin.series.hidden")}</span></p>;
+  }
+  const parts = [];
+  if (anime) parts.push(t("admin.series.episodes", { count: anime }));
+  if (manga) parts.push(t("admin.series.chapters", { count: manga }));
+  return <p className="hint">{parts.join(" · ")}</p>;
 }

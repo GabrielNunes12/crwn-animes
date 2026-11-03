@@ -3,7 +3,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Component as Series, loader, shouldRevalidate } from "./Series.jsx";
 import { mockFetch, renderApp } from "../../test/utils.jsx";
-import { saveProgress } from "../../lib/progress.js";
+import { buildSeriesIndex, getAllProgress, pruneSeriesProgress, saveProgress } from "../../lib/progress.js";
 import { pickSeason, seasonsOf } from "../../lib/seasons.js";
 
 const v = (n, season = 1) => ({
@@ -139,5 +139,32 @@ describe("Series page — seasons, watched N of M and Continue", () => {
     expect(screen.getByText("1 episode is unavailable right now.")).toBeInTheDocument();
     expect(screen.queryByText("Watched everything")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /^(Continue|Start watching)/ })).not.toBeInTheDocument();
+  });
+
+  it("prunes local entries for episodes that no longer exist, so cards agree with the page", async () => {
+    const save = (yt, route, now) => saveProgress(yt, { position: 100, duration: 100, route, now });
+    save(VIDEOS[0].youtubeVideoId, VIDEOS[0].route, 1); // S1E1: real, watched
+    save("ghost000099", "/anime/op/episode/99", 2); // deleted episode
+    save(VIDEOS[1].youtubeVideoId, "/anime/op/episode/7", 3); // renumbered: E7 is now E2
+    save("other000001", "/anime/bleach/episode/99", 4); // another series: untouched
+    save("manga000099", "/manga/op/chapter/99", 5); // same slug, other section: untouched
+    expect(buildSeriesIndex(getAllProgress())["anime/op"]).toEqual({ watched: 3, started: 3 }); // stale card count
+
+    setup();
+    await screen.findByRole("heading", { level: 1, name: "OP" });
+    await waitFor(() => expect(buildSeriesIndex(getAllProgress())["anime/op"]).toEqual({ watched: 2, started: 2 }));
+    expect(screen.getByText("Watched 2 of 5")).toBeInTheDocument();
+    const all = getAllProgress();
+    expect(all.ghost000099).toBeUndefined();
+    expect(all[VIDEOS[1].youtubeVideoId].route).toBe("/anime/op/episode/2");
+    expect(all.other000001.route).toBe("/anime/bleach/episode/99");
+    expect(all.manga000099.route).toBe("/manga/op/chapter/99");
+  });
+
+  it("pruneSeriesProgress never clears anything without a published list", () => {
+    saveProgress("ghost000099", { position: 100, duration: 100, route: "/anime/op/episode/99" });
+    expect(pruneSeriesProgress("anime", "op", [])).toBe(0);
+    expect(pruneSeriesProgress("anime", "op", undefined)).toBe(0);
+    expect(getAllProgress().ghost000099).toBeDefined();
   });
 });

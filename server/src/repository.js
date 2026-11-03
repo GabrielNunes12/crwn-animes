@@ -121,8 +121,13 @@ const ADMIN_VIDEO_FILTERS = {
 };
 const ADMIN_VIDEO_ORDER = "v.created_at DESC, v.id DESC";
 
+// Admin rows carry their published counts per section (from series_stats) so the admin can see
+// which series are not on the site yet: a series only appears in a section once it has a video there.
 const ADMIN_SERIES_SELECT = `
-  SELECT s.*, COUNT(*) OVER () AS total FROM series s WHERE ${NEEDLE_MATCH}`;
+  SELECT s.*, COUNT(*) OVER () AS total,
+    COALESCE((SELECT video_count FROM series_stats WHERE series_id = s.id AND section = 'anime'), 0) AS anime_count,
+    COALESCE((SELECT video_count FROM series_stats WHERE series_id = s.id AND section = 'manga'), 0) AS manga_count
+  FROM series s WHERE ${NEEDLE_MATCH}`;
 
 export function createRepository(db) {
   const q = {
@@ -417,7 +422,8 @@ export function createRepository(db) {
       if (needle === "") return { items: [], total: 0 };
       const rows = q.adminSeriesPage.all({ needle, limit, offset });
       const total = rows.length ? rows[0].total : offset > 0 ? q.adminSeriesCount.get({ needle }).n : 0;
-      return { items: rows.map(toSeries), total };
+      const items = rows.map((row) => ({ ...toSeries(row), videoCounts: { anime: row.anime_count, manga: row.manga_count } }));
+      return { items, total };
     },
     /**
      * GET /api/admin/videos: { items: Video[], total }. `needle` (from searchNeedle()) matches the
