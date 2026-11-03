@@ -1,7 +1,7 @@
 // Journeys 5 and 6: password reset (signs out other sessions) and
 // "your data": export and account deletion.
 import fs from "node:fs";
-import { test, expect, createUser, linkFrom, newGuardedContext, uniqueEmail, waitForEmail, SUBJECT } from "./fixtures.js";
+import { test, expect, createUser, linkFrom, newGuardedContext, uniqueEmail, waitForEmail, SUBJECT, headerUser, headerLogin } from "./fixtures.js";
 
 async function loginViaUi(page, { email, password }) {
   await page.goto("/login");
@@ -16,7 +16,7 @@ test("forgot password → reset link → new password works, the old session is 
 
   await test.step("device A is logged in", async () => {
     await page.goto("/");
-    await expect(page.getByLabel(`Menu da conta de ${user.displayName}`)).toBeVisible();
+    await expect(headerUser(page, user.displayName)).toBeVisible();
   });
 
   const deviceB = await newGuardedContext(browser);
@@ -44,13 +44,13 @@ test("forgot password → reset link → new password works, the old session is 
       await pageB.getByRole("button", { name: "Salvar nova senha" }).click();
       await expect(pageB).toHaveURL(/\/$/);
       await expect(pageB.getByRole("status").filter({ hasText: "Sua senha foi alterada" })).toBeVisible();
-      await expect(pageB.getByLabel(`Menu da conta de ${user.displayName}`)).toBeVisible();
+      await expect(headerUser(pageB, user.displayName)).toBeVisible();
     });
 
     await test.step("device A's old session was revoked", async () => {
       await page.reload();
-      await expect(page.getByRole("link", { name: "Entrar", exact: true })).toBeVisible();
-      await expect(page.getByLabel(`Menu da conta de ${user.displayName}`)).toHaveCount(0);
+      await expect(headerLogin(page)).toBeVisible();
+      await expect(headerUser(page, user.displayName)).toHaveCount(0);
       expect((await (await page.request.get("/api/auth/me")).json()).user).toBeNull();
     });
 
@@ -59,7 +59,7 @@ test("forgot password → reset link → new password works, the old session is 
       await expect(page.getByRole("alert")).toContainText("E-mail ou senha incorretos.");
       await page.getByLabel("Senha", { exact: true }).fill(newPassword);
       await page.getByRole("button", { name: "Entrar", exact: true }).click();
-      await expect(page.getByLabel(`Menu da conta de ${user.displayName}`)).toBeVisible();
+      await expect(headerUser(page, user.displayName)).toBeVisible();
       await expect(page).toHaveURL(/\/$/);
     });
 
@@ -110,7 +110,7 @@ test("account: download my data (no password hash), delete account with password
     await dialog.getByRole("button", { name: "Excluir minha conta" }).click();
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole("status").filter({ hasText: "Sua conta e todos os seus dados foram excluídos." })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Entrar", exact: true })).toBeVisible();
+    await expect(headerLogin(page)).toBeVisible();
     expect((await (await page.request.get("/api/auth/me")).json()).user).toBeNull();
   });
 

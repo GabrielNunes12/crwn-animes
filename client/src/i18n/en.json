@@ -62,7 +62,39 @@
     "RATE_LIMITED": "Too many attempts. Please wait a moment and try again.",
     "UPSTREAM_ERROR": "YouTube didn't answer. Please try again later.",
     "INVALID_TOKEN": "This link is invalid or has expired.",
-    "NETWORK_ERROR": "Can't reach the server. Check your connection and try again."
+    "NETWORK_ERROR": "Can't reach the server. Check your connection and try again.",
+    "INTERNAL_ERROR": "Something went wrong on our side. Please try again in a moment.",
+    "PAYLOAD_TOO_LARGE": "That's too much data to send at once.",
+    "HTTP_ERROR": "The server answered with an unexpected error. Please try again.",
+    "ERROR": "Something went wrong. Please try again.",
+    "fieldInvalid": "One of the fields is not valid.",
+    "fields": {
+      "email": "Enter a valid email address.",
+      "password": "Password must be at least 10 characters.",
+      "newPassword": "The new password must be at least 10 characters.",
+      "currentPassword": "Enter your current password.",
+      "displayName": "Display name must be 2–30 characters.",
+      "acceptPrivacy": "You need to accept the privacy notice.",
+      "token": "This link is invalid or has expired.",
+      "name": "Enter a name for the series.",
+      "slug": "Slug may only use lowercase letters, numbers and dashes.",
+      "coverUrl": "Enter a valid image URL (http or https).",
+      "url": "Enter a YouTube link or 11-character video ID.",
+      "section": "Choose Anime or Manga.",
+      "seriesSlug": "Choose an existing series.",
+      "season": "Season must be a whole number, 1 or more.",
+      "number": "Number must be 0 or more.",
+      "score": "Choose from 1 to 5 stars.",
+      "reaction": "Choose one of the listed reactions.",
+      "synopsis": "The synopsis is too long.",
+      "aliases": "Check the aliases: each must be short text.",
+      "genres": "Check the genres: each must be short text.",
+      "title": "The title is not valid.",
+      "text": "Paste up to 50 YouTube links.",
+      "urls": "Paste up to 50 YouTube links.",
+      "defaults": "Check the default values.",
+      "body": "The request was not valid."
+    }
   },
   "notice": {
     "adminOnly": "That area is for admins only.",
@@ -84,10 +116,11 @@
     "signup": "Sign up",
     "logout": "Log out",
     "account": "My account",
-    "userMenu": "Account menu for {name}",
     "toLight": "Switch to light theme",
     "toDark": "Switch to dark theme",
-    "language": "Language"
+    "language": "Language",
+    "accountMenu": "account menu",
+    "siteSearch": "Site search"
   },
   "footer": {
     "label": "Footer",
@@ -103,7 +136,9 @@
     "prev": "Previous episode / chapter",
     "theatre": "Toggle theatre mode",
     "close": "Close dialogs",
-    "note": "Shortcuts are ignored while you type in a field."
+    "note": "Shortcuts are ignored while you type in a field.",
+    "singleKey": "Single-key shortcuts (T, /, ?)",
+    "singleKeyHint": "Turn off if you use speech input or press keys by accident. Shift+N / Shift+P keep working."
   },
   "home": {
     "eyebrow": "🌸 Anime & manga, episode by episode",
@@ -138,7 +173,8 @@
     "resultsFor": "Results for “{q}”",
     "clear": "Clear filters",
     "tryOther": "Try {section}",
-    "empty": "No series match these filters."
+    "empty": "No series match these filters.",
+    "listHeading": "All {section} series"
   },
   "search": {
     "title": "Search",
@@ -259,10 +295,14 @@
       "spam": "Nothing there? Check the spam folder, or resend the link. Unverified accounts are deleted after 7 days."
     },
     "verify": {
-      "title": "Verifying your email",
-      "working": "One moment, verifying your link…",
+      "title": "Confirm your email",
+      "text": "Enter the password you chose at sign-up to activate your account.",
+      "submit": "Confirm and log in",
+      "working": "Confirming…",
+      "wrongPassword": "That isn't the password you chose at sign-up. Try again — your link is still valid.",
       "invalid": "This verification link is invalid, already used or expired.",
-      "missing": "This link is missing its token. Open the link from the email again.",
+      "resendText": "Enter your email and we'll send you a new link.",
+      "missing": "This link is missing its token. Open the link from the email again, or get a new one below.",
       "requestNew": "Get a new link"
     },
     "forgot": {

@@ -75,17 +75,17 @@ export const authApi = {
   logoutAll: () => apiFetch("/auth/logout-all", { method: "POST" }),
   register: ({ email, password, displayName, locale }) =>
     post("/auth/register", { email, password, displayName, acceptPrivacy: true, locale }),
-  verifyEmail: (token) => post("/auth/verify-email", { token }),
+  verifyEmail: (token, password) => post("/auth/verify-email", { token, password }),
   resendVerification: (email, locale) => post("/auth/resend-verification", { email, locale }),
   forgotPassword: (email, locale) => post("/auth/forgot-password", { email, locale }),
-  resetPassword: (token, password) => post("/auth/reset-password", { token, password }),
+  resetPassword: (token, password, locale) => post("/auth/reset-password", { token, password, locale }),
 };
 
 // ------------------------------------------------------- your data (me)
 export const meApi = {
   exportUrl: `${BASE}/me/export`,
   update: (displayName) => apiFetch("/me", { method: "PATCH", body: { displayName } }),
-  changePassword: (currentPassword, newPassword) => post("/me/password", { currentPassword, newPassword }),
+  changePassword: (currentPassword, newPassword, locale) => post("/me/password", { currentPassword, newPassword, locale }),
   remove: (password) => apiFetch("/me", { method: "DELETE", body: { password } }),
 };
 

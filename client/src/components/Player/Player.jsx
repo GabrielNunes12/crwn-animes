@@ -24,6 +24,8 @@ export function Player({ video, autoStart = false, onEnded, next, nextLabel }) {
   const [attempt, setAttempt] = useState(0);
   const [resumeAt] = useState(() => resumePosition(getProgress(id)));
   const mountRef = useRef(null);
+  const stageRef = useRef(null);
+  const focusOnReady = useRef(false); // the user pressed play: keep keyboard focus with the player
   const onEndedRef = useRef(onEnded);
   useEffect(() => {
     onEndedRef.current = onEnded;
@@ -74,10 +76,14 @@ export function Player({ video, autoStart = false, onEnded, next, nextLabel }) {
             onReady: (e) => {
               if (cancelled) return;
               try {
-                e.target.getIframe().title = video.title;
+                const iframe = e.target.getIframe();
+                iframe.title = video.title;
+                // Move focus into the player before the facade button unmounts.
+                if (focusOnReady.current) iframe.focus();
               } catch {
                 /* ignore */
               }
+              focusOnReady.current = false;
               setPhase("ready");
             },
             onStateChange: (e) => {
@@ -96,13 +102,18 @@ export function Player({ video, autoStart = false, onEnded, next, nextLabel }) {
             onError: (e) => {
               if (cancelled) return;
               stopTimer();
+              if (focusOnReady.current) stageRef.current?.focus();
+              focusOnReady.current = false;
               setPhase(UNPLAYABLE_ERRORS.has(Number(e.data)) ? "unplayable" : "error");
             },
           },
         });
       })
       .catch(() => {
-        if (!cancelled) setPhase("error");
+        if (cancelled) return;
+        if (focusOnReady.current) stageRef.current?.focus();
+        focusOnReady.current = false;
+        setPhase("error");
       });
 
     const onPageHide = () => save();
@@ -129,6 +140,8 @@ export function Player({ video, autoStart = false, onEnded, next, nextLabel }) {
   }, [activated, id, attempt]);
 
   function play() {
+    if (activated) return; // aria-disabled while loading: keep focus, ignore repeats
+    focusOnReady.current = true;
     setWantsPlay(true);
     setActivated(true);
   }
@@ -142,11 +155,11 @@ export function Player({ video, autoStart = false, onEnded, next, nextLabel }) {
 
   return (
     <div className={styles.wrap}>
-      <div className={styles.stage} data-phase={phase}>
+      <div ref={stageRef} className={styles.stage} data-phase={phase} tabIndex={-1} aria-busy={activated && phase === "idle" ? true : undefined}>
         <div ref={mountRef} className={styles.mount} hidden={phase === "unplayable" || phase === "error"} />
 
         {showFacade && (
-          <button type="button" className={styles.facade} onClick={play} disabled={activated} aria-label={t("watch.play", { title: video.title })}>
+          <button type="button" className={styles.facade} onClick={play} aria-disabled={activated || undefined} aria-label={t("watch.play", { title: video.title })}>
             <img src={video.thumbnailUrl} alt="" width="480" height="360" decoding="async" fetchPriority="high" />
             <span className={styles.playIcon} aria-hidden="true">
               {activated ? <span className={styles.spinner} /> : <svg viewBox="0 0 24 24" width="36" height="36"><path d="M8 5v14l11-7z" fill="currentColor" /></svg>}

@@ -9,13 +9,7 @@
     <meta name="theme-color" content="#faf8ff" media="(prefers-color-scheme: light)" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Crwn Animes</title>
-    <script>
-      // Apply the saved theme before first paint to avoid a flash.
-      try {
-        var t = localStorage.getItem("crwn:theme");
-        if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
-      } catch (e) {}
-    </script>
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

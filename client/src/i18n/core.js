@@ -62,6 +62,17 @@ export function createI18n(locale, setLocale = () => {}) {
   const nf = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 });
   const df = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
   const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  /** Translated message for one invalid field (server `details` key). */
+  const fieldError = (field) => {
+    const key = `errors.fields.${field}`;
+    const msg = t(key);
+    return msg === key ? t("errors.fieldInvalid") : msg;
+  };
+  /** { field: translated message } for a VALIDATION_ERROR's details. */
+  const fieldErrors = (err) => {
+    if (err?.code !== "VALIDATION_ERROR" || !err.details || typeof err.details !== "object") return {};
+    return Object.fromEntries(Object.keys(err.details).map((f) => [f, fieldError(f)]));
+  };
   return {
     locale,
     setLocale,
@@ -77,15 +88,22 @@ export function createI18n(locale, setLocale = () => {}) {
       if (abs < 86400 * 30) return rtf.format(Math.round(diff / 86400), "day");
       return df.format(new Date(d));
     },
-    /** Translated message for an ApiError (by code), falling back to the server text. */
+    fieldError,
+    fieldErrors,
+    /**
+     * Translated message for an error. ApiErrors are mapped by `code`; unknown
+     * codes become errors.generic (the server's English text is never shown).
+     * VALIDATION_ERROR details are translated per field. Errors without a code
+     * are client-side and already translated.
+     */
     errorMessage: (err) => {
       if (!err) return "";
-      if (err.code) {
-        const key = `errors.${err.code}`;
-        const msg = t(key);
-        if (msg !== key) return msg;
-      }
-      return err.message || t("errors.generic");
+      if (!err.code) return err.message || t("errors.generic");
+      const key = `errors.${err.code}`;
+      let msg = t(key);
+      if (msg === key) msg = t("errors.generic");
+      const fields = Object.values(fieldErrors(err));
+      return fields.length ? `${msg} ${[...new Set(fields)].join(" ")}` : msg;
     },
   };
 }

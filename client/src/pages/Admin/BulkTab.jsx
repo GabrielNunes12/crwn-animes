@@ -11,9 +11,9 @@ function rowRoute(row) {
 }
 
 export function BulkResults({ results, preview }) {
-  const { t } = useT();
+  const { t, locale } = useT();
   return (
-    <div className={styles.tableWrap}>
+    <div className={styles.tableWrap} tabIndex={0} role="region" aria-label={preview ? t("admin.bulk.previewCaption") : t("admin.bulk.resultCaption")}>
       <table className={styles.table}>
         <caption className="visually-hidden">{preview ? t("admin.bulk.previewCaption") : t("admin.bulk.resultCaption")}</caption>
         <thead>
@@ -55,7 +55,7 @@ export function BulkResults({ results, preview }) {
                   )}
                 </td>
                 <td>
-                  {row.message && <p>{row.message}</p>}
+                  {row.message && locale === "en" && <p>{row.message}</p>}
                   {row.preview?.reasons?.length > 0 && <p className="hint">{row.preview.reasons.join("; ")}</p>}
                   {row.video?.title && <p className="hint">{row.video.title}</p>}
                 </td>

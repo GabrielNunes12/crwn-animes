@@ -9,7 +9,7 @@ import { MIN_PASSWORD } from "../../lib/password.js";
 import styles from "./Auth.module.css";
 
 export function Component() {
-  const { t, errorMessage } = useT();
+  const { t, locale, errorMessage } = useT();
   const { setUser } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -31,7 +31,7 @@ export function Component() {
     setBusy(true);
     setServerError(null);
     try {
-      const { user } = await authApi.resetPassword(token, password);
+      const { user } = await authApi.resetPassword(token, password, locale);
       setUser(user);
       navigate("/", { replace: true, state: { notice: "passwordReset" } });
     } catch (err) {

@@ -10,7 +10,7 @@ import { validateRegistration } from "../../lib/validation.js";
 import styles from "./Auth.module.css";
 
 export function Component() {
-  const { t, locale, errorMessage } = useT();
+  const { t, locale, errorMessage, fieldErrors } = useT();
   const navigate = useNavigate();
   const [form, setForm] = useState({ email: "", displayName: "", password: "", consent: false });
   const [errors, setErrors] = useState({});
@@ -37,10 +37,16 @@ export function Component() {
       navigate(`/check-email?email=${encodeURIComponent(email)}`, { state: { email } });
     } catch (err) {
       setServerError(err);
-      if (err.details && typeof err.details === "object") {
-        const fieldErrors = {};
-        for (const k of ["email", "displayName", "password"]) if (err.details[k]) fieldErrors[k] = String(err.details[k]);
-        if (Object.keys(fieldErrors).length) setErrors(fieldErrors);
+      // Server field errors → translated messages next to the matching fields.
+      const translated = fieldErrors(err);
+      const mapped = {};
+      for (const [field, msg] of Object.entries(translated)) {
+        const k = field === "acceptPrivacy" ? "consent" : field;
+        if (["email", "displayName", "password", "consent"].includes(k)) mapped[k] = msg;
+      }
+      if (Object.keys(mapped).length) {
+        setErrors(mapped);
+        setServerError(null);
       }
       setBusy(false);
     }

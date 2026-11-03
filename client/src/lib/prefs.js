@@ -5,6 +5,7 @@ export const THEME_KEY = "crwn:theme";
 export const ALWAYS_LOAD_KEY = "crwn:yt-always-load";
 export const AUTOPLAY_KEY = "crwn:autoplay-next";
 export const LOCALE_KEY = "crwn:locale";
+export const SINGLE_KEY_SHORTCUTS_KEY = "crwn:single-key-shortcuts";
 
 export function getBool(key, fallback = false) {
   const v = readString(key);

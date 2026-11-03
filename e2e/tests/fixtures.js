@@ -150,6 +150,11 @@ export async function ensureVideo(admin, { youtubeId, title, ...overrides }) {
   throw new Error(`POST /api/admin/videos → ${res.status()} ${await res.text()}`);
 }
 
+/** The logged-in user's name as shown in the header's account menu. */
+export const headerUser = (page, displayName) => page.getByRole("banner").getByText(displayName, { exact: true });
+/** The header's "Entrar" link (only shown when logged out). */
+export const headerLogin = (page) => page.getByRole("banner").getByRole("link", { name: "Entrar", exact: true });
+
 export const test = base.extend({
   // Every context (and so every page) gets the network guard.
   context: async ({ context }, use) => {

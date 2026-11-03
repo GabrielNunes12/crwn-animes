@@ -56,11 +56,12 @@ function UserMenu() {
   }
   return (
     <details ref={ref} className={styles.menu}>
-      <summary className={styles.menuButton} aria-label={t("nav.userMenu", { name: user.displayName })}>
+      <summary className={styles.menuButton}>
         <span className={styles.avatar} aria-hidden="true">
           {user.displayName.slice(0, 1).toUpperCase()}
         </span>
         <span className={styles.menuName}>{user.displayName}</span>
+        <span className="visually-hidden"> — {t("nav.accountMenu")}</span>
       </summary>
       <div className={styles.menuPanel}>
         <p className={styles.menuEmail}>{user.email}</p>
@@ -127,7 +128,7 @@ export function Header({ searchRef }) {
           )}
         </nav>
 
-        <Form role="search" action="/search" className={styles.search} key={q}>
+        <Form role="search" aria-label={t("nav.siteSearch")} action="/search" className={styles.search} key={q}>
           <label htmlFor="site-search" className="visually-hidden">
             {t("nav.search")}
           </label>

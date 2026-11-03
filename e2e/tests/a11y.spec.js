@@ -1,7 +1,7 @@
 // Journeys 7 and 8: axe-core on the main pages (serious/critical violations
 // fail the test) and a phone-sized smoke test for horizontal overflow.
 import AxeBuilder from "@axe-core/playwright";
-import { test, expect, ADMIN_STATE, ensureSeries, ensureVideo, fakeYouTubeId } from "./fixtures.js";
+import { test, expect, ADMIN_STATE, createUser, ensureSeries, ensureVideo, uniqueEmail } from "./fixtures.js";
 
 const SERIES = { name: "Axe Saga", slug: "axe-saga", aliases: ["Saga Axe"], genres: ["Fantasy"], synopsis: "Uma série para testes de acessibilidade." };
 const EPISODE_ROUTE = "/anime/axe-saga/episode/1";
@@ -12,15 +12,10 @@ test.beforeEach(async ({ admin }) => {
   await ensureVideo(admin, { youtubeId: "axeSagaEp02", title: "Axe Saga Episode 2" });
 });
 
-// The logged-in header's account menu (<summary aria-label="Menu da conta de X">)
-// fails label-content-name-mismatch: a known app bug with its own expected-to-fail
-// test below. It is excluded from the page scans so they keep guarding everything else.
-const USER_MENU = "header details > summary";
-
 const axe = (page) => new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"]);
 
 /** Runs axe and fails on serious/critical violations, with a readable message. */
-async function expectNoSeriousViolations(page, name, builder = axe(page).exclude(USER_MENU)) {
+async function expectNoSeriousViolations(page, name, builder = axe(page)) {
   const results = await builder.analyze();
   const serious = results.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
   const report = serious
@@ -58,19 +53,14 @@ test.describe("accessibility (axe-core: no serious/critical violations)", () => 
       await expect(page.getByRole("heading", { level: 2, name: /pendente/ })).toBeVisible();
       await expectNoSeriousViolations(page, "admin (pending tab)");
     });
+  });
 
-    // BUG (client/src/components/Layout/Header.jsx:58-63): the account menu's
-    // <summary> has aria-label "Menu da conta de {name}" while its visible text is
-    // the avatar initial + the name ("E" + "E2E Admin"), so axe reports
-    // label-content-name-mismatch (serious, WCAG 2.5.3 Label in Name) on every
-    // logged-in page. Remove test.fail() once the label contains the visible text.
-    test("logged-in header account menu: visible label is part of its accessible name", async ({ page }) => {
-      test.fail();
-      await page.goto("/login");
-      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-      await expect(page.locator(USER_MENU)).toBeVisible();
-      await expectNoSeriousViolations(page, "header account menu", axe(page).include(USER_MENU));
-    });
+  test("episode, logged in (star radios, reaction buttons, account menu)", async ({ page }) => {
+    await createUser(page.request, { email: uniqueEmail("axe"), displayName: "Leitor de Tela" });
+    await page.goto(EPISODE_ROUTE);
+    await expect(page.getByRole("radiogroup").or(page.getByRole("group", { name: "Sua avaliação" })).first()).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await expectNoSeriousViolations(page, "episode (logged in)");
   });
 });
 

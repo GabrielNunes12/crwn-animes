@@ -43,7 +43,7 @@ export function Component() {
       <section id="keep" aria-labelledby="keep-h">
         <h2 id="keep-h">{t("privacy.keep.title")}</h2>
         <p>{t("privacy.keep.intro")}</p>
-        <div className={styles.tableWrap}>
+        <div className={styles.tableWrap} tabIndex={0} role="region" aria-label={t("privacy.keep.title")}>
           <table className={styles.table}>
             <caption className="visually-hidden">{t("privacy.keep.title")}</caption>
             <thead>

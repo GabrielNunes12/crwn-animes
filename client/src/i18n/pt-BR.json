@@ -62,7 +62,39 @@
     "RATE_LIMITED": "Muitas tentativas. Aguarde um pouco e tente de novo.",
     "UPSTREAM_ERROR": "O YouTube não respondeu. Tente mais tarde.",
     "INVALID_TOKEN": "Este link é inválido ou expirou.",
-    "NETWORK_ERROR": "Sem conexão com o servidor. Verifique sua internet e tente de novo."
+    "NETWORK_ERROR": "Sem conexão com o servidor. Verifique sua internet e tente de novo.",
+    "INTERNAL_ERROR": "Algo deu errado do nosso lado. Tente novamente em instantes.",
+    "PAYLOAD_TOO_LARGE": "São dados demais para enviar de uma vez.",
+    "HTTP_ERROR": "O servidor respondeu com um erro inesperado. Tente novamente.",
+    "ERROR": "Algo deu errado. Tente novamente.",
+    "fieldInvalid": "Um dos campos não é válido.",
+    "fields": {
+      "email": "Digite um e-mail válido.",
+      "password": "A senha deve ter pelo menos 10 caracteres.",
+      "newPassword": "A nova senha deve ter pelo menos 10 caracteres.",
+      "currentPassword": "Digite sua senha atual.",
+      "displayName": "O nome de exibição deve ter de 2 a 30 caracteres.",
+      "acceptPrivacy": "Você precisa aceitar o aviso de privacidade.",
+      "token": "Este link é inválido ou expirou.",
+      "name": "Digite um nome para a série.",
+      "slug": "O slug só pode ter letras minúsculas, números e hífens.",
+      "coverUrl": "Digite uma URL de imagem válida (http ou https).",
+      "url": "Digite um link do YouTube ou o ID de 11 caracteres.",
+      "section": "Escolha Anime ou Mangá.",
+      "seriesSlug": "Escolha uma série existente.",
+      "season": "A temporada deve ser um número inteiro, 1 ou mais.",
+      "number": "O número deve ser 0 ou mais.",
+      "score": "Escolha de 1 a 5 estrelas.",
+      "reaction": "Escolha uma das reações da lista.",
+      "synopsis": "A sinopse está longa demais.",
+      "aliases": "Confira os apelidos: cada um deve ser um texto curto.",
+      "genres": "Confira os gêneros: cada um deve ser um texto curto.",
+      "title": "O título não é válido.",
+      "text": "Cole até 50 links do YouTube.",
+      "urls": "Cole até 50 links do YouTube.",
+      "defaults": "Confira os valores padrão.",
+      "body": "A requisição não era válida."
+    }
   },
   "notice": {
     "adminOnly": "Essa área é só para administradores.",
@@ -84,10 +116,11 @@
     "signup": "Criar conta",
     "logout": "Sair",
     "account": "Minha conta",
-    "userMenu": "Menu da conta de {name}",
     "toLight": "Mudar para tema claro",
     "toDark": "Mudar para tema escuro",
-    "language": "Idioma"
+    "language": "Idioma",
+    "accountMenu": "menu da conta",
+    "siteSearch": "Busca no site"
   },
   "footer": {
     "label": "Rodapé",
@@ -103,7 +136,9 @@
     "prev": "Episódio / capítulo anterior",
     "theatre": "Modo cinema",
     "close": "Fechar diálogos",
-    "note": "Os atalhos são ignorados enquanto você digita em um campo."
+    "note": "Os atalhos são ignorados enquanto você digita em um campo.",
+    "singleKey": "Atalhos de uma tecla (T, /, ?)",
+    "singleKeyHint": "Desative se você usa entrada por voz ou aperta teclas sem querer. Shift+N / Shift+P continuam funcionando."
   },
   "home": {
     "eyebrow": "🌸 Anime e mangá, episódio por episódio",
@@ -138,7 +173,8 @@
     "resultsFor": "Resultados para “{q}”",
     "clear": "Limpar filtros",
     "tryOther": "Tentar em {section}",
-    "empty": "Nenhuma série corresponde a esses filtros."
+    "empty": "Nenhuma série corresponde a esses filtros.",
+    "listHeading": "Todas as séries de {section}"
   },
   "search": {
     "title": "Busca",
@@ -259,10 +295,14 @@
       "spam": "Não chegou? Veja a pasta de spam ou reenvie o link. Contas não confirmadas são excluídas após 7 dias."
     },
     "verify": {
-      "title": "Confirmando seu e-mail",
-      "working": "Um momento, confirmando seu link…",
+      "title": "Confirme seu e-mail",
+      "text": "Digite a senha que você escolheu no cadastro para ativar sua conta.",
+      "submit": "Confirmar e entrar",
+      "working": "Confirmando…",
+      "wrongPassword": "Essa não é a senha que você escolheu no cadastro. Tente de novo — seu link continua válido.",
       "invalid": "Este link de confirmação é inválido, já foi usado ou expirou.",
-      "missing": "Este link está sem o token. Abra novamente o link do e-mail.",
+      "resendText": "Digite seu e-mail e enviaremos um novo link.",
+      "missing": "Este link está sem o token. Abra novamente o link do e-mail ou peça um novo abaixo.",
       "requestNew": "Receber um novo link"
     },
     "forgot": {

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { getBool, SINGLE_KEY_SHORTCUTS_KEY } from "../lib/prefs.js";
 
 export function isTypingTarget(el) {
   if (!el || !(el instanceof Element)) return false;
@@ -22,7 +23,8 @@ export function keyId(e) {
 
 /**
  * useShortcuts({ "shift+n": fn, "t": fn, "/": fn }). Ignored while typing in a
- * field, with Ctrl/Meta/Alt held, or when a modal <dialog> is open.
+ * field, with Ctrl/Meta/Alt held, or when a modal <dialog> is open. Single-key
+ * shortcuts are skipped when the user turned them off.
  */
 export function useShortcuts(map, enabled = true) {
   const ref = useRef(map);
@@ -35,7 +37,10 @@ export function useShortcuts(map, enabled = true) {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
       if (isTypingTarget(e.target)) return;
       if (document.querySelector("dialog[open]")) return;
-      const fn = ref.current[keyId(e)];
+      const id = keyId(e);
+      // Single-character shortcuts can be switched off (WCAG 2.1.4); Shift+key ones stay.
+      if (!id.startsWith("shift+") && !getBool(SINGLE_KEY_SHORTCUTS_KEY, true)) return;
+      const fn = ref.current[id];
       if (fn) {
         e.preventDefault();
         fn(e);

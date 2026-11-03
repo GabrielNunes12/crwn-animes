@@ -11,6 +11,7 @@ import { useTitle } from "../../hooks/useTitle.js";
 import { useT } from "../../i18n/useT.js";
 import { MIN_PASSWORD } from "../../lib/password.js";
 import { clearProgress } from "../../lib/progress.js";
+import { SingleKeyToggle } from "../../components/ShortcutsDialog/SingleKeyToggle.jsx";
 import styles from "./Account.module.css";
 
 function Status({ state }) {
@@ -65,7 +66,7 @@ function ProfileCard() {
 }
 
 function PasswordCard() {
-  const { t } = useT();
+  const { t, locale } = useT();
   const { setUser } = useAuth();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -79,7 +80,7 @@ function PasswordCard() {
     }
     setState({ busy: true, message: "", error: null });
     try {
-      const { user } = await meApi.changePassword(current, next);
+      const { user } = await meApi.changePassword(current, next, locale);
       setUser(user);
       setCurrent("");
       setNext("");
@@ -236,6 +237,8 @@ function DeviceCard() {
       <p role="status" aria-live="polite" className={styles.ok}>
         {message}
       </p>
+      <hr />
+      <SingleKeyToggle />
       <ConfirmDialog
         open={open}
         title={t("account.clearHistory")}

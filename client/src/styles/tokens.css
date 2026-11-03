@@ -41,6 +41,7 @@
     --danger: oklch(71.1% 0.166 22.2);
     --on-danger: oklch(15.5% 0.019 283.9);
     --star: oklch(84% 0.16 84);
+    --star-empty: oklch(58% 0.05 288);   /* ≥ 3:1 on --surface (WCAG 1.4.11) */
 
     /* Derived with color-mix() */
     --primary-soft: color-mix(in oklch, var(--primary) 16%, transparent);
@@ -120,7 +121,8 @@
       --warning: oklch(52% 0.13 70);
       --danger: oklch(55% 0.2 25);
       --on-danger: oklch(100% 0 0);
-      --star: oklch(70% 0.17 70);
+      --star: oklch(62% 0.16 65);
+    --star-empty: oklch(60% 0.04 290);
       --glass: color-mix(in oklch, var(--surface) 75%, transparent);
       --shadow: 0 8px 24px -12px oklch(30% 0.05 290 / 0.25);
       --shadow-lift: 0 18px 36px -16px color-mix(in oklch, var(--sakura) 45%, oklch(30% 0.05 290 / 0.35));
@@ -143,7 +145,8 @@
     --warning: oklch(52% 0.13 70);
     --danger: oklch(55% 0.2 25);
     --on-danger: oklch(100% 0 0);
-    --star: oklch(70% 0.17 70);
+    --star: oklch(62% 0.16 65);
+    --star-empty: oklch(60% 0.04 290);
     --glass: color-mix(in oklch, var(--surface) 75%, transparent);
     --shadow: 0 8px 24px -12px oklch(30% 0.05 290 / 0.25);
     --shadow-lift: 0 18px 36px -16px color-mix(in oklch, var(--sakura) 45%, oklch(30% 0.05 290 / 0.35));

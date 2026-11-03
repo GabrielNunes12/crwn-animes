@@ -1,15 +1,8 @@
 // Journeys 1 and 2: sign-up with e-mail verification, and logging in before verifying.
-import { test, expect, createUser, linkFrom, uniqueEmail, waitForEmail, SUBJECT } from "./fixtures.js";
+import { test, expect, createUser, linkFrom, uniqueEmail, waitForEmail, SUBJECT, headerUser, headerLogin } from "./fixtures.js";
 
 test.describe("sign-up and e-mail verification", () => {
   test("register → check e-mail → open link → confirm password → verified and logged in", async ({ page }) => {
-    // BUG (client): /verify-email never asks for the password. It POSTs only
-    // { token } on mount (client/src/pages/Auth/VerifyEmail.jsx:20-29 via
-    // client/src/api/client.js:78 `verifyEmail: (token) => post(..., { token })`),
-    // but API v1.1 requires { token, password } → 400 VALIDATION_ERROR and the page
-    // shows "Alguns campos não são válidos". New users can never verify from the UI.
-    // Remove test.fail() when the client change (password prompt) lands.
-    test.fail();
     const email = uniqueEmail("signup");
     const password = "my-long-passphrase-42";
     const displayName = "Novo Fã";
@@ -37,8 +30,25 @@ test.describe("sign-up and e-mail verification", () => {
 
     await test.step("the verification page asks for the sign-up password", async () => {
       await page.goto(link);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       const passwordField = page.getByLabel("Senha", { exact: true });
       await expect(passwordField, "verify-email page must ask for the password (API v1.1: { token, password })").toBeVisible();
+      // Nothing is verified just by opening the link.
+      expect((await (await page.request.get("/api/auth/me")).json()).user).toBeNull();
+    });
+
+    await test.step("a wrong password is refused and the link stays valid", async () => {
+      const passwordField = page.getByLabel("Senha", { exact: true });
+      await passwordField.fill("not-the-signup-password");
+      await passwordField.press("Enter");
+      await expect(passwordField).toHaveAttribute("aria-invalid", "true");
+      await expect(passwordField).toHaveAccessibleDescription(/senha que você escolheu no cadastro/);
+      await expect(page).toHaveURL(/\/verify-email\?token=/);
+      expect((await (await page.request.get("/api/auth/me")).json()).user).toBeNull();
+    });
+
+    await test.step("the right password verifies the account", async () => {
+      const passwordField = page.getByLabel("Senha", { exact: true });
       await passwordField.fill(password);
       await passwordField.press("Enter");
     });
@@ -46,8 +56,8 @@ test.describe("sign-up and e-mail verification", () => {
     await test.step("verified, logged in, header shows the user", async () => {
       await expect(page).toHaveURL(/\/$/);
       await expect(page.getByRole("status").filter({ hasText: "E-mail confirmado" })).toBeVisible();
-      await expect(page.getByLabel(`Menu da conta de ${displayName}`)).toBeVisible();
-      await expect(page.getByRole("link", { name: "Entrar" })).toHaveCount(0);
+      await expect(headerUser(page, displayName)).toBeVisible();
+      await expect(headerLogin(page)).toHaveCount(0);
       const me = await (await page.request.get("/api/auth/me")).json();
       expect(me.user).toMatchObject({ email, displayName, role: "user" });
     });

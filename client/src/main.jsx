@@ -7,6 +7,11 @@ import "./styles/global.css";
 import { AuthProvider } from "./auth/AuthProvider.jsx";
 import { I18nProvider } from "./i18n/I18nProvider.jsx";
 import { createRouter } from "./router.jsx";
+import { getTheme } from "./lib/prefs.js";
+
+// Fallback in case /theme-init.js did not run (blocked or failed).
+const savedTheme = getTheme();
+if (savedTheme) document.documentElement.dataset.theme = savedTheme;
 
 const router = createRouter();
 

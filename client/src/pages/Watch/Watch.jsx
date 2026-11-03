@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useLoaderData, useLocation, useNavigate } from "react-router";
+import { Link, Navigate, useLoaderData, useLocation, useNavigate } from "react-router";
 import { AsyncView } from "../../components/Await/AsyncView.jsx";
 import { Skeleton } from "../../components/Skeleton/Skeleton.jsx";
 import { Player } from "../../components/Player/Player.jsx";
@@ -167,11 +167,21 @@ function WatchView({ section, video, series, prev, next, videos }) {
   );
 }
 
+/** /season/1/episode/2, /episode/01, /episode/1.0 … → replace with the canonical video.route. */
+function CanonicalWatch({ section, data }) {
+  const location = useLocation();
+  const route = data.video.route;
+  if (route && decodeURI(location.pathname) !== route) {
+    return <Navigate to={{ pathname: route, search: location.search }} replace state={location.state} />;
+  }
+  return <WatchView key={data.video.id} section={section} {...data} />;
+}
+
 export function Component() {
   const { section, data } = useLoaderData();
   return (
     <AsyncView resolve={data} fallback={<WatchSkeleton />}>
-      {(d) => <WatchView key={d.video.id} section={section} {...d} />}
+      {(d) => <CanonicalWatch section={section} data={d} />}
     </AsyncView>
   );
 }

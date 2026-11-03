@@ -61,7 +61,7 @@ describe("RatingPanel", () => {
     const user = userEvent.setup();
     let reject;
     mockFetch((url, init) => {
-      if (init.method === "PUT") return new Promise((resolve) => (reject = () => resolve([500, { error: { code: "INTERNAL", message: "Boom" } }])));
+      if (init.method === "PUT") return new Promise((resolve) => (reject = () => resolve([500, { error: { code: "INTERNAL_ERROR", message: "Boom" } }])));
       return [200, summary()];
     });
     renderApp(<RatingPanel videoId={9} />, { user: USER });
@@ -72,8 +72,44 @@ describe("RatingPanel", () => {
     expect(screen.getByRole("radio", { name: "1 star" })).toBeChecked();
 
     reject();
-    await waitFor(() => expect(screen.getByText(/Couldn't save your rating: Boom/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Couldn't save your rating: Something went wrong on our side/)).toBeInTheDocument());
+    expect(screen.queryByText(/Boom/)).not.toBeInTheDocument();
     expect(screen.getByText("2 ratings")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "1 star" })).not.toBeChecked();
+  });
+
+  it("keyboard: arrow keys update the stars at once but send a single PUT after a pause", async () => {
+    const user = userEvent.setup();
+    const fetch = mockFetch((url, init) => {
+      if (init.method === "PUT") {
+        const body = JSON.parse(init.body);
+        return [200, summary({ count: 3, mine: { score: body.score, reaction: body.reaction } })];
+      }
+      return [200, summary()];
+    });
+    renderApp(<RatingPanel videoId={5} />, { user: USER });
+    const first = await screen.findByRole("radio", { name: "1 star" });
+    first.focus();
+    await user.keyboard("{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}");
+    // UI follows the keys immediately…
+    expect(screen.getByRole("radio", { name: "5 stars" })).toBeChecked();
+    const puts = () => fetch.mock.calls.filter(([, init]) => init.method === "PUT");
+    expect(puts()).toHaveLength(0);
+    // …and only the final choice is saved, once.
+    await waitFor(() => expect(puts()).toHaveLength(1), { timeout: 2000 });
+    expect(JSON.parse(puts()[0][1].body)).toEqual({ score: 5, reaction: null });
+    await new Promise((r) => setTimeout(r, 700));
+    expect(puts()).toHaveLength(1);
+  });
+
+  it("keyboard: Enter saves the pending choice right away", async () => {
+    const user = userEvent.setup();
+    const fetch = mockFetch((url, init) => (init.method === "PUT" ? [200, summary({ mine: { score: 2, reaction: null } })] : [200, summary()]));
+    renderApp(<RatingPanel videoId={5} />, { user: USER });
+    (await screen.findByRole("radio", { name: "1 star" })).focus();
+    await user.keyboard("{ArrowRight}{Enter}");
+    const puts = fetch.mock.calls.filter(([, init]) => init.method === "PUT");
+    expect(puts).toHaveLength(1);
+    expect(JSON.parse(puts[0][1].body)).toEqual({ score: 2, reaction: null });
   });
 });

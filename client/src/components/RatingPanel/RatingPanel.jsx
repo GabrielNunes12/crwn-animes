@@ -8,6 +8,8 @@ import { Skeleton } from "../Skeleton/Skeleton.jsx";
 import styles from "./RatingPanel.module.css";
 
 const SCORES = [1, 2, 3, 4, 5];
+/** Arrow keys move through the stars: wait for the user to settle before saving. */
+const KEYBOARD_SAVE_DELAY = 600;
 
 export function RatingPanel({ videoId }) {
   const { user, status: authStatus } = useAuth();
@@ -22,6 +24,9 @@ export function RatingPanel({ videoId }) {
   const [hover, setHover] = useState(0);
   const confirmed = useRef(null); // last summary the server agreed with
   const seq = useRef(0);
+  const inputMode = useRef("pointer"); // how the current star change was made
+  const pending = useRef(null); // keyboard choice waiting to be saved
+  const timer = useRef(null);
 
   const userId = user?.id ?? null;
   useEffect(() => {
@@ -40,9 +45,39 @@ export function RatingPanel({ videoId }) {
     return () => ctrl.abort();
   }, [videoId, userId, authStatus, reloadKey]);
 
-  async function send(mine) {
-    const id = ++seq.current;
+  // Save a pending keyboard choice if the panel goes away before the delay.
+  useEffect(
+    () => () => {
+      clearTimeout(timer.current);
+      if (pending.current) ratingsApi.put(videoId, pending.current.score, pending.current.reaction ?? null).catch(() => {});
+    },
+    [videoId],
+  );
+
+  /** Update the UI now; save now (pointer) or after KEYBOARD_SAVE_DELAY (keyboard). */
+  function choose(mine, { debounce = false } = {}) {
+    clearTimeout(timer.current);
+    if (!debounce) {
+      pending.current = null;
+      send(mine);
+      return;
+    }
     setSummary((s) => applyMyRating(s, mine));
+    pending.current = mine;
+    timer.current = setTimeout(flush, KEYBOARD_SAVE_DELAY);
+  }
+
+  function flush() {
+    clearTimeout(timer.current);
+    const mine = pending.current;
+    if (!mine) return;
+    pending.current = null;
+    send(mine, { applied: true });
+  }
+
+  async function send(mine, { applied = false } = {}) {
+    const id = ++seq.current;
+    if (!applied) setSummary((s) => applyMyRating(s, mine));
     setLive({ kind: "pending", text: t("rating.saving") });
     try {
       const next = mine ? await ratingsApi.put(videoId, mine.score, mine.reaction ?? null) : await ratingsApi.remove(videoId);
@@ -96,18 +131,39 @@ export function RatingPanel({ videoId }) {
           <div className={styles.mine}>
             {user ? (
               <>
-                <fieldset className={styles.stars} onMouseLeave={() => setHover(0)}>
+                <fieldset
+                  className={styles.stars}
+                  onMouseLeave={() => setHover(0)}
+                  onBlur={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget)) flush();
+                  }}
+                >
                   <legend className={styles.legend}>{t("rating.yours")}</legend>
                   <div className={styles.starRow}>
                     {SCORES.map((n) => (
-                      <label key={n} className={styles.star} data-filled={n <= shown ? "true" : "false"} onMouseEnter={() => setHover(n)}>
+                      <label
+                        key={n}
+                        className={styles.star}
+                        data-filled={n <= shown ? "true" : "false"}
+                        onMouseEnter={() => setHover(n)}
+                        onPointerDown={() => {
+                          inputMode.current = "pointer";
+                        }}
+                      >
                         <input
                           type="radio"
                           className="visually-hidden"
                           name={`${groupId}-score`}
                           value={n}
                           checked={mine?.score === n}
-                          onChange={() => send({ score: n, reaction: mine?.reaction ?? null })}
+                          onKeyDown={(e) => {
+                            inputMode.current = "keyboard";
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              flush();
+                            }
+                          }}
+                          onChange={() => choose({ score: n, reaction: mine?.reaction ?? null }, { debounce: inputMode.current === "keyboard" })}
                         />
                         <svg viewBox="0 0 24 24" aria-hidden="true" width="32" height="32">
                           <path d="M12 2.6l2.9 6 6.6.8-4.9 4.5 1.3 6.5L12 17.2l-5.9 3.2 1.3-6.5L2.5 9.4l6.6-.8z" />
@@ -132,7 +188,10 @@ export function RatingPanel({ videoId }) {
                           className={styles.reaction}
                           aria-pressed={active}
                           disabled={!mine}
-                          onClick={() => send({ score: mine.score, reaction: active ? null : key })}
+                          onClick={() => {
+                            flush();
+                            choose({ score: mine.score, reaction: active ? null : key });
+                          }}
                         >
                           <span aria-hidden="true" className={styles.emoji}>{emoji}</span>
                           <span className="visually-hidden">{t(`rating.reaction.${key}`)}</span>
@@ -149,7 +208,15 @@ export function RatingPanel({ videoId }) {
                 </div>
 
                 {mine && (
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => send(null)}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => {
+                      clearTimeout(timer.current);
+                      pending.current = null;
+                      send(null);
+                    }}
+                  >
                     {t("rating.remove")}
                   </button>
                 )}

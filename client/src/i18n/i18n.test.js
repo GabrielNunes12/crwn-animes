@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createTranslator, detectLocale, MESSAGES } from "./core.js";
+import { createI18n, createTranslator, detectLocale, MESSAGES } from "./core.js";
+import { ApiError } from "../api/client.js";
 
 function flatKeys(obj, prefix = "") {
   return Object.entries(obj).flatMap(([k, v]) => {
@@ -45,5 +46,23 @@ describe("i18n", () => {
 
   it("ships the same keys in pt-BR and en", () => {
     expect(flatKeys(MESSAGES.en).sort()).toEqual(flatKeys(MESSAGES["pt-BR"]).sort());
+  });
+
+  it("never shows the server's English text: unknown codes fall back to errors.generic", () => {
+    const pt = createI18n("pt-BR");
+    expect(pt.errorMessage(new ApiError({ status: 500, code: "SOMETHING_NEW", message: "Raw English text" }))).toBe(MESSAGES["pt-BR"].errors.generic);
+    expect(pt.errorMessage(new ApiError({ status: 500, code: "INTERNAL_ERROR", message: "Internal" }))).toBe(MESSAGES["pt-BR"].errors.INTERNAL_ERROR);
+    expect(pt.errorMessage(new ApiError({ status: 413, code: "PAYLOAD_TOO_LARGE" }))).toBe(MESSAGES["pt-BR"].errors.PAYLOAD_TOO_LARGE);
+    expect(pt.errorMessage(new ApiError({ status: 0, code: "HTTP_ERROR" }))).toBe(MESSAGES["pt-BR"].errors.HTTP_ERROR);
+    expect(createI18n("en").errorMessage(new ApiError({ code: "WHATEVER", message: "server words" }))).toBe(MESSAGES.en.errors.generic);
+  });
+
+  it("translates VALIDATION_ERROR details per field, with a generic message for unknown fields", () => {
+    const pt = createI18n("pt-BR");
+    const err = new ApiError({ status: 400, code: "VALIDATION_ERROR", message: "Some fields are invalid.", details: { email: "Enter a valid e-mail address.", weird: "Bad." } });
+    expect(pt.fieldErrors(err)).toEqual({ email: "Digite um e-mail válido.", weird: "Um dos campos não é válido." });
+    const msg = pt.errorMessage(err);
+    expect(msg).toContain("Digite um e-mail válido.");
+    expect(msg).not.toMatch(/Enter a valid|invalid/);
   });
 });

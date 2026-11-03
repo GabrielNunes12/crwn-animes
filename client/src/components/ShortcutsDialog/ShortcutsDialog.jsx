@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useT } from "../../i18n/useT.js";
+import { SingleKeyToggle } from "./SingleKeyToggle.jsx";
 
 const ROWS = [
   ["?", "shortcuts.help"],
@@ -42,6 +43,7 @@ export function ShortcutsDialog({ open, onClose }) {
           ))}
         </dl>
         <p className="hint">{t("shortcuts.note")}</p>
+        <SingleKeyToggle />
         <div className="cluster" style={{ justifyContent: "flex-end" }}>
           <button type="button" className="btn" onClick={onClose} autoFocus>
             {t("common.close")}

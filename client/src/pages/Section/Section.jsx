@@ -46,7 +46,7 @@ export function Component() {
           </h1>
           <p className="muted">{t(`section.subtitle.${section}`)}</p>
         </div>
-        <Form method="get" role="search" className={styles.search} key={`${section}-${q}`}>
+        <Form method="get" role="search" aria-label={t("section.searchLabel", { section: title })} className={styles.search} key={`${section}-${q}`}>
           {genre && <input type="hidden" name="genre" value={genre} />}
           <label htmlFor="section-search" className="visually-hidden">
             {t("section.searchLabel", { section: title })}
@@ -92,6 +92,7 @@ export function Component() {
         {(items) =>
           items.length ? (
             <>
+              <h2 className="visually-hidden">{t("section.listHeading", { section: title })}</h2>
               <p className="visually-hidden" role="status">
                 {t("common.seriesCount", { count: items.length })}
               </p>

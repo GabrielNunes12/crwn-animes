@@ -75,18 +75,23 @@
     block-size: 2.75rem;
     border-radius: var(--radius-sm);
     cursor: pointer;
-    color: var(--border-strong);
+    color: var(--star-empty);
     transition:
       transform var(--dur-fast) var(--ease-spring),
       color var(--dur-fast);
   }
+  /* Empty = outline, filled = solid: shape differs, not only colour. */
   .star svg {
-    fill: currentColor;
-    stroke: color-mix(in oklch, var(--star) 50%, transparent);
-    stroke-width: 1;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linejoin: round;
   }
   .star[data-filled="true"] {
     color: var(--star);
+  }
+  .star[data-filled="true"] svg {
+    fill: currentColor;
   }
   .star:hover {
     transform: scale(1.18);

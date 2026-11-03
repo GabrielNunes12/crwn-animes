@@ -31,8 +31,12 @@
     background: #000;
     color: #fff;
   }
-  .facade:disabled {
+  .facade[aria-disabled="true"] {
     cursor: progress;
+  }
+  .stage:focus-visible {
+    outline: 3px solid var(--secondary);
+    outline-offset: 2px;
   }
   .facade img {
     position: absolute;

@@ -1,20 +1,28 @@
 // Journey 4: the episode page — YouTube facade, ratings and reactions,
 // the logged-out view, and /admin for a normal user.
-import { test, expect, createUser, ensureSeries, ensureVideo, fakeYouTubeId, uniqueEmail, YOUTUBE_HOST } from "./fixtures.js";
+import { test, expect, createUser, ensureSeries, ensureVideo, fakeYouTubeId, uniqueEmail, YOUTUBE_HOST, headerUser } from "./fixtures.js";
 
 const SERIES = { name: "Watch Saga", slug: "watch-saga", aliases: [], genres: ["Drama"] };
 
 const isYouTube = (url) => YOUTUBE_HOST.test(new URL(url).hostname);
 // Each test gets its own episode slot, so tests never share ratings (and the
 // file stays safe under --repeat-each against the same server).
-const episodeNumber = () => 100 + Math.floor(Math.random() * 9000);
+// (Kept < 1000: pt-BR formats 1000+ as "Episódio 1.000".)
+async function newEpisode(admin, prefix) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const n = 100 + Math.floor(Math.random() * 900);
+    const title = `Watch Saga Episode ${n}`;
+    const video = await ensureVideo(admin, { youtubeId: fakeYouTubeId(prefix), title });
+    if (video.status === "published") return { n, title, video };
+    await admin.delete(`/api/admin/videos/${video.id}`); // slot already taken: try another
+  }
+  throw new Error("could not find a free episode slot");
+}
 
 test.describe("episode page", () => {
   test("facade loads nothing from YouTube; a user rates 4★ + 🔥, it persists, changes to 5★, then is removed", async ({ page, admin, externalRequests }) => {
     await ensureSeries(admin, SERIES);
-    const n = episodeNumber();
-    const title = `Watch Saga Episode ${n}`;
-    const video = await ensureVideo(admin, { youtubeId: fakeYouTubeId("wRate"), title });
+    const { n, title, video } = await newEpisode(admin, "wRate");
     expect(video.route).toBe(`/anime/watch-saga/episode/${n}`);
     const user = await createUser(page.request, { email: uniqueEmail("rater"), displayName: "Avaliador" });
 
@@ -33,7 +41,7 @@ test.describe("episode page", () => {
       await page.goto(video.route);
       await expect(page.getByRole("heading", { level: 1, name: `Episódio ${n}` })).toBeVisible();
       await expect(page.getByRole("button", { name: `Reproduzir: ${title}` })).toBeVisible();
-      await expect(page.getByLabel(`Menu da conta de ${user.displayName}`)).toBeVisible();
+      await expect(headerUser(page, user.displayName)).toBeVisible();
       await expect(stars(4)).toBeAttached(); // visually hidden radio inside a star label
       // Thumbnails (i.ytimg.com) are the only YouTube traffic allowed before play.
       const beforePlay = ytRequests.filter((u) => !/ytimg\.com/.test(new URL(u).hostname));
@@ -87,9 +95,7 @@ test.describe("episode page", () => {
 
   test("logged-out visitor sees “log in to rate” and no rating controls", async ({ page, admin }) => {
     await ensureSeries(admin, SERIES);
-    const n = episodeNumber();
-    const video = await ensureVideo(admin, { youtubeId: fakeYouTubeId("wAnon"), title: `Watch Saga Episode ${n}` });
-    expect(video.status).toBe("published");
+    const { n, video } = await newEpisode(admin, "wAnon");
 
     await page.goto(video.route);
     await expect(page.getByRole("heading", { level: 1, name: `Episódio ${n}` })).toBeVisible();
