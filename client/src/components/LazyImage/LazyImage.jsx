@@ -1,6 +1,12 @@
 import { useState } from "react";
 import styles from "./LazyImage.module.css";
 
+function initials(label = "") {
+  const words = String(label).split(/[\s\-—:]+/).filter(Boolean);
+  const out = words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? "").slice(0, 2);
+  return out.toUpperCase();
+}
+
 /**
  * Lazy, async-decoded image that fades in from a blurred shimmer placeholder.
  * Always reserves space via aspect-ratio (+ width/height attributes).
@@ -18,7 +24,7 @@ export function LazyImage({ src, alt = "", ratio = "16 / 9", width = 480, height
     <span className={`${styles.frame} ${className}`.trim()} style={{ aspectRatio: ratio }} data-state={failed ? "error" : state}>
       {failed ? (
         <span className={styles.fallback} aria-hidden="true">
-          {fallbackLabel.slice(0, 2).toUpperCase()}
+          {initials(fallbackLabel)}
         </span>
       ) : (
         <img

@@ -56,37 +56,64 @@ export function createVideoService({ repo, fetchVideoInfo }) {
 
     // A title sent by hand skips the YouTube lookup (useful offline and in tests).
     const info = title ? { title, channel } : await fetchVideoInfo(youtubeVideoId);
-    return repo.insertVideo({ youtubeVideoId, ...info, ...place(info.title, overrides) });
+
+    // Check again after the lookup: the same link may have been added meanwhile.
+    // From here to the insert everything is synchronous, so nothing else interleaves.
+    const added = repo.getVideoByYoutubeId(youtubeVideoId);
+    if (added) throw new HttpError(409, "This video was already added.", { video: added });
+    try {
+      return repo.insertVideo({ youtubeVideoId, ...info, ...place(info.title, overrides) });
+    } catch (error) {
+      const owner = error.code === "SQLITE_CONSTRAINT_UNIQUE" && repo.getVideoByYoutubeId(youtubeVideoId);
+      if (owner) throw new HttpError(409, "This video was already added.", { video: owner });
+      throw error;
+    }
   }
+
+  const mergeOverrides = (current, changes) => {
+    const overrides = { ...current };
+    for (const [key, value] of Object.entries(changes)) {
+      if (value == null) delete overrides[key];
+      else overrides[key] = value;
+    }
+    return overrides;
+  };
 
   return {
     add,
 
-    /** Merges admin corrections into the video's overrides and places it again. */
-    update(id, changes) {
-      const video = repo.getVideo(id);
-      if (!video) throw new HttpError(404, "Video not found.");
-      const overrides = { ...video.overrides };
-      for (const [key, value] of Object.entries(changes)) {
-        if (value == null) delete overrides[key];
-        else overrides[key] = value;
-      }
-      return repo.updateVideo(id, place(video.title, overrides, id));
-    },
-
     /**
-     * Points an existing video at another YouTube upload (the old one was taken
-     * down). Route, title, overrides and ratings stay; availability resets to "ok".
+     * Admin correction of one video. `url` points it at another YouTube upload
+     * (the old one was taken down): route, title and ratings stay, availability
+     * resets to "ok". `changes` are override corrections ({ section, seriesSlug,
+     * season, number }, null clears one). Everything is checked first; then
+     * both are written in one transaction, so a bad field changes nothing.
      */
-    async swapUrl(id, url) {
-      const video = repo.getVideo(id);
-      if (!video) throw new HttpError(404, "Video not found.");
-      const youtubeVideoId = parseYouTubeId(url);
-      if (!youtubeVideoId) throw validationError({ url: "That is not a YouTube link or video ID." }, "That is not a YouTube link or video ID.");
-      const owner = repo.getVideoByYoutubeId(youtubeVideoId);
-      if (owner && owner.id !== id) throw new HttpError(409, "Another video already uses this YouTube ID.", { video: owner });
-      await fetchVideoInfo(youtubeVideoId); // throws 404/422/502 if it cannot play here
-      return repo.swapYoutubeId(id, youtubeVideoId);
+    async patch(id, { url, changes = {} }) {
+      if (!repo.getVideo(id)) throw new HttpError(404, "Video not found.");
+      let youtubeVideoId = null;
+      if (url) {
+        youtubeVideoId = parseYouTubeId(url);
+        if (!youtubeVideoId) throw validationError({ url: "That is not a YouTube link or video ID." }, "That is not a YouTube link or video ID.");
+        const owner = repo.getVideoByYoutubeId(youtubeVideoId);
+        if (owner && owner.id !== id) throw new HttpError(409, "Another video already uses this YouTube ID.", { video: owner });
+        await fetchVideoInfo(youtubeVideoId); // throws 404/422/502 if it cannot play here
+      }
+      return repo.transaction(() => {
+        // Re-read after the await: the video may have changed or gone meanwhile.
+        const video = repo.getVideo(id);
+        if (!video) throw new HttpError(404, "Video not found.");
+        const placement = Object.keys(changes).length
+          ? place(video.title, mergeOverrides(video.overrides, changes), id)
+          : null; // throws 400 on an unknown seriesSlug before anything is written
+        if (youtubeVideoId && youtubeVideoId !== video.youtubeVideoId) {
+          const owner = repo.getVideoByYoutubeId(youtubeVideoId);
+          if (owner) throw new HttpError(409, "Another video already uses this YouTube ID.", { video: owner });
+        }
+        let result = youtubeVideoId ? repo.swapYoutubeId(id, youtubeVideoId) : video;
+        if (placement) result = repo.updateVideo(id, placement);
+        return result;
+      });
     },
 
     /** Runs the classifier again on every pending video, e.g. after a new series is added. */

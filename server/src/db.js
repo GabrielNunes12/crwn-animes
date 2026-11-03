@@ -133,6 +133,20 @@ const MIGRATIONS = [
   );
   CREATE INDEX rating_activity_day ON rating_activity (day);
   `,
+
+  // 3: before migration 2, deleting a series set its videos' series_id to NULL
+  // and left them "published" with no route. Send them back to the admin queue.
+  `
+  UPDATE videos SET status = 'pending', series_id = NULL,
+    classification = json_set(
+      CASE WHEN json_valid(classification) THEN classification ELSE '{}' END,
+      '$.reasons',
+      json_insert(
+        CASE WHEN json_valid(classification) AND json_type(classification, '$.reasons') = 'array'
+          THEN json_extract(classification, '$.reasons') ELSE '[]' END,
+        '$[#]', 'its series was deleted; pick a new one'))
+  WHERE status = 'published' AND (series_id IS NULL OR series_id NOT IN (SELECT id FROM series));
+  `,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

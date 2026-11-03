@@ -64,14 +64,15 @@ export class Client {
 /**
  * Starts the app on port 0 with an in-memory DB.
  * fake.titles[id] sets what "YouTube" answers; fake.gone has IDs that answer 404;
- * fake.down makes every lookup fail like a network error.
+ * fake.down makes every lookup fail like a network error; fake.delayMs slows lookups.
  */
-export async function startServer({ config = {} } = {}) {
+export async function startServer({ config = {}, mailer: customMailer } = {}) {
   const db = openDatabase(":memory:");
-  const mailer = createMailer({ smtp: null }, { log: () => {} });
-  const fake = { titles: {}, gone: new Set(), down: false, calls: [] };
+  const mailer = customMailer ?? createMailer({ smtp: null }, { log: () => {} });
+  const fake = { titles: {}, gone: new Set(), down: false, calls: [], delayMs: 0 };
   const fetchVideoInfo = async (id) => {
     fake.calls.push(id);
+    if (fake.delayMs) await new Promise((resolve) => setTimeout(resolve, fake.delayMs));
     if (fake.down) throw new HttpError(502, "Could not reach YouTube.");
     if (fake.gone.has(id)) throw new HttpError(404, "YouTube has no public video with this ID.");
     return { title: fake.titles[id] ?? `Untitled upload ${id}`, channel: "Test Channel" };

@@ -198,6 +198,8 @@ export function createRepository(db) {
   };
 
   return {
+    /** Runs `fn` in one SQLite transaction (sync functions only). */
+    transaction: (fn) => db.transaction(fn)(),
     listSeries: () => q.allSeries.all().map(toSeries),
     getSeries: (slug) => {
       const row = q.seriesBySlug.get(slug);

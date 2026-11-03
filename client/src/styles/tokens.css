@@ -34,6 +34,8 @@
     --primary-fill-hover: oklch(76% 0.18 2);
     --secondary-fill: var(--cyan);
     --on-accent: oklch(15.5% 0.019 283.9);   /* #0b0b14 */
+    --success-fill: oklch(77.3% 0.153 163.2);
+    --warning-fill: oklch(83.7% 0.164 84.4);
     --success: oklch(77.3% 0.153 163.2);
     --warning: oklch(83.7% 0.164 84.4);
     --danger: oklch(71.1% 0.166 22.2);
@@ -56,8 +58,8 @@
     --gradient-text: linear-gradient(100deg in oklch, var(--sakura), var(--violet), var(--cyan));
     --gradient-glow:
       radial-gradient(60% 80% at 10% 0%, color-mix(in oklch, var(--sakura) 35%, transparent), transparent 70%),
-      radial-gradient(50% 70% at 90% 10%, color-mix(in oklch, var(--cyan) 25%, transparent), transparent 70%),
-      radial-gradient(60% 60% at 50% 100%, color-mix(in oklch, var(--violet) 30%, transparent), transparent 70%);
+      radial-gradient(50% 60% at 90% 10%, color-mix(in oklch, var(--cyan) 25%, transparent), transparent 70%),
+      radial-gradient(55% 35% at 50% 55%, color-mix(in oklch, var(--violet) 22%, transparent), transparent 70%);
 
     /* Shape & depth */
     --radius-sm: 0.5rem;
@@ -115,7 +117,7 @@
       --primary-strong: oklch(51% 0.2 4);
       --secondary: oklch(50% 0.09 207.7);
       --success: oklch(52% 0.13 163);
-      --warning: oklch(58% 0.14 70);
+      --warning: oklch(52% 0.13 70);
       --danger: oklch(55% 0.2 25);
       --on-danger: oklch(100% 0 0);
       --star: oklch(70% 0.17 70);
@@ -138,7 +140,7 @@
     --primary-strong: oklch(51% 0.2 4);
     --secondary: oklch(50% 0.09 207.7);
     --success: oklch(52% 0.13 163);
-    --warning: oklch(58% 0.14 70);
+    --warning: oklch(52% 0.13 70);
     --danger: oklch(55% 0.2 25);
     --on-danger: oklch(100% 0 0);
     --star: oklch(70% 0.17 70);

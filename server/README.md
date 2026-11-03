@@ -14,6 +14,7 @@ npm run dev               # http://localhost:4000, restarts on change
 
 In development no SMTP server is needed: e-mails go to an in-memory outbox
 (`GET /api/dev/outbox`) and verification/reset links are printed to the console.
+With `NODE_ENV=production` the server refuses to start without `SMTP_HOST`.
 In production, if `../client/dist/index.html` exists the server also serves the
 built React app and falls back to `index.html` for client-side routes.
 
@@ -51,8 +52,8 @@ See [`.env.example`](.env.example) — each variable is documented there.
 | `ratings` | user id, video id, score, reaction | the rating feature | account deleted |
 | `rating_activity` | **not personal data**: per-video, per-day counts, no user id | "trending" | 30 days |
 
-Never stored: IP addresses (the rate limiter keeps them in memory only, for 15
-minutes), user agents, analytics, the e-mail language choice. Nothing logs
+Never stored: IP addresses (the rate limiter keeps them, IPv6 by /64, in a
+capped in-memory map for 15 minutes), user agents, analytics, the e-mail language choice. Nothing logs
 e-mail addresses or passwords. The only cookie is the essential `sid`
 (httpOnly, SameSite=Lax, Secure in production). Users can export their data
 (`GET /api/me/export`) and delete their account (`DELETE /api/me`).

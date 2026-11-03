@@ -57,7 +57,7 @@
     }
     .videoHead > img {
       grid-column: 1 / -1;
-      inline-size: 100%;
+      inline-size: min(100%, 16rem);
       block-size: auto;
     }
   }
@@ -80,11 +80,11 @@
     overflow-wrap: anywhere;
   }
   .published {
-    background: var(--success);
+    background: var(--success-fill);
     color: var(--on-accent);
   }
   .pending {
-    background: var(--warning);
+    background: var(--warning-fill);
     color: var(--on-accent);
   }
   .reasons {
@@ -204,7 +204,7 @@
   }
   .outcome-created,
   .outcome-would-create {
-    background: var(--success);
+    background: var(--success-fill);
     color: var(--on-accent);
   }
   .outcome-duplicate {

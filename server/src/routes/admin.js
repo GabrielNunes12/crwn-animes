@@ -168,11 +168,7 @@ export function adminRoutes({ repo, videos }) {
     const url = v.has("url") ? v.string("url", { required: true, max: 500 }) : undefined;
     const changes = readOverrides(v, { nullable: true });
     v.done();
-    let video = repo.getVideo(id);
-    if (!video) throw notFound("Video not found.");
-    if (url) video = await videos.swapUrl(id, url);
-    if (Object.keys(changes).length) video = videos.update(id, changes);
-    res.json({ video });
+    res.json({ video: await videos.patch(id, { url, changes }) });
   });
 
   router.delete("/videos/:id", (req, res) => {

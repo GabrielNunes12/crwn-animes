@@ -63,7 +63,7 @@
     inset-inline-end: var(--space-2);
     padding: 0.1em 0.55em;
     border-radius: var(--radius-pill);
-    background: var(--success);
+    background: var(--success-fill);
     color: var(--on-accent);
     font-size: 0.75rem;
     font-weight: 700;

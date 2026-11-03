@@ -163,7 +163,7 @@
     inline-size: 1.4rem;
     block-size: 1.4rem;
     border-radius: 50%;
-    background: var(--success);
+    background: var(--success-fill);
     color: var(--on-accent);
     font-size: 0.8rem;
     font-weight: 900;

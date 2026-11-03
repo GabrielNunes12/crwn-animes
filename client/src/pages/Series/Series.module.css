@@ -151,7 +151,7 @@
     inline-size: 1.8rem;
     block-size: 1.8rem;
     border-radius: 50%;
-    background: var(--success);
+    background: var(--success-fill);
     color: var(--on-accent);
     font-weight: 900;
   }
