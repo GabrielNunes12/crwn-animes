@@ -9,6 +9,13 @@ If something here is wrong or missing, change this file first, then both sides.
   `Path=/`, 30 days). The client never reads it; it just sends `credentials: "include"`.
 - Every request with a body must be `Content-Type: application/json` (the server rejects
   others with 415 — this is part of the CSRF defence together with `SameSite=Lax`).
+- Every POST/PUT/PATCH/DELETE under `/api` must come from our own origin: it is allowed when
+  `Sec-Fetch-Site` is `same-origin` or `none`, or when `Origin` equals the `APP_URL` origin or a
+  configured `CLIENT_ORIGIN`; otherwise, if either header is present, it gets `403 CROSS_SITE_REQUEST`.
+  Requests with neither header (curl, server-to-server) are allowed. Logout routes only send a
+  cookie-clearing `Set-Cookie` when the request actually carried a `sid` cookie.
+- Malformed `%`-escapes in a path give `400 VALIDATION_ERROR` (never 500), and e-mail addresses
+  containing control characters are rejected with `400`.
 - Errors always look like:
   ```json
   { "error": { "code": "SOME_CODE", "message": "Human readable text", "details": {} } }

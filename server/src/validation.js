@@ -4,7 +4,8 @@ import { DEFAULT_LOCALE, LOCALES } from "./mail.js";
 // Small, dependency-free validators. Each `check` collects a message per field
 // and `done()` throws one 400 VALIDATION_ERROR listing all of them.
 
-export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// No whitespace and no control characters (\p{Cc}: NUL, ESC, DEL, C1 controls, ...).
+export const EMAIL_RE = /^[^\s@\p{Cc}]+@[^\s@\p{Cc}]+\.[^\s@\p{Cc}]+$/u;
 export const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const REACTIONS = ["fire", "laugh", "cry", "wow", "love"];
 

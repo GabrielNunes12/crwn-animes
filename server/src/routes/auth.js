@@ -57,15 +57,22 @@ export function authRoutes({ auth, config }) {
     signIn(req, res, await auth.login({ email, password }));
   });
 
+  // The cookie is cleared only when one came with the request: answering a
+  // cookie-less POST (e.g. a cross-site form, which never carries the Lax
+  // cookie) with a clearing Set-Cookie would sign the victim out anyway.
+  const clearIfSent = (req, res) => {
+    if (req.hasSessionCookie) clearSessionCookie(res, config);
+  };
+
   router.post("/logout", (req, res) => {
     auth.endSession(req.sessionToken);
-    clearSessionCookie(res, config);
+    clearIfSent(req, res);
     res.status(204).end();
   });
 
   router.post("/logout-all", (req, res) => {
     if (req.user) auth.endAllSessions(req.user.id);
-    clearSessionCookie(res, config);
+    clearIfSent(req, res);
     res.status(204).end();
   });
 
