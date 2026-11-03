@@ -47,6 +47,11 @@ export function useAdminList(fetchPage, { pageSize = ADMIN_PAGE_SIZE, delay = SE
 
   const pageCount = Math.max(1, Math.ceil(state.total / pageSize));
   const loading = state.key !== key;
+  // The list shrank under us (deletes, moves, another admin): an empty page past the end
+  // goes to the new last page instead of showing "page 3 of 2".
+  if (!loading && !state.error && state.items.length === 0 && state.total > 0 && page.index > pageCount - 1) {
+    setPage({ ...page, index: pageCount - 1 });
+  }
 
   const goTo = useCallback(
     (index) => {
@@ -60,19 +65,18 @@ export function useAdminList(fetchPage, { pageSize = ADMIN_PAGE_SIZE, delay = SE
 
   const reload = useCallback(() => setVersion((v) => v + 1), []);
 
-  /** Remove one item locally (deleted / moved to another list); refills an emptied page. */
-  const removeItem = useCallback(
-    (id) => {
-      const left = state.items.filter((it) => it.id !== id);
-      if (left.length === state.items.length) return;
-      setState((s) => ({ ...s, items: left, total: Math.max(0, s.total - 1) }));
-      if (left.length === 0 && state.total - 1 > 0) {
-        if (page.index > 0) setPage((p) => ({ ...p, index: p.index - 1 }));
-        else setVersion((v) => v + 1);
-      }
-    },
-    [state.items, state.total, page.index],
-  );
+  /**
+   * An item left this list (deleted, or moved out of the filter). It disappears at once,
+   * then the current page is fetched again so the offsets stay right: otherwise the first
+   * item of the next page would slide onto this one and never be shown.
+   */
+  const removeItem = useCallback((id) => {
+    setState((s) => {
+      const left = s.items.filter((it) => it.id !== id);
+      return left.length === s.items.length ? s : { ...s, items: left, total: Math.max(0, s.total - 1) };
+    });
+    setVersion((v) => v + 1);
+  }, []);
 
   const replaceItem = useCallback((item) => {
     setState((s) => ({ ...s, items: s.items.map((it) => (it.id === item.id ? item : it)) }));

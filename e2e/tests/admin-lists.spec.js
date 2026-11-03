@@ -77,7 +77,7 @@ test("series list: search (accent-insensitive), 25 results over 2 pages, Previou
     expect(second).toEqual(names.slice(20));
     expect(second.filter((n) => first.includes(n))).toEqual([]);
     await expect(next(region)).toHaveAttribute("aria-disabled", "true");
-    await next(region).click(); // aria-disabled: nothing happens
+    await next(region).click({ force: true }); // aria-disabled (Playwright treats it as disabled): nothing happens
     await expect(pageOf(region)).toHaveText("Página 2 de 2");
   });
 

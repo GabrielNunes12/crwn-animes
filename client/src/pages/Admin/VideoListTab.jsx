@@ -6,7 +6,7 @@ import { CardGridSkeleton } from "../../components/Skeleton/Skeleton.jsx";
 import { useT } from "../../i18n/useT.js";
 import { Reasons, StatusBadge, ErrorText } from "./shared.jsx";
 import { VideoEditForm } from "./VideoEditForm.jsx";
-import { ListEmpty, ListSearch, Pager } from "./ListControls.jsx";
+import { ListEmpty, ListHeading, ListSearch, Pager } from "./ListControls.jsx";
 import { useAdminList } from "./useAdminList.js";
 import { videoLabel } from "../../lib/format.js";
 import styles from "./Admin.module.css";
@@ -48,9 +48,9 @@ export function VideoListTab({ status, series }) {
   return (
     <section className="stack" aria-labelledby={`${status}-title`}>
       <div className="section-head">
-        <h2 id={`${status}-title`} ref={headingRef} tabIndex={-1}>
+        <ListHeading list={list} id={`${status}-title`} ref={headingRef}>
           {t(`admin.videos.${status}Title`, { count: list.total })}
-        </h2>
+        </ListHeading>
         <button type="button" className="btn btn-sm" onClick={list.reload}>
           {t("admin.refresh")}
         </button>

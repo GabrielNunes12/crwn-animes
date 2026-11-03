@@ -3,7 +3,7 @@ import { adminApi } from "../../api/client.js";
 import { CardGridSkeleton } from "../../components/Skeleton/Skeleton.jsx";
 import { useT } from "../../i18n/useT.js";
 import { ErrorText, VideoSummary } from "./shared.jsx";
-import { ListEmpty, ListSearch, Pager } from "./ListControls.jsx";
+import { ListEmpty, ListHeading, ListSearch, Pager } from "./ListControls.jsx";
 import { useAdminList } from "./useAdminList.js";
 import styles from "./Admin.module.css";
 
@@ -61,9 +61,9 @@ export function BrokenTab() {
   return (
     <section className="stack" aria-labelledby="broken-title">
       <div className="section-head">
-        <h2 id="broken-title" ref={headingRef} tabIndex={-1}>
+        <ListHeading list={list} id="broken-title" ref={headingRef}>
           {t("admin.broken.title", { count: list.total })}
-        </h2>
+        </ListHeading>
         <button type="button" className="btn" onClick={runCheck} disabled={check.busy}>
           {check.busy ? t("admin.broken.checking") : t("admin.broken.run")}
         </button>

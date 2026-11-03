@@ -240,6 +240,8 @@ async function readFileText(file) {
   });
 }
 
+const IMPORT_ERRORS = { tooLarge: "account.progress.tooLarge", invalid: "account.progress.invalid", storage: "account.progress.storage" };
+
 function DeviceCard() {
   const { t } = useT();
   const id = useId();
@@ -275,7 +277,7 @@ function DeviceCard() {
     setStatus(
       result.ok
         ? { message: t("account.progress.imported", { imported: result.imported, skipped: result.skipped }), error: false }
-        : { message: t(result.error === "tooLarge" ? "account.progress.tooLarge" : "account.progress.invalid"), error: true },
+        : { message: t(IMPORT_ERRORS[result.error] ?? "account.progress.invalid"), error: true },
     );
   }
 

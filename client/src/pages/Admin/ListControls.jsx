@@ -2,6 +2,20 @@ import { useId } from "react";
 import { useT } from "../../i18n/useT.js";
 import styles from "./Admin.module.css";
 
+/**
+ * The list's h2 (focus target after Previous/Next). While searching it reads as results
+ * ("11 results for “x”"); on multi-page lists its name ends with ", page x of y".
+ */
+export function ListHeading({ list, id, ref, children }) {
+  const { t } = useT();
+  return (
+    <h2 id={id} ref={ref} tabIndex={-1}>
+      {list.q ? t("admin.list.resultsFor", { count: list.total, q: list.q }) : children}
+      {list.pageCount > 1 && <span className="visually-hidden">{t("admin.list.pageSuffix", { page: list.page + 1, pages: list.pageCount })}</span>}
+    </h2>
+  );
+}
+
 /** Search box + live "N results" line for a useAdminList() list. */
 export function ListSearch({ list, label }) {
   const { t } = useT();

@@ -221,7 +221,15 @@
     "readOf": "Read {watched} of {total}",
     "allWatched": "Watched everything",
     "allRead": "Read everything",
-    "seasons": "Seasons"
+    "seasons": "Seasons",
+    "episodesUnavailable": {
+      "one": "{count} episode is unavailable right now.",
+      "other": "{count} episodes are unavailable right now."
+    },
+    "chaptersUnavailable": {
+      "one": "{count} chapter is unavailable right now.",
+      "other": "{count} chapters are unavailable right now."
+    }
   },
   "watch": {
     "play": "Play: {title}",
@@ -406,7 +414,8 @@
       },
       "imported": "{imported} imported, {skipped} skipped.",
       "tooLarge": "That file is larger than 1 MB. Nothing was imported.",
-      "invalid": "That isn't a Crwn Animes watch history file. Nothing was imported."
+      "invalid": "That isn't a Crwn Animes watch history file. Nothing was imported.",
+      "storage": "Couldn't save the imported history — is this browser's storage full? Nothing was imported."
     }
   },
   "notFound": {
@@ -694,7 +703,8 @@
       "pagination": "Pages",
       "previous": "Previous page",
       "next": "Next page",
-      "pageOf": "Page {page} of {pages}"
+      "pageOf": "Page {page} of {pages}",
+      "pageSuffix": ", page {page} of {pages}"
     }
   },
   "genre": {

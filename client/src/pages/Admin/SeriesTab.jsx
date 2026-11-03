@@ -5,7 +5,7 @@ import { ConfirmDialog } from "../../components/ConfirmDialog/ConfirmDialog.jsx"
 import { TextField } from "../../components/Form/TextField.jsx";
 import { useT } from "../../i18n/useT.js";
 import { ErrorText } from "./shared.jsx";
-import { ListEmpty, ListSearch, Pager } from "./ListControls.jsx";
+import { ListEmpty, ListHeading, ListSearch, Pager } from "./ListControls.jsx";
 import { useAdminList } from "./useAdminList.js";
 import styles from "./Admin.module.css";
 
@@ -121,9 +121,9 @@ export function SeriesTab({ genres, reloadSeries, reloadKey }) {
       </form>
 
       <section aria-labelledby="series-list-title" className="stack">
-        <h2 id="series-list-title" ref={headingRef} tabIndex={-1}>
+        <ListHeading list={list} id="series-list-title" ref={headingRef}>
           {t("admin.series.all", { count: list.total })}
-        </h2>
+        </ListHeading>
         <ListSearch list={list} label={t("admin.list.searchSeries")} />
         <ErrorText error={list.error} />
         <ListEmpty list={list}>{t("admin.series.none")}</ListEmpty>
