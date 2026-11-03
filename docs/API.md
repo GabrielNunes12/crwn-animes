@@ -139,6 +139,7 @@ for local development (the verification link is also printed to the server conso
 | `sessions` | SHA-256 of the session token, user id, expiry | stay logged in | expiry (30 days) — purged automatically |
 | `email_tokens` | SHA-256 of the token, user id, expiry | verify email | used or expired (24 h) — purged automatically |
 | `ratings` | user id, video id, score, reaction | the rating feature | account deleted |
+| `rating_activity` | none — per-video daily counts with no user id (not personal data) | trending row | 30 days |
 
 No IP addresses, user agents, analytics or third-party trackers are stored. The only cookie is
 the essential `sid` session cookie. Watch progress lives only in the browser's `localStorage`.
@@ -156,12 +157,12 @@ These extend everything above; nothing above is removed.
   (published in the last 7 days), `availability: "ok" | "unavailable"`.
 - `/api/latest`, `/api/top-rated`, `/api/trending`, `/api/random` never return unavailable videos.
   Series pages still list them (the client greys them out).
-- Requests that send email (`register`, `resend-verification`, `forgot-password`) accept an optional
+- Requests that send email (`register`, `resend-verification`, `forgot-password`, `reset-password`, `POST /api/me/password`) accept an optional
   `locale: "pt-BR" | "en"` (default `"pt-BR"`). It is used for that email only and **never stored**.
 
 ## Security & caching headers (server)
 - CSP: `default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com;
-  frame-src https://www.youtube-nocookie.com https://www.youtube.com; img-src 'self' data: https://i.ytimg.com;
+  frame-src https://www.youtube-nocookie.com https://www.youtube.com; img-src 'self' data: https:;
   style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self';
   frame-ancestors 'none'; form-action 'self'`. No cross-origin isolation (COEP) header.
 - `Referrer-Policy: strict-origin-when-cross-origin` (the default `no-referrer` breaks YouTube embeds).
@@ -186,7 +187,7 @@ The reset email links to `${APP_URL}/reset-password?token=<token>`.
 |---|---|
 | `GET /api/top-rated?section=&limit=12` | `200 Video[]` — Bayesian average `(C·m + Σscores) / (C + n)` with `C = 5`, `m` = site-wide mean; needs `n ≥ 3`. |
 | `GET /api/trending?section=&limit=12` | `200 Video[]` — most ratings in the last 7 days (from `rating_activity`). |
-| `GET /api/random?section=` | `200 { video }` — a random published, available video; 404 if none. |
+| `GET /api/random?section=` | `200 { video }` — a random published, available video; 404 if none. Sent with `Cache-Control: no-store` (a cached "random" would always be the same). |
 
 `rating_activity(video_id, day, count, score_sum)` is **anonymous** (no user id), aggregated per video per
 day and purged after 30 days. Add it to the personal-data table as "not personal data".

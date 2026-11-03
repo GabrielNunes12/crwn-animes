@@ -1,0 +1,111 @@
+@layer components {
+  .page {
+    max-inline-size: 52rem;
+    padding-block: var(--space-6);
+    display: grid;
+    gap: var(--space-6);
+  }
+  .page section {
+    display: grid;
+    gap: var(--space-3);
+    scroll-margin-block-start: calc(var(--header-h) + 2rem);
+  }
+  .page ul,
+  .page ol {
+    padding-inline-start: 1.25rem;
+    display: grid;
+    gap: var(--space-2);
+  }
+  .page h2 {
+    font-size: var(--step-2);
+  }
+  .head {
+    display: grid;
+    gap: var(--space-3);
+  }
+  .kicker {
+    color: var(--primary);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: var(--step--1);
+  }
+  .lead {
+    font-size: var(--step-1);
+    color: var(--muted);
+  }
+  .toc {
+    padding: var(--space-4) var(--space-5);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+  }
+  .toc ol {
+    columns: 2 12rem;
+    display: block;
+  }
+  .toc li {
+    break-inside: avoid;
+    margin-block-end: var(--space-1);
+  }
+  .highlight {
+    padding: var(--space-5);
+    border-radius: var(--radius-lg);
+    border: 1px solid color-mix(in oklch, var(--primary) 40%, var(--border));
+    background:
+      radial-gradient(100% 120% at 0% 0%, color-mix(in oklch, var(--sakura) 14%, transparent), transparent 60%),
+      radial-gradient(100% 120% at 100% 100%, color-mix(in oklch, var(--cyan) 12%, transparent), transparent 60%),
+      var(--surface);
+  }
+  .tableWrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .table {
+    inline-size: 100%;
+    min-inline-size: 34rem;
+    border-collapse: collapse;
+    font-size: var(--step--1);
+  }
+  .table th,
+  .table td {
+    padding: var(--space-3);
+    text-align: start;
+    vertical-align: top;
+    border-block-end: 1px solid var(--border);
+  }
+  .table thead th {
+    background: var(--elevated);
+  }
+  .table tbody th {
+    font-weight: 400;
+  }
+  .table tr:last-child > * {
+    border-block-end: 0;
+  }
+  .cellHint {
+    display: block;
+    color: var(--muted);
+    margin-block-start: 0.2rem;
+  }
+  .rights {
+    display: grid;
+    gap: var(--space-3);
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  }
+  .right {
+    padding: var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  .right dt {
+    font-weight: 700;
+    margin-block-end: var(--space-1);
+  }
+  .right dd {
+    margin: 0;
+    color: var(--muted);
+  }
+}

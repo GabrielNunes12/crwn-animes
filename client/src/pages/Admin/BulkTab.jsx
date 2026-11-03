@@ -144,7 +144,7 @@ export function BulkTab({ series }) {
         <ErrorText error={state.error} />
         <div className="cluster">
           <button type="submit" className="btn" disabled={state.busy || !text.trim()}>
-            {state.busy && state.preview === false && !state.results ? t("common.working") : t("admin.bulk.preview")}
+            {state.busy ? t("common.working") : t("admin.bulk.preview")}
           </button>
           {state.preview && (
             <button type="button" className="btn btn-primary" disabled={state.busy || creatable === 0} onClick={() => run(false)}>

@@ -17,7 +17,7 @@ export default defineConfig({
     },
   },
   css: {
-    modules: { localsConvention: "camelCaseOnly" },
+    modules: { localsConvention: "camelCase" },
   },
   test: {
     environment: "jsdom",
