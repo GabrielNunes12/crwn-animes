@@ -9,11 +9,11 @@ Ground rules that never change:
 - No analytics, trackers or third-party requests other than YouTube on Play and `i.ytimg.com` thumbnails.
 - Never skip or disable a test to make CI green.
 
-## Release 1 (in progress)
-- [ ] Base platform: anime/manga sections, auto-classification, admin CRUD, ratings, email auth, RGPD (docs/API.md base)
-- [ ] v1.1: password reset, security headers, bulk add, broken-video health check, continue watching, discovery rows, pt-BR/en
-- [ ] Playwright e2e of the core journeys + axe accessibility checks
-- [ ] GitHub Actions CI running server tests, client lint/test/build and e2e on every PR
+## Release 1 (shipped)
+- [x] Base platform: anime/manga sections, auto-classification, admin CRUD, ratings, email auth, RGPD (docs/API.md base)
+- [x] v1.1: password reset, security headers, bulk add, broken-video health check, continue watching, discovery rows, pt-BR/en
+- [x] Playwright e2e of the core journeys + axe accessibility checks
+- [x] GitHub Actions CI running server tests, client lint/test/build and e2e on every PR
 
 ## Next
 - [ ] SEO: server-rendered `<title>`/description/OpenGraph per series and episode, canonical URLs, `sitemap.xml`, VideoObject JSON-LD
