@@ -9,7 +9,7 @@ import { useTitle } from "../../hooks/useTitle.js";
 import { useT } from "../../i18n/useT.js";
 import { truncateWords, videoLabel } from "../../lib/format.js";
 import { genreHref } from "../../lib/search.js";
-import { entryCompleted, formatTime, resumePosition, seriesProgress } from "../../lib/progress.js";
+import { formatTime, resumePosition, seriesProgress } from "../../lib/progress.js";
 import { pickSeason, seasonsOf } from "../../lib/seasons.js";
 import styles from "./Series.module.css";
 
@@ -54,9 +54,8 @@ function SeriesSkeleton() {
   );
 }
 
-function EpisodeRow({ video: v, entry: p, index }) {
+function EpisodeRow({ video: v, entry: p, done, index }) {
   const { t } = useT();
-  const done = entryCompleted(p);
   const pct = p?.d > 0 ? Math.min(100, Math.round((p.t / p.d) * 100)) : 0;
   const unavailable = v.availability === "unavailable";
   const content = (
@@ -117,7 +116,7 @@ function SeasonNav({ seasons, active }) {
       <ul role="list">
         {seasons.map((n) => (
           <li key={n}>
-            <Link to={href(n)} replace preventScrollReset aria-current={n === active ? "true" : undefined}>
+            <Link to={href(n)} preventScrollReset aria-current={n === active ? "true" : undefined}>
               {t("common.season", { n: String(n) })}
             </Link>
           </li>
@@ -180,11 +179,15 @@ function SeriesView({ section, series, videos, seasons: apiSeasons }) {
                 <span className={styles.meter} style={{ "--p": `${pct}%` }} aria-hidden="true" />
               </div>
             )}
-            {sp.allWatched ? (
+            {sp.allWatched && (
               <p className={styles.allDone}>
                 {t(isManga ? "series.allRead" : "series.allWatched")} <span aria-hidden="true">✓</span>
               </p>
-            ) : (
+            )}
+            {!sp.allWatched && !sp.target && sp.unavailableLeft > 0 && (
+              <p className={styles.unavailNote}>{t(isManga ? "series.chaptersUnavailable" : "series.episodesUnavailable", { count: sp.unavailableLeft })}</p>
+            )}
+            {!sp.allWatched &&
               sp.target && (
                 <div className="cluster">
                   <Link to={sp.target.route} className="btn btn-primary" data-resume={sp.resume || undefined}>
@@ -194,8 +197,7 @@ function SeriesView({ section, series, videos, seasons: apiSeasons }) {
                       : t(isManga ? "series.startReading" : "series.startWatching")}
                   </Link>
                 </div>
-              )
-            )}
+              )}
           </div>
         </div>
 
@@ -217,7 +219,7 @@ function SeriesView({ section, series, videos, seasons: apiSeasons }) {
               ) : (
                 <ol className={styles.list} role="list">
                   {shown.map((v, i) => (
-                    <EpisodeRow key={v.id} video={v} entry={progress[v.youtubeVideoId]} index={i} />
+                    <EpisodeRow key={v.id} video={v} entry={progress[v.youtubeVideoId]} done={sp.isWatched(v)} index={i} />
                   ))}
                 </ol>
               )}

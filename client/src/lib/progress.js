@@ -112,6 +112,10 @@ const ROUTE = /^\/(anime|manga)\/([a-z0-9-]+)\/(?:episode\/\d+|season\/(\d+)\/ep
 // the browser fetch from arbitrary hosts.
 const THUMB = /^https:\/\/i\.ytimg\.com\/[^\s"'<>]{1,300}$/;
 const MAX_TITLE = 300;
+/** Longest believable position/duration (≈ 11.5 days of video). */
+export const MAX_SECONDS = 1e6;
+/** Imported `at` may be at most this far in the future (clock skew between devices). */
+export const MAX_FUTURE_MS = 24 * 60 * 60 * 1000;
 
 /** `{ version: 1, exportedAt, entries }` — what "Export watch history" downloads. */
 export function exportProgress(now = new Date()) {
@@ -120,11 +124,17 @@ export function exportProgress(now = new Date()) {
 
 const num = (v) => typeof v === "number" && Number.isFinite(v);
 
-/** A clean copy of one imported entry (unknown keys dropped), or null when it is invalid. */
-export function sanitizeEntry(raw) {
+/**
+ * A clean copy of one imported entry (unknown keys dropped), or null when it is invalid.
+ * Rejects absurd numbers: a far-future `at` would pin the entry as "most recent" forever
+ * (and make the LRU evict every real entry), a huge `t`/`d` would overflow to Infinity.
+ */
+export function sanitizeEntry(raw, now = Date.now()) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const { t, d, at, route = null, title = null, thumb = null } = raw;
-  if (!num(t) || !num(d) || !num(at) || t < 0 || d < 0 || at <= 0) return null;
+  if (!num(t) || !num(d) || !num(at)) return null;
+  if (t < 0 || d < 0 || t > MAX_SECONDS || d > MAX_SECONDS) return null;
+  if (at <= 0 || at > now + MAX_FUTURE_MS) return null;
   if (d > 0 && t > d + 1) return null;
   if (route !== null && (typeof route !== "string" || !ROUTE.test(route))) return null;
   if (title !== null && typeof title !== "string") return null;
@@ -143,9 +153,10 @@ export function sanitizeEntry(raw) {
  * Merges an exported file (its text) into local progress. Never throws.
  * Newest `at` wins per video; invalid entries are skipped; the 200-entry cap is kept
  * (entries evicted by the cap count as skipped).
- * → { ok: true, imported, skipped } | { ok: false, error: "tooLarge" | "invalid" }
+ * → { ok: true, imported, skipped } | { ok: false, error: "tooLarge" | "invalid" | "storage" }
+ *   ("storage": the merged history could not be saved, e.g. the storage quota is full).
  */
-export function importProgress(text, { size } = {}) {
+export function importProgress(text, { size, now = Date.now() } = {}) {
   try {
     const bytes = size ?? new Blob([text ?? ""]).size;
     if (bytes > MAX_IMPORT_BYTES) return { ok: false, error: "tooLarge" };
@@ -165,7 +176,7 @@ export function importProgress(text, { size } = {}) {
     for (const [id, raw] of Object.entries(incoming)) {
       seen += 1;
       if (!VIDEO_ID.test(id)) continue;
-      const entry = sanitizeEntry(raw);
+      const entry = sanitizeEntry(raw, now);
       if (!entry) continue;
       const local = all[id];
       if (local && (local.at ?? 0) >= entry.at) continue;
@@ -175,7 +186,7 @@ export function importProgress(text, { size } = {}) {
     const kept = pruneLRU(all);
     const imported = [...applied].filter((id) => id in kept).length;
     if (imported > 0) {
-      writeJSON(PROGRESS_KEY, kept);
+      if (!writeJSON(PROGRESS_KEY, kept)) return { ok: false, error: "storage" };
       emit();
     }
     return { ok: true, imported, skipped: seen - imported };
@@ -193,48 +204,75 @@ export function parseRoute(route) {
 
 export const seriesKey = (section, slug) => `${section}/${slug}`;
 
-/** { "anime/naruto": { watched, started } } — how many episodes of each series were finished / touched. Pure. */
-export function buildSeriesIndex(entries) {
-  const index = {};
+/**
+ * Distinct episode routes with local progress: { watched: Set<route>, started: Set<route> }.
+ * The one derivation behind both the series cards and the series page: counting routes
+ * (not entries) means a swapped YouTube link (old and new ID share a route) counts once. Pure.
+ */
+export function progressRoutes(entries) {
+  const watched = new Set();
+  const started = new Set();
   for (const e of Object.values(entries ?? {})) {
-    const r = parseRoute(e?.route);
-    if (!r) continue;
-    const key = seriesKey(r.section, r.slug);
-    const row = (index[key] ??= { watched: 0, started: 0 });
+    if (!e || !parseRoute(e.route)) continue;
+    started.add(e.route);
+    if (entryCompleted(e)) watched.add(e.route);
+  }
+  return { watched, started };
+}
+
+/**
+ * { "anime/naruto": { watched, started } } — distinct episodes finished / touched per series.
+ * Cards compare `watched` with the series' videoCount and cap it there (a deleted episode
+ * can still be in local history). Pure.
+ */
+export function buildSeriesIndex(entries) {
+  const { watched, started } = progressRoutes(entries);
+  const index = {};
+  for (const route of started) {
+    const r = parseRoute(route);
+    const row = (index[seriesKey(r.section, r.slug)] ??= { watched: 0, started: 0 });
     row.started += 1;
-    if (entryCompleted(e)) row.watched += 1;
+    if (watched.has(route)) row.watched += 1;
   }
   return index;
 }
 
 /**
  * What a series page shows for local progress. Pure.
- * `videos` are the series' published videos in that section (season, number order).
- * → { watched, total, target, resume, allWatched }
- *   target = the in-progress episode (most recently watched) if any, else the first unwatched playable one.
+ * `videos` are ALL the series' published videos in that section (season, number order),
+ * so N and M match the cards' videoCount.
+ * → { watched, total, target, resume, touched, allWatched, unavailableLeft, isWatched }
+ *   target = the in-progress episode (most recently watched) if any, else the first unwatched
+ *   playable one; null when nothing playable is left.
+ *   allWatched only when watched === total. unavailableLeft = unwatched episodes that can't be
+ *   played right now (unavailable on YouTube).
  */
 export function seriesProgress(videos, entries) {
   const list = videos ?? [];
   const map = entries ?? {};
-  const playable = list.filter((v) => v.route && v.availability !== "unavailable");
-  const watched = list.filter((v) => entryCompleted(map[v.youtubeVideoId])).length;
-  const touched = list.some((v) => map[v.youtubeVideoId]);
+  const routes = progressRoutes(map);
+  const isWatched = (v) => entryCompleted(map[v.youtubeVideoId]) || (v.route != null && routes.watched.has(v.route));
+  const isPlayable = (v) => Boolean(v.route) && v.availability !== "unavailable";
+  const playable = list.filter(isPlayable);
+  const watched = list.filter(isWatched).length;
+  const touched = list.some((v) => map[v.youtubeVideoId] || (v.route != null && routes.started.has(v.route)));
   let inProgress = null;
   for (const v of playable) {
     const e = map[v.youtubeVideoId];
-    if (resumePosition(e) > 0 && (!inProgress || e.at > map[inProgress.youtubeVideoId].at)) inProgress = v;
+    if (resumePosition(e) > 0 && !isWatched(v) && (!inProgress || e.at > map[inProgress.youtubeVideoId].at)) inProgress = v;
   }
-  const firstUnwatched = playable.find((v) => !entryCompleted(map[v.youtubeVideoId])) ?? null;
-  const target = inProgress ?? firstUnwatched;
+  const firstUnwatched = playable.find((v) => !isWatched(v)) ?? null;
   return {
     watched,
     total: list.length,
-    target,
+    target: inProgress ?? firstUnwatched,
     /** True when the target has a saved position (the Watch page resumes it). */
     resume: Boolean(inProgress),
     /** Any local progress for this series at all. */
     touched,
-    allWatched: playable.length > 0 && !firstUnwatched,
+    allWatched: list.length > 0 && watched === list.length,
+    unavailableLeft: list.filter((v) => !isPlayable(v) && !isWatched(v)).length,
+    isWatched,
   };
 }
 

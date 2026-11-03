@@ -93,9 +93,14 @@
     min-block-size: 2.75rem;
     padding: 0.55em 1.15em;
     border-radius: var(--radius-pill);
-    background: var(--success-soft);
-    color: var(--success);
+    /* Filled accent + dark --on-accent text: AA in both themes (same pair as the ✓ badges). */
+    background: var(--success-fill);
+    color: var(--on-accent);
     font-weight: 700;
+  }
+  .unavailNote {
+    color: var(--muted);
+    font-size: var(--step--1);
   }
 
   /* Season picker: a segmented control of links (?season=N). */
