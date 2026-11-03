@@ -143,3 +143,68 @@ for local development (the verification link is also printed to the server conso
 No IP addresses, user agents, analytics or third-party trackers are stored. The only cookie is
 the essential `sid` session cookie. Watch progress lives only in the browser's `localStorage`.
 YouTube's player is loaded from `www.youtube-nocookie.com`.
+
+---
+
+# v1.1 additions (wave 2 — accepted from product review)
+
+These extend everything above; nothing above is removed.
+
+## Fixes to the base contract
+- Deleting a series **deletes** its videos (FK `ON DELETE CASCADE`), not `SET NULL`.
+- `Video` gains: `publishedAt: string | null` (set when it first becomes published), `isNew: boolean`
+  (published in the last 7 days), `availability: "ok" | "unavailable"`.
+- `/api/latest`, `/api/top-rated`, `/api/trending`, `/api/random` never return unavailable videos.
+  Series pages still list them (the client greys them out).
+- Requests that send email (`register`, `resend-verification`, `forgot-password`) accept an optional
+  `locale: "pt-BR" | "en"` (default `"pt-BR"`). It is used for that email only and **never stored**.
+
+## Security & caching headers (server)
+- CSP: `default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com;
+  frame-src https://www.youtube-nocookie.com https://www.youtube.com; img-src 'self' data: https://i.ytimg.com;
+  style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self';
+  frame-ancestors 'none'; form-action 'self'`. No cross-origin isolation (COEP) header.
+- `Referrer-Policy: strict-origin-when-cross-origin` (the default `no-referrer` breaks YouTube embeds).
+- Public catalog GETs: `Cache-Control: public, max-age=60, stale-while-revalidate=600` + ETag (304 support).
+  `/api/auth/*`, `/api/me/*`, `/api/admin/*`, every `/rating` route: `Cache-Control: private, no-store`.
+- Static client: hashed `/assets/*` → `public, max-age=31536000, immutable`; `index.html` → `no-cache`.
+- Fonts are self-hosted (no Google Fonts: it would leak visitor IPs to a third party).
+
+## Password reset & session management
+| Method & path | Body | Success |
+|---|---|---|
+| `POST /api/auth/forgot-password` | `{ email, locale? }` | `202 { message }` always. Reset token valid 1 h, single use; issuing a new one invalidates older reset tokens. |
+| `POST /api/auth/reset-password` | `{ token, password }` | `200 { user }` + new `sid`. Deletes **all** the user's other sessions, marks email verified, sends "your password was changed" email. 400 `INVALID_TOKEN`. |
+| `POST /api/me/password` | `{ currentPassword, newPassword }` | `200 { user }` + new `sid`; revokes all other sessions; sends "password changed" email. 401 `INVALID_CREDENTIALS` on wrong current password. |
+| `POST /api/auth/logout-all` | – | `204` — deletes every session of the user (sign out everywhere). |
+
+`email_tokens.purpose` is `"verify" | "reset"`. The session token is rotated on every login, verify and reset.
+The reset email links to `${APP_URL}/reset-password?token=<token>`.
+
+## Rating-driven discovery (public)
+| Method & path | Success |
+|---|---|
+| `GET /api/top-rated?section=&limit=12` | `200 Video[]` — Bayesian average `(C·m + Σscores) / (C + n)` with `C = 5`, `m` = site-wide mean; needs `n ≥ 3`. |
+| `GET /api/trending?section=&limit=12` | `200 Video[]` — most ratings in the last 7 days (from `rating_activity`). |
+| `GET /api/random?section=` | `200 { video }` — a random published, available video; 404 if none. |
+
+`rating_activity(video_id, day, count, score_sum)` is **anonymous** (no user id), aggregated per video per
+day and purged after 30 days. Add it to the personal-data table as "not personal data".
+
+## Admin productivity & resilience
+| Method & path | Body | Success |
+|---|---|---|
+| `POST /api/admin/videos/bulk` | `{ text?: string, urls?: string[], defaults?: { section?, seriesSlug?, season? }, dryRun?: boolean }` | `200 { results: BulkRow[] }` — extracts every YouTube ID from `text`/`urls` (max 50, de-duplicated), oEmbed lookups 3 at a time. |
+| `POST /api/admin/videos/health-check` | – | `200 { checked: number, unavailable: Video[] }` — re-runs oEmbed for every video (also runs daily in-process); 401/403/404 → `availability: "unavailable"`. |
+| `GET /api/admin/videos?availability=unavailable` | – | `200 Video[]` (combinable with `status`) |
+| `PATCH /api/admin/videos/:id` | also accepts `{ url }` | swaps the YouTube ID (re-checks oEmbed), keeps route and ratings, resets availability to `"ok"`. |
+
+```ts
+type BulkRow = {
+  input: string; youtubeVideoId: string | null;
+  outcome: "created" | "would-create" | "duplicate" | "invalid" | "unavailable" | "error";
+  video?: Video;          // created, or the existing one for duplicate
+  preview?: { section, seriesSlug, season, number, status, route, reasons: string[] }; // dryRun
+  message?: string;
+};
+```
