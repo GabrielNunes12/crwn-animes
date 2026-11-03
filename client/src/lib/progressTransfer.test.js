@@ -112,6 +112,47 @@ describe("progress import", () => {
     expect(localStorage.getItem(PROGRESS_KEY)).toBe(before);
   });
 
+  it("rejects absurd numbers: far-future `at` (would pin the entry and evict real ones), huge t/d", () => {
+    const now = Date.UTC(2026, 10, 3);
+    const day = 24 * 60 * 60 * 1000;
+    const res = importProgress(
+      file({
+        [id(1)]: entry({ at: 1e300 }),
+        [id(2)]: entry({ at: now + day + 1 }),
+        [id(3)]: entry({ t: 1e308, d: 1e308 }),
+        [id(4)]: entry({ t: 10, d: 2e6 }),
+        [id(5)]: entry({ at: now + day }), // clock skew of up to a day is fine
+        [id(6)]: entry({ t: 3600, d: 7200, at: now }),
+      }),
+      { now },
+    );
+    expect(res).toEqual({ ok: true, imported: 2, skipped: 4 });
+    expect(Object.keys(getAllProgress()).sort()).toEqual([id(5), id(6)]);
+    // Nothing ends up as Infinity / null in storage.
+    expect(localStorage.getItem(PROGRESS_KEY)).not.toMatch(/null,"d"|"t":null|"d":null/);
+  });
+
+  it("a far-future entry can no longer push real progress out of the 200-entry cap", () => {
+    const now = Date.now();
+    const evil = {};
+    for (let i = 0; i < MAX_ENTRIES; i++) evil[id(i)] = entry({ at: 1e15 + i });
+    expect(importProgress(file(evil))).toEqual({ ok: true, imported: 0, skipped: MAX_ENTRIES });
+    saveProgress(id(9999), { position: 30, duration: 100, now });
+    expect(getAllProgress()[id(9999)]).toBeDefined();
+  });
+
+  it("reports a storage failure (quota full) instead of claiming success", () => {
+    const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("full", "QuotaExceededError");
+    });
+    try {
+      expect(importProgress(file({ [id(1)]: entry() }))).toEqual({ ok: false, error: "storage" });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(getAllProgress()).toEqual({});
+  });
+
   it("refuses files over 1 MB", () => {
     expect(importProgress("{}", { size: MAX_IMPORT_BYTES + 1 })).toEqual({ ok: false, error: "tooLarge" });
     const big = file({ [id(1)]: entry({ title: "x".repeat(MAX_IMPORT_BYTES) }) });
@@ -154,6 +195,15 @@ describe("per-series progress", () => {
     });
     expect(index).toEqual({ "anime/naruto": { watched: 1, started: 2 }, "manga/naruto": { watched: 1, started: 1 } });
   });
+
+  it("counts distinct episodes (routes), not entries: a swapped YouTube link counts once", () => {
+    const index = buildSeriesIndex({
+      old: entry({ t: 95, route: "/anime/naruto/episode/1" }),
+      new: entry({ t: 95, route: "/anime/naruto/episode/1" }),
+      half: entry({ t: 10, route: "/anime/naruto/episode/1" }),
+    });
+    expect(index).toEqual({ "anime/naruto": { watched: 1, started: 1 } });
+  });
 });
 
 describe("watched N of M + Continue target", () => {
@@ -188,6 +238,25 @@ describe("watched N of M + Continue target", () => {
   it("a barely started episode (< 5 s) is not 'in progress'", () => {
     const map = { [videos[0].youtubeVideoId]: done(), [videos[4].youtubeVideoId]: { t: 2, d: 100, at: 9 } };
     expect(seriesProgress(videos, map)).toMatchObject({ target: videos[1], resume: false });
+  });
+
+  it("N and M count every published episode; unavailable ones block 'everything' and Continue", () => {
+    const list = [v(1), v(2), v(3, 1, { availability: "unavailable" })];
+    const map = { [list[0].youtubeVideoId]: done(), [list[1].youtubeVideoId]: done() };
+    expect(seriesProgress(list, map)).toMatchObject({ watched: 2, total: 3, target: null, allWatched: false, unavailableLeft: 1 });
+    // A watched episode that later became unavailable still counts and doesn't block.
+    const map2 = { ...map, [list[2].youtubeVideoId]: done() };
+    expect(seriesProgress(list, map2)).toMatchObject({ watched: 3, total: 3, allWatched: true, unavailableLeft: 0 });
+  });
+
+  it("uses the same route-based derivation as the cards: a swapped link keeps the episode watched", () => {
+    const list = [v(1), v(2)];
+    // Progress was saved under the old YouTube ID; the admin swapped the link (same route).
+    const map = { oldYoutubeId: { ...done(), route: list[0].route } };
+    const sp = seriesProgress(list, map);
+    expect(sp).toMatchObject({ watched: 1, total: 2, target: list[1], touched: true });
+    expect(sp.isWatched(list[0])).toBe(true);
+    expect(buildSeriesIndex(map)["anime/s"]).toEqual({ watched: 1, started: 1 });
   });
 
   it("everything watched: no target", () => {

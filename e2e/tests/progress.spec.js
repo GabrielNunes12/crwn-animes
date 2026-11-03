@@ -183,10 +183,7 @@ test.describe("series page progress", () => {
   });
 
   test("Back after clicking a season tab returns to the previous season", async ({ page }) => {
-    // KNOWN BUG (cycle 3): SeasonNav's <Link replace> (client/src/pages/Series/Series.jsx) replaces the
-    // history entry, so Back after a season switch leaves the series page instead of returning to the
-    // previous season. The tabs are plain links that change the URL; Back should undo them.
-    test.fail();
+    // Regression (found in cycle 3): the season links used <Link replace>, so Back left the series page.
     await page.goto("/anime");
     await expect(page.getByRole("heading", { level: 1, name: "Anime" })).toBeVisible();
     await page.goto(S.anime);
@@ -196,6 +193,8 @@ test.describe("series page progress", () => {
     await page.goBack();
     await expect(page).toHaveURL(new RegExp(`${S.anime}(\\?season=1)?$`));
     await expect(seasonLink(page, 1)).toHaveAttribute("aria-current", "true");
+    await page.goBack();
+    await expect(page).toHaveURL("/anime");
   });
 
   test("series cards on /anime and /manga show N/M watched / read", async ({ page }) => {
@@ -217,26 +216,39 @@ test.describe("series page progress", () => {
     await expect(card(S.name)).toContainText("✓ 2/2 lidos");
   });
 
-  test("a card and its series page agree on N/M when the history holds stale entries for the series", async ({ page }) => {
-    // KNOWN BUG (cycle 3): cards count completed history entries whose stored *route* points at the
-    // series (buildSeriesIndex in client/src/lib/progress.js), while the series page counts the series'
-    // current videos by YouTube id (seriesProgress). After an admin swaps a broken episode's link (the
-    // Quebrados tab keeps the route, changes the id) or deletes an episode, the old entry still counts
-    // on the card: here the card says 3/5 while the series page says 1 de 5.
-    test.fail();
+  const stale = (route, at) => ({ t: 100, d: 100, at, route, title: "old link", thumb: null });
+  const seriesCard = (page) => page.getByRole("article").filter({ has: page.getByRole("heading", { name: S.name, exact: true }) });
+
+  test("card and series page agree when an episode's YouTube link was swapped (old + new id, one route)", async ({ page }) => {
+    // Regression (found in cycle 3): the card counted history entries by route, the page by id → 2/5 vs 1 de 5.
     const { v } = S;
-    const stale = (route, at) => ({ t: 100, d: 100, at, route, title: "old link", thumb: null });
     await seedProgress(page, {
       [v.s1e1.youtubeVideoId]: done(v.s1e1, 1_000),
       [fakeYouTubeId("old")]: stale(v.s1e1.route, 500), // same episode, previous YouTube link
-      [fakeYouTubeId("del")]: stale(`${S.anime}/episode/99`, 600), // an episode that no longer exists
+      [fakeYouTubeId("old")]: stale(v.s1e2.route, 600), // only the old link of S1 E2 was watched
+    });
+    await page.goto(S.anime);
+    await expect(page.getByText("2 de 5 assistidos", { exact: true })).toBeVisible();
+    await page.goto(`/anime?q=${encodeURIComponent(S.name)}`);
+    await expect(seriesCard(page)).toContainText("2/5 assistidos");
+  });
+
+  test("card and series page agree when local history holds an episode that no longer exists", async ({ page }) => {
+    // KNOWN BUG (cycle 3): buildSeriesIndex() (client/src/lib/progress.js) counts every distinct
+    // watched route of the series, including routes of deleted/renumbered episodes, and the card only
+    // caps that at videoCount; seriesProgress() (series page) counts the series' current videos.
+    // Here: card "2/5 assistidos", series page "1 de 5 assistidos".
+    test.fail();
+    const { v } = S;
+    await seedProgress(page, {
+      [v.s1e1.youtubeVideoId]: done(v.s1e1, 1_000),
+      [fakeYouTubeId("del")]: stale(`${S.anime}/episode/99`, 600), // an episode that was deleted
     });
     await page.goto(S.anime);
     await expect(page.getByText("1 de 5 assistidos", { exact: true })).toBeVisible();
     await page.goto(`/anime?q=${encodeURIComponent(S.name)}`);
-    const card = page.getByRole("article").filter({ has: page.getByRole("heading", { name: S.name, exact: true }) });
-    await expect(card).toContainText("/5 assistidos");
-    await expect(card).toContainText("1/5 assistidos");
+    await expect(seriesCard(page)).toContainText("/5 assistidos");
+    await expect(seriesCard(page)).toContainText("1/5 assistidos");
   });
 
   test("axe: series page with progress and season tabs", async ({ page }) => {
@@ -338,38 +350,41 @@ test.describe("/account: export / import watch history", () => {
     });
 
     const evilId = fakeYouTubeId("evil");
+    const AT = Date.now() - 60_000; // a believable timestamp (far-future ones are rejected)
     await test.step("crafted entries are skipped; a third-party thumb is dropped; no prototype pollution", async () => {
       // Raw JSON so "__proto__" is a real own key of the parsed objects.
       const evil = `{
         "version": 1,
         "__proto__": { "polluted": "top" },
         "entries": {
-          "__proto__": { "t": 1, "d": 100, "at": 99999999999999, "route": "${v.s1e3.route}", "polluted": "entries" },
-          "constructor": { "t": 1, "d": 100, "at": 99999999999999, "route": "${v.s1e3.route}" },
-          "${fakeYouTubeId("js")}": { "t": 30, "d": 100, "at": 99999999999999, "route": "javascript:alert(document.domain)", "title": "x" },
-          "${fakeYouTubeId("ext")}": { "t": 30, "d": 100, "at": 99999999999999, "route": "https://evil.example/anime/x/episode/1" },
-          "${fakeYouTubeId("pr")}": { "t": 30, "d": 100, "at": 99999999999999, "route": "//evil.example/anime/x/episode/1" },
-          "${fakeYouTubeId("trv")}": { "t": 30, "d": 100, "at": 99999999999999, "route": "/anime/../../evil/episode/1" },
-          "short": { "t": 30, "d": 100, "at": 99999999999999, "route": "${v.s1e3.route}" },
-          "${fakeYouTubeId("neg")}": { "t": -5, "d": 100, "at": 99999999999999, "route": "${v.s1e3.route}" },
-          "${fakeYouTubeId("str")}": { "t": "30", "d": 100, "at": 99999999999999, "route": "${v.s1e3.route}" },
+          "__proto__": { "t": 1, "d": 100, "at": ${AT}, "route": "${v.s1e3.route}", "polluted": "entries" },
+          "constructor": { "t": 1, "d": 100, "at": ${AT}, "route": "${v.s1e3.route}" },
+          "${fakeYouTubeId("js")}": { "t": 30, "d": 100, "at": ${AT}, "route": "javascript:alert(document.domain)", "title": "x" },
+          "${fakeYouTubeId("ext")}": { "t": 30, "d": 100, "at": ${AT}, "route": "https://evil.example/anime/x/episode/1" },
+          "${fakeYouTubeId("pr")}": { "t": 30, "d": 100, "at": ${AT}, "route": "//evil.example/anime/x/episode/1" },
+          "${fakeYouTubeId("trv")}": { "t": 30, "d": 100, "at": ${AT}, "route": "/anime/../../evil/episode/1" },
+          "short": { "t": 30, "d": 100, "at": ${AT}, "route": "${v.s1e3.route}" },
+          "${fakeYouTubeId("neg")}": { "t": -5, "d": 100, "at": ${AT}, "route": "${v.s1e3.route}" },
+          "${fakeYouTubeId("str")}": { "t": "30", "d": 100, "at": ${AT}, "route": "${v.s1e3.route}" },
+          "${fakeYouTubeId("fut")}": { "t": 30, "d": 100, "at": 99999999999999, "route": "${v.s1e3.route}" },
+          "${fakeYouTubeId("big")}": { "t": 1e300, "d": 1e300, "at": ${AT}, "route": "${v.s1e3.route}" },
           "${v.s1e1.youtubeVideoId}": { "t": 0, "d": 100, "at": 500, "route": "${v.s1e1.route}" },
-          "${evilId}": { "t": 30, "d": 100, "at": 99999999999999, "route": "${v.s1e3.route}", "title": "<img src=x onerror=alert(1)>",
+          "${evilId}": { "t": 30, "d": 100, "at": ${AT}, "route": "${v.s1e3.route}", "title": "<img src=x onerror=alert(1)>",
                          "thumb": "https://evil.example/track.png?c=1", "__proto__": { "polluted": "entry" } }
         }
       }`;
       await importInput(page).setInputFiles(file("evil.json", evil));
       // "constructor" is 11 [A-Za-z0-9_-] characters, i.e. a well-formed video id: it is
       // kept, but only as plain data (Object.prototype.constructor is untouched).
-      await expect(status(page)).toHaveText("Importados: 2. Ignorados: 9.");
+      await expect(status(page)).toHaveText("Importados: 2. Ignorados: 11.");
       await expect(page.getByText("3 vídeos no seu histórico.")).toBeVisible();
 
       const stored = await readProgress(page);
       expect(Object.keys(stored).sort()).toEqual([evilId, v.s1e1.youtubeVideoId, "constructor"].sort());
-      expect(stored.constructor).toEqual({ t: 1, d: 100, at: 99999999999999, route: v.s1e3.route, title: null, thumb: null });
+      expect(stored.constructor).toEqual({ t: 1, d: 100, at: AT, route: v.s1e3.route, title: null, thumb: null });
       expect(await page.evaluate(() => ({}).constructor === Object && typeof Object.prototype.constructor === "function")).toBe(true);
       expect(stored[v.s1e1.youtubeVideoId]).toEqual(original[v.s1e1.youtubeVideoId]); // older `at` lost
-      expect(stored[evilId]).toEqual({ t: 30, d: 100, at: 99999999999999, route: v.s1e3.route, title: "<img src=x onerror=alert(1)>", thumb: null });
+      expect(stored[evilId]).toEqual({ t: 30, d: 100, at: AT, route: v.s1e3.route, title: "<img src=x onerror=alert(1)>", thumb: null });
       expect(await page.evaluate(() => ({}).polluted ?? Object.prototype.polluted ?? null)).toBeNull();
     });
 

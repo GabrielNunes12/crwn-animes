@@ -40,6 +40,21 @@ describe("Account — your progress on this device (logged out)", () => {
     expect(getAllProgress()).toEqual({});
   });
 
+  it("says so when the merged history can't be saved (storage full)", async () => {
+    renderApp(<Account />);
+    const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("full", "QuotaExceededError");
+    });
+    try {
+      await userEvent.setup().upload(screen.getByLabelText("Import watch history"), jsonFile({ version: 1, entries: { [id(1)]: entry(1) } }));
+      await waitFor(() =>
+        expect(screen.getByRole("status")).toHaveTextContent("Couldn't save the imported history — is this browser's storage full? Nothing was imported."),
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("exports crwn-animes-progress.json", async () => {
     saveProgress(id(1), { position: 10, duration: 100, now: 5000 });
     const blobs = [];

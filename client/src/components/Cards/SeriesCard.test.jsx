@@ -30,4 +30,17 @@ describe("SeriesCard — watched indicator", () => {
     renderApp(<SeriesCard series={{ ...series, route: "/manga/naruto" }} section="manga" />);
     expect(screen.getByText("0/12 read")).toBeInTheDocument();
   });
+
+  it("counts distinct episodes and never exceeds the episode count", () => {
+    save(1, "/anime/naruto/episode/1");
+    save(2, "/anime/naruto/episode/1"); // same episode after a link swap
+    renderApp(<SeriesCard series={series} section="anime" />);
+    expect(screen.getByText("1/12 watched")).toBeInTheDocument();
+  });
+
+  it("caps N at M (watched episodes that were later deleted)", () => {
+    [1, 2, 3].forEach((n) => save(n, `/anime/naruto/episode/${n}`));
+    renderApp(<SeriesCard series={{ ...series, videoCount: 2 }} section="anime" />);
+    expect(screen.getByText("2/2 watched")).toBeInTheDocument();
+  });
 });

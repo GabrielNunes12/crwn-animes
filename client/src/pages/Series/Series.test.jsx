@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Component as Series, loader, shouldRevalidate } from "./Series.jsx";
 import { mockFetch, renderApp } from "../../test/utils.jsx";
@@ -26,9 +26,9 @@ const SERIES = { id: 1, slug: "op", name: "OP", synopsis: null, aliases: [], gen
 
 const routes = [{ path: "/anime/:slug", Component: Series, loader: (args) => loader({ ...args, section: "anime" }), shouldRevalidate }];
 
-function setup(path = "/anime/op") {
-  const fetchFn = mockFetch((url) => (url.startsWith("/api/anime/series/op") ? [200, { series: SERIES, videos: VIDEOS, seasons: [1, 2] }] : [404, {}]));
-  const utils = renderApp(null, { routes, path });
+function setup(path = "/anime/op", videos = VIDEOS) {
+  const fetchFn = mockFetch((url) => (url.startsWith("/api/anime/series/op") ? [200, { series: SERIES, videos, seasons: [1, 2] }] : [404, {}]));
+  const utils = renderApp(null, { routes: [...routes, { path: "/elsewhere", element: <p>Elsewhere</p> }], path });
   return { ...utils, fetchFn };
 }
 
@@ -77,6 +77,20 @@ describe("Series page — seasons, watched N of M and Continue", () => {
     expect(fetchFn.mock.calls[0][0]).toBe("/api/anime/series/op");
   });
 
+  it("season links push history entries: Back returns to the previous season, not off the page", async () => {
+    const { router } = setup("/elsewhere");
+    await act(() => router.navigate("/anime/op"));
+    await screen.findByRole("heading", { level: 1, name: "OP" });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("link", { name: "Season 2" }));
+    await waitFor(() => expect(router.state.location.search).toBe("?season=2"));
+    expect(router.state.historyAction).toBe("PUSH");
+    await act(() => router.navigate(-1));
+    await waitFor(() => expect(router.state.location.search).toBe(""));
+    expect(router.state.location.pathname).toBe("/anime/op");
+    expect(screen.getByRole("link", { name: "Season 1" })).toHaveAttribute("aria-current", "true");
+  });
+
   it("opens the season from the URL", async () => {
     setup("/anime/op?season=2");
     await screen.findByRole("heading", { level: 1, name: "OP" });
@@ -111,7 +125,19 @@ describe("Series page — seasons, watched N of M and Continue", () => {
     expect(screen.getByText("Watched 5 of 5")).toBeInTheDocument();
     expect(screen.getByText("Watched everything")).toHaveTextContent("Watched everything ✓");
     expect(screen.queryByRole("link", { name: /^(Continue|Start watching)/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/unavailable right now/)).not.toBeInTheDocument();
     // Back to the first season when there is nothing left to continue.
     expect(screen.getByRole("link", { name: "Season 1" })).toHaveAttribute("aria-current", "true");
+  });
+
+  it("everything playable watched but some episodes unavailable: no badge, no Continue, a short note", async () => {
+    const videos = VIDEOS.map((x, i) => (i === 4 ? { ...x, availability: "unavailable" } : x));
+    videos.slice(0, 4).forEach((x, i) => watch(x, { at: i + 1 }));
+    setup("/anime/op", videos);
+    await screen.findByRole("heading", { level: 1, name: "OP" });
+    expect(screen.getByText("Watched 4 of 5")).toBeInTheDocument();
+    expect(screen.getByText("1 episode is unavailable right now.")).toBeInTheDocument();
+    expect(screen.queryByText("Watched everything")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^(Continue|Start watching)/ })).not.toBeInTheDocument();
   });
 });

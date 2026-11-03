@@ -14,6 +14,12 @@ const newTag = () => `q${Date.now().toString(36).slice(-5)}${Math.random().toStr
 const pad = (n) => String(n).padStart(2, "0");
 
 const tab = (page, name) => page.getByRole("tab", { name, exact: true });
+// The list's <section> is labelled by its h2, whose text changes with the count / search / page,
+// so it is located by that heading's id; the live "N resultados" line is the search bar's hint.
+const listRegion = (page, headingId) => page.locator(`section[aria-labelledby="${headingId}"]`);
+const resultsLine = (region) => region.locator('p.hint[aria-live="polite"]');
+/** The heading shows the total: "25 séries", or while searching "25 resultados para “q”" (plus an optional ", página x de y"). */
+const total = (n, noun) => new RegExp(`^${n} (${noun}|resultados? para “[^”]*”)(, página \\d+ de \\d+)?$`);
 const pageOf = (region) => region.getByRole("navigation", { name: "Páginas" }).getByText(/^Página \d+ de \d+$/);
 const next = (region) => region.getByRole("button", { name: "Próxima página" });
 const previous = (region) => region.getByRole("button", { name: "Página anterior" });
@@ -42,24 +48,24 @@ test("series list: search (accent-insensitive), 25 results over 2 pages, Previou
 
   await page.goto("/admin");
   await expect(tab(page, "Séries")).toHaveAttribute("aria-selected", "true");
-  const region = page.getByRole("region", { name: /^\d+ séries?$/ });
-  const heading = region.getByRole("heading", { level: 2 });
+  const region = listRegion(page, "series-list-title");
+  const heading = region.locator("#series-list-title");
   const search = region.getByRole("searchbox", { name: "Buscar séries" });
 
   await test.step("without a search: heading total and page count agree", async () => {
-    await expect(heading).toHaveText(/^\d+ séries$/);
-    const total = Number((await heading.textContent()).match(/^(\d+)/)[1]);
-    expect(total).toBeGreaterThanOrEqual(25);
-    await expect(region.getByText(new RegExp(`^${total} resultados$`))).toBeVisible();
-    await expect(pageOf(region)).toHaveText(`Página 1 de ${Math.ceil(total / 20)}`);
+    await expect(heading).toHaveText(total("\\d+", "séries"));
+    const all = Number((await heading.textContent()).match(/^(\d+)/)[1]);
+    expect(all).toBeGreaterThanOrEqual(25);
+    await expect(resultsLine(region)).toHaveText(`${all} resultados`);
+    await expect(pageOf(region)).toHaveText(`Página 1 de ${Math.ceil(all / 20)}`);
     await expect(region.locator(":scope > ul > li")).toHaveCount(20);
   });
 
   let first;
   await test.step("search the tag → 25 results, page 1 of 2 with the first 20 by name", async () => {
     await search.fill(tag);
-    await expect(region.getByText(`25 resultados para “${tag}”`)).toBeVisible();
-    await expect(heading).toHaveText("25 séries");
+    await expect(resultsLine(region)).toHaveText(`25 resultados para “${tag}”`);
+    await expect(heading).toHaveText(total(25, "séries"));
     await expect(pageOf(region)).toHaveText("Página 1 de 2");
     await expect(previous(region)).toHaveAttribute("aria-disabled", "true");
     await expect(next(region)).not.toHaveAttribute("aria-disabled", /.*/);
@@ -72,7 +78,7 @@ test("series list: search (accent-insensitive), 25 results over 2 pages, Previou
     await expect(pageOf(region)).toHaveText("Página 2 de 2");
     await expect(region.locator(":scope > ul > li")).toHaveCount(5);
     await expect(heading).toBeFocused();
-    await expect(heading).toHaveText("25 séries");
+    await expect(heading).toHaveText(total(25, "séries"));
     const second = await shownNames(region, mine);
     expect(second).toEqual(names.slice(20));
     expect(second.filter((n) => first.includes(n))).toEqual([]);
@@ -93,19 +99,19 @@ test("series list: search (accent-insensitive), 25 results over 2 pages, Previou
     await next(region).click();
     await expect(pageOf(region)).toHaveText("Página 2 de 2");
     await search.fill(`CORACAO ${tag}`);
-    await expect(region.getByText(`12 resultados para “CORACAO ${tag}”`)).toBeVisible();
-    await expect(heading).toHaveText("12 séries");
+    await expect(resultsLine(region)).toHaveText(`12 resultados para “CORACAO ${tag}”`);
+    await expect(heading).toHaveText(total(12, "séries"));
     await expect(region.getByRole("navigation", { name: "Páginas" })).toHaveCount(0); // one page: no pager
     expect(await shownNames(region, mine)).toEqual(names.slice(0, 12)); // a new search starts on page 1
     await search.fill(`ÉSPADA ${tag} 1`);
-    await expect(region.getByText(`4 resultados para “ÉSPADA ${tag} 1”`)).toBeVisible();
+    await expect(resultsLine(region)).toHaveText(`4 resultados para “ÉSPADA ${tag} 1”`);
     expect(await shownNames(region, mine)).toEqual([10, 11, 12, 13].map((n) => `Espada ${tag} ${n}`));
   });
 
   await test.step("no match → “Nada encontrado”", async () => {
     await search.fill(`nada ${tag}`);
-    await expect(region.getByText(`Nada encontrado para “nada ${tag}”.`)).toBeVisible();
-    await expect(heading).toHaveText(/^0 séries?$/); // pt-BR: 0 takes the singular
+    await expect(region.getByText(`Nada encontrado para “nada ${tag}”.`, { exact: true })).toBeVisible();
+    await expect(heading).toHaveText(total(0, "séries?")); // pt-BR: 0 takes the singular
     await expect(region.locator(":scope > ul > li")).toHaveCount(0);
   });
 });
@@ -136,14 +142,14 @@ test("published videos list: search by title (accent-insensitive) or series name
 
   await page.goto("/admin?tab=published");
   await expect(tab(page, "Publicados")).toHaveAttribute("aria-selected", "true");
-  const region = page.getByRole("region", { name: /^\d+ vídeos? publicados?$/ });
-  const heading = region.getByRole("heading", { level: 2 });
+  const region = listRegion(page, "published-title");
+  const heading = region.locator("#published-title");
   const search = region.getByRole("searchbox", { name: "Buscar vídeos por título ou série" });
 
   await test.step("“ARVORE <tag>” (no accent, upper case) → 22 results, page 1 of 2", async () => {
     await search.fill(`ARVORE ${tag}`);
-    await expect(region.getByText(`22 resultados para “ARVORE ${tag}”`)).toBeVisible();
-    await expect(heading).toHaveText("22 vídeos publicados");
+    await expect(resultsLine(region)).toHaveText(`22 resultados para “ARVORE ${tag}”`);
+    await expect(heading).toHaveText(total(22, "vídeos publicados"));
     await expect(pageOf(region)).toHaveText("Página 1 de 2");
     expect(await shownNames(region, mine)).toEqual(newestFirst.slice(0, 20));
   });
@@ -162,16 +168,16 @@ test("published videos list: search by title (accent-insensitive) or series name
 
   await test.step("a series name matches its videos: “rio <tag>” → the 3 “Pedra” videos", async () => {
     await search.fill(`rio ${tag}`);
-    await expect(region.getByText(`3 resultados para “rio ${tag}”`)).toBeVisible();
-    await expect(heading).toHaveText("3 vídeos publicados");
+    await expect(resultsLine(region)).toHaveText(`3 resultados para “rio ${tag}”`);
+    await expect(heading).toHaveText(total(3, "vídeos publicados"));
     await expect(region.getByRole("navigation", { name: "Páginas" })).toHaveCount(0);
     expect(await shownNames(region, mine)).toEqual([3, 2, 1].map((n) => `Pedra ${tag} ${pad(n)}`));
   });
 
   await test.step("the pending list does not show published videos", async () => {
     await tab(page, "Pendentes").click();
-    const pending = page.getByRole("region", { name: /^\d+ vídeos? pendentes?$/ });
+    const pending = listRegion(page, "pending-title");
     await pending.getByRole("searchbox", { name: "Buscar vídeos por título ou série" }).fill(tag);
-    await expect(pending.getByText(`Nada encontrado para “${tag}”.`)).toBeVisible();
+    await expect(pending.getByText(`Nada encontrado para “${tag}”.`, { exact: true })).toBeVisible();
   });
 });

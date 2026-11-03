@@ -17,7 +17,8 @@ test("admin: series CRUD, add videos, fix a pending one, delete video and series
   // series/videos in parallel: narrow each list with its search box first.
   const search = async (label, q) => {
     await panel.getByRole("searchbox", { name: label }).fill(q);
-    await expect(panel.getByText(new RegExp(`resultados? para “${q}”`))).toBeVisible();
+    // The search bar's live results line ("1 resultado para “q”").
+    await expect(panel.locator('p.hint[aria-live="polite"]')).toHaveText(new RegExp(`^\\d+ resultados? para “${q}”$`));
   };
   const searchSeries = (q = "E2E Saga") => search("Buscar séries", q);
   const searchVideos = (q) => search("Buscar vídeos por título ou série", q);
