@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useT } from "../../i18n/useT.js";
 import { SingleKeyToggle } from "./SingleKeyToggle.jsx";
+import { isApplePlatform } from "../../lib/platform.js";
 
 const ROWS = [
   ["?", "shortcuts.help"],
@@ -33,7 +34,7 @@ export function ShortcutsDialog({ open, onClose }) {
           {t("shortcuts.title")}
         </h2>
         <dl style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.6rem 1rem", alignItems: "center" }}>
-          {ROWS.map(([keys, label]) => (
+          {[[isApplePlatform() ? "⌘ K" : "Ctrl + K", "shortcuts.palette"], ...ROWS].map(([keys, label]) => (
             <div key={keys} style={{ display: "contents" }}>
               <dt>
                 <kbd>{keys}</kbd>

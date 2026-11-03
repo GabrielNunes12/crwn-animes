@@ -1,69 +1,146 @@
-import { Link, useLoaderData } from "react-router";
-import { catalogApi } from "../../api/client.js";
-import { AsyncView } from "../../components/Await/AsyncView.jsx";
-import { CardGridSkeleton } from "../../components/Skeleton/Skeleton.jsx";
-import { Reveal } from "../../components/Reveal/Reveal.jsx";
-import { SeriesCard } from "../../components/Cards/SeriesCard.jsx";
+import { useEffect, useEffectEvent, useState } from "react";
+import { Link, useLocation, useSearchParams } from "react-router";
+import { SearchResults } from "../../components/SearchResults/SearchResults.jsx";
+import { useGenres } from "../../hooks/useGenres.js";
+import { useSearchResults } from "../../hooks/useSearchResults.js";
 import { useTitle } from "../../hooks/useTitle.js";
 import { useT } from "../../i18n/useT.js";
+import { DEBOUNCE_MS, MAX_Q, readSearchParams, SEARCH_SORTS } from "../../lib/search.js";
+import styles from "./Search.module.css";
 
-const SECTIONS = ["anime", "manga"];
-
-export function loader({ request }) {
-  const q = (new URL(request.url).searchParams.get("q") ?? "").trim();
-  return {
-    q,
-    results: q
-      ? Promise.all(SECTIONS.map((s) => catalogApi.seriesList(s, { q }, { signal: request.signal }))).then(([anime, manga]) => ({ anime, manga }))
-      : Promise.resolve(null),
-  };
+/** Segmented control built from native radios (arrow keys move between them for free). */
+function SectionFilter({ value, onChange }) {
+  const { t } = useT();
+  const options = [
+    ["", t("search.sectionAll")],
+    ["anime", t("common.anime")],
+    ["manga", t("common.manga")],
+  ];
+  return (
+    <fieldset className={styles.segmented}>
+      <legend className={styles.legend}>{t("search.sectionLabel")}</legend>
+      <div className={styles.segments}>
+        {options.map(([v, label]) => (
+          <label key={v || "all"} className={styles.segment}>
+            <input type="radio" name="section" value={v} checked={value === v} onChange={() => onChange(v)} />
+            <span>{label}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
 }
 
 export function Component() {
-  const { q, results } = useLoaderData();
   const { t } = useT();
-  useTitle(q ? t("search.resultsFor", { q }) : t("search.title"));
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { q, section, genre, sort } = readSearchParams(searchParams);
+  const genres = useGenres();
+  const results = useSearchResults({ q, section, genre, sort });
+
+  // The text box is a draft of `q`: typing updates the URL after a pause, and
+  // back/forward (or the header search) updates the draft.
+  const [draft, setDraft] = useState(q);
+  const [seenQ, setSeenQ] = useState(q);
+  if (q !== seenQ) {
+    setSeenQ(q);
+    if (draft.trim() !== q) setDraft(q);
+  }
+
+  const heading = q ? t("search.resultsFor", { q }) : t("search.title");
+  useTitle(heading);
+
+  function update(changes, opts) {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        for (const [k, v] of Object.entries(changes)) {
+          if (v) next.set(k, v);
+          else next.delete(k);
+        }
+        // "Relevance" only exists while there is a query.
+        if (!next.get("q") && next.get("sort") === "relevance") next.delete("sort");
+        return next;
+      },
+      { preventScrollReset: true, ...opts },
+    );
+  }
+
+  /** One history entry per burst of typing: the first commit pushes, later ones replace it. */
+  function commitQuery(value, typing) {
+    const next = value.trim().slice(0, MAX_Q);
+    if (next === q) return;
+    update({ q: next }, typing ? { replace: location.state?.typing === true, state: { typing: true } } : undefined);
+  }
+
+  const onTypingPause = useEffectEvent((value) => commitQuery(value, true));
+  useEffect(() => {
+    const id = setTimeout(() => onTypingPause(draft), DEBOUNCE_MS);
+    return () => clearTimeout(id);
+  }, [draft]);
+
+  const genreOptions = genre && !genres.some((g) => g.toLowerCase() === genre.toLowerCase()) ? [genre, ...genres] : genres;
+  const filtered = Boolean(q || section || genre || searchParams.get("sort"));
+  const clearLink = (
+    <Link to="/search" className="btn" style={{ justifySelf: "start" }}>
+      {t("section.clear")}
+    </Link>
+  );
 
   return (
     <div className="container" style={{ paddingBlock: "var(--space-6)" }}>
-      <h1 style={{ marginBlockEnd: "var(--space-5)" }}>{q ? t("search.resultsFor", { q }) : t("search.title")}</h1>
-      {!q && <p className="muted">{t("search.prompt")}</p>}
-      <AsyncView key={q} resolve={results} fallback={<CardGridSkeleton count={6} kind="series" />}>
-        {(data) => {
-          if (!data) return null;
-          const total = data.anime.length + data.manga.length;
-          if (!total)
-            return (
-              <p className="card" role="status">
-                {t("search.empty")}
-              </p>
-            );
-          return (
-            <div className="stack" style={{ "--stack-gap": "var(--space-6)" }}>
-              <p className="visually-hidden" role="status">
-                {t("common.seriesCount", { count: total })}
-              </p>
-              {SECTIONS.map((s) =>
-                data[s].length ? (
-                  <section key={s} aria-labelledby={`search-${s}`}>
-                    <div className="section-head">
-                      <h2 id={`search-${s}`}>{t(`common.${s}`)}</h2>
-                      <Link to={`/${s}?q=${encodeURIComponent(q)}`}>{t("common.seeAll")}</Link>
-                    </div>
-                    <ul className="grid-cards" role="list">
-                      {data[s].map((item, i) => (
-                        <Reveal as="li" key={item.id} index={i % 6}>
-                          <SeriesCard series={item} section={s} />
-                        </Reveal>
-                      ))}
-                    </ul>
-                  </section>
-                ) : null,
-              )}
-            </div>
-          );
+      <h1 className={styles.title}>{heading}</h1>
+
+      <form
+        role="search"
+        aria-label={t("search.formLabel")}
+        className={styles.filters}
+        onSubmit={(e) => {
+          e.preventDefault();
+          commitQuery(draft, false);
         }}
-      </AsyncView>
+      >
+        <div className={`field ${styles.query}`}>
+          <label htmlFor="search-q">{t("search.queryLabel")}</label>
+          <input
+            id="search-q"
+            className="input"
+            type="search"
+            name="q"
+            value={draft}
+            maxLength={MAX_Q}
+            autoComplete="off"
+            enterKeyHint="search"
+            placeholder={t("section.searchPlaceholder")}
+            onChange={(e) => setDraft(e.target.value)}
+          />
+        </div>
+        <SectionFilter value={section} onChange={(v) => update({ section: v })} />
+        <div className="field">
+          <label htmlFor="search-genre">{t("search.genreLabel")}</label>
+          <select id="search-genre" className="select" value={genreOptions.find((g) => g.toLowerCase() === genre.toLowerCase()) ?? ""} onChange={(e) => update({ genre: e.target.value })}>
+            <option value="">{t("search.allGenres")}</option>
+            {genreOptions.map((g) => (
+              <option key={g} value={g}>
+                {g}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="search-sort">{t("search.sortLabel")}</label>
+          <select id="search-sort" className="select" value={sort} onChange={(e) => update({ sort: e.target.value })}>
+            {SEARCH_SORTS.filter((s) => s !== "relevance" || q).map((s) => (
+              <option key={s} value={s}>
+                {t(`search.sort.${s}`)}
+              </option>
+            ))}
+          </select>
+        </div>
+      </form>
+
+      <SearchResults results={results} emptyAction={filtered ? clearLink : null} />
     </div>
   );
 }

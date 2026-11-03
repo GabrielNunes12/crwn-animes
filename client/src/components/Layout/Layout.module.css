@@ -191,7 +191,8 @@
   }
   /* Narrow phones: the language switcher stays available in the footer. */
   @media (max-width: 30rem) {
-    .actions .lang {
+    .actions .lang,
+    .actions .paletteBtn {
       display: none;
     }
     .logo {

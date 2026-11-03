@@ -3,6 +3,7 @@ import { Form, Link, NavLink, useLocation, useNavigate, useSearchParams } from "
 import { useAuth } from "../../auth/useAuth.js";
 import { useT } from "../../i18n/useT.js";
 import { effectiveTheme, setTheme } from "../../lib/prefs.js";
+import { isApplePlatform } from "../../lib/platform.js";
 import { LanguageSelect } from "./LanguageSelect.jsx";
 import styles from "./Layout.module.css";
 
@@ -26,6 +27,34 @@ function ThemeToggle() {
       ) : (
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="currentColor" /><path stroke="currentColor" strokeWidth="2" strokeLinecap="round" d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>
       )}
+    </button>
+  );
+}
+
+/** Opens the ⌘K / Ctrl+K quick-search palette. */
+function PaletteButton({ onOpen }) {
+  const { t } = useT();
+  const keys = isApplePlatform() ? "⌘K" : "Ctrl+K";
+  return (
+    <button
+      type="button"
+      className={`btn btn-ghost btn-icon ${styles.iconBtn} ${styles.paletteBtn}`}
+      onClick={onOpen}
+      aria-label={t("palette.open")}
+      aria-haspopup="dialog"
+      aria-keyshortcuts="Control+K Meta+K"
+      title={`${t("palette.open")} (${keys})`}
+    >
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M18 3a3 3 0 0 0-3 3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 0 0 0-6Z"
+        />
+      </svg>
     </button>
   );
 }
@@ -88,7 +117,7 @@ function UserMenu() {
   );
 }
 
-export function Header({ searchRef }) {
+export function Header({ searchRef, onOpenPalette }) {
   const { isAdmin } = useAuth();
   const { t } = useT();
   const [params] = useSearchParams();
@@ -143,6 +172,7 @@ export function Header({ searchRef }) {
         </Form>
 
         <div className={styles.actions}>
+          {onOpenPalette && <PaletteButton onOpen={onOpenPalette} />}
           <LanguageSelect compact />
           <ThemeToggle />
           <UserMenu />

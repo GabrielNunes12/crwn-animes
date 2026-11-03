@@ -2,9 +2,11 @@ import { Link } from "react-router";
 import { LazyImage } from "../LazyImage/LazyImage.jsx";
 import { RatingBadge } from "./RatingBadge.jsx";
 import { useT } from "../../i18n/useT.js";
+import { sectionLabel } from "../../lib/format.js";
 import styles from "./Cards.module.css";
 
-export function SeriesCard({ series, section }) {
+/** `showSection` adds an Anime/Mangá badge (search results mix both sections). */
+export function SeriesCard({ series, section, showSection = false }) {
   const { t } = useT();
   const countKey = section === "manga" ? "common.chapters" : "common.episodes";
   return (
@@ -12,6 +14,11 @@ export function SeriesCard({ series, section }) {
       <Link to={series.route ?? `/${section}/${series.slug}`} className={styles.link}>
         <div className={styles.media}>
           <LazyImage src={series.coverUrl} alt="" ratio="2 / 3" width={300} height={450} fallbackLabel={series.name} />
+          {showSection && (
+            <div className={styles.badges}>
+              <span className={`badge badge-${section}`}>{sectionLabel(t, section)}</span>
+            </div>
+          )}
         </div>
         <div className={styles.body}>
           <h3 className={styles.title}>{series.name}</h3>

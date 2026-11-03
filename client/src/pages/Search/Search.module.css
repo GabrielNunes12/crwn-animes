@@ -1,0 +1,86 @@
+@layer components {
+  .title {
+    margin-block-end: var(--space-5);
+  }
+  .filters {
+    display: grid;
+    gap: var(--space-4);
+    align-items: end;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+    margin-block-end: var(--space-5);
+  }
+  .query {
+    grid-column: 1 / -1;
+  }
+  @media (min-width: 64rem) {
+    .filters {
+      grid-template-columns: minmax(16rem, 2fr) auto minmax(10rem, 1fr) minmax(10rem, 1fr);
+    }
+    .query {
+      grid-column: auto;
+    }
+  }
+
+  .segmented {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    min-inline-size: 0;
+  }
+  .legend {
+    padding: 0;
+    margin-block-end: 0.35rem;
+    font-weight: 600;
+    font-size: var(--step--1);
+  }
+  .segments {
+    display: flex;
+    padding: 0.2rem;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-pill);
+    background: var(--bg);
+  }
+  .segment {
+    position: relative;
+    flex: 1 1 auto;
+    display: flex;
+  }
+  .segment input {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .segment span {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    min-block-size: 2.25rem;
+    padding-inline: 0.9rem;
+    border-radius: var(--radius-pill);
+    color: var(--muted);
+    font-weight: 600;
+    font-size: var(--step--1);
+    white-space: nowrap;
+    transition:
+      background-color var(--dur-fast),
+      color var(--dur-fast);
+  }
+  .segment input:hover + span {
+    color: var(--text);
+  }
+  .segment input:checked + span {
+    background: var(--primary-fill);
+    color: var(--on-accent);
+  }
+  .segment input:focus-visible + span {
+    outline: 2px solid var(--secondary);
+    outline-offset: 2px;
+  }
+  @media (forced-colors: active) {
+    .segment input:checked + span {
+      outline: 2px solid CanvasText;
+    }
+  }
+}
