@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router";
 import { SearchResults } from "../../components/SearchResults/SearchResults.jsx";
 import { useGenres } from "../../hooks/useGenres.js";
@@ -67,11 +67,20 @@ export function Component() {
     );
   }
 
-  /** One history entry per burst of typing: the first commit pushes, later ones replace it. */
+  // The last query whose results were actually on screen. A typed query gets its own
+  // history entry once the user has seen its results; intermediate drafts whose results
+  // never arrived (still typing) are replaced instead, so Back skips half-typed words
+  // but never a query the user looked at.
+  const shownQ = useRef(null);
+  useEffect(() => {
+    if (!results.loading) shownQ.current = q;
+  }, [results.loading, q]);
+
   function commitQuery(value, typing) {
     const next = value.trim().slice(0, MAX_Q);
     if (next === q) return;
-    update({ q: next }, typing ? { replace: location.state?.typing === true, state: { typing: true } } : undefined);
+    const replace = typing && location.state?.typing === true && shownQ.current !== q;
+    update({ q: next }, typing ? { replace, state: { typing: true } } : undefined);
   }
 
   const onTypingPause = useEffectEvent((value) => commitQuery(value, true));

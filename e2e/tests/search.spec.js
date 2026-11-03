@@ -41,6 +41,15 @@ const resultCount = (page) => page.getByRole("status").filter({ hasText: /^\d+ r
 const genreSelect = (page) => page.getByRole("combobox", { name: "Gênero", exact: true });
 const sortSelect = (page) => page.getByRole("combobox", { name: "Ordenar por" });
 const sectionRadio = (page, name) => page.getByRole("radio", { name, exact: true });
+/**
+ * Clicks a section radio. Not locator.check(): the radios are controlled by the
+ * URL, which updates on the router's (async) navigation, so right after the
+ * click React may briefly re-render the old choice; the assertion waits for it.
+ */
+async function pickSection(page, name) {
+  await sectionRadio(page, name).click();
+  await expect(sectionRadio(page, name)).toBeChecked();
+}
 
 test.describe("search page", () => {
   test("accent-insensitive: “pokemon” finds “Pokémon Teste” (both sections), and so does its alias", async ({ page }) => {
@@ -75,17 +84,17 @@ test.describe("search page", () => {
     await expect(sortSelect(page)).toHaveValue("relevance");
 
     await test.step("section: Mangá, then Anime, then Todas", async () => {
-      await sectionRadio(page, "Mangá").check();
+      await pickSection(page, "Mangá");
       await expect(page).toHaveURL(/[?&]section=manga(&|$)/);
       await expect(resultNames(page)).toHaveText(["Pokémon Teste"]);
       await expect(results(page).getByText("Mangá", { exact: true })).toBeVisible();
 
-      await sectionRadio(page, "Anime").check();
+      await pickSection(page, "Anime");
       await expect(page).toHaveURL(/[?&]section=anime(&|$)/);
       await expect(resultNames(page)).toHaveText(["Pokémon Teste", "Arena dos Pokémon"]);
       await expect(resultCount(page)).toHaveText("2 resultados");
 
-      await sectionRadio(page, "Todas").check();
+      await pickSection(page, "Todas");
       await expect(page).not.toHaveURL(/section=/);
       await expect(resultNames(page)).toHaveText(["Pokémon Teste", "Pokémon Teste", "Arena dos Pokémon"]);
     });
@@ -133,7 +142,7 @@ test.describe("search page", () => {
       await expect(page).toHaveURL(/\/search\?q=pokemon$/);
       await expect(resultNames(page)).toHaveText(["Pokémon Teste", "Pokémon Teste", "Arena dos Pokémon"]);
 
-      await sectionRadio(page, "Anime").check();
+      await pickSection(page, "Anime");
       await expect(page).toHaveURL(/\/search\?q=pokemon&section=anime$/);
       await expect(resultNames(page)).toHaveText(["Pokémon Teste", "Arena dos Pokémon"]);
 
@@ -160,6 +169,7 @@ test.describe("search page", () => {
     });
   });
 
+  // Regression: a typed query whose results the user saw must keep its own history entry.
   test("back after typing a second query (after the first one's results were shown) restores the first query", async ({ page }) => {
     await page.goto("/search");
     await expect(resultCount(page)).toBeVisible();
@@ -173,7 +183,7 @@ test.describe("search page", () => {
     await expect(resultNames(page)).toHaveText(["Pokémon Teste", "Pokémon Teste"]);
 
     await page.goBack();
-    await expect(page).toHaveURL(/\/search\?q=pokemon$/);
+    await expect(page).toHaveURL(/\/search\?q=pokemon$/, { timeout: 5_000 }); // a same-document Back is instant
     await expect(queryBox(page)).toHaveValue("pokemon");
     await expect(resultNames(page)).toHaveText(["Pokémon Teste", "Pokémon Teste", "Arena dos Pokémon"]);
   });
