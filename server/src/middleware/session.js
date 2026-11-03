@@ -3,21 +3,22 @@ import { SESSION_TTL_MS } from "../authService.js";
 
 export const COOKIE_NAME = "sid";
 
+/** { present, value }: value is null when the cookie is absent or cannot be decoded. */
 function readCookie(req, name) {
   const header = req.headers.cookie;
-  if (!header) return null;
+  if (!header) return { present: false, value: null };
   for (const part of header.split(";")) {
     const index = part.indexOf("=");
     if (index === -1) continue;
     if (part.slice(0, index).trim() === name) {
       try {
-        return decodeURIComponent(part.slice(index + 1).trim());
+        return { present: true, value: decodeURIComponent(part.slice(index + 1).trim()) };
       } catch {
-        return null;
+        return { present: true, value: null };
       }
     }
   }
-  return null;
+  return { present: false, value: null };
 }
 
 const cookieOptions = (config) => ({
@@ -35,10 +36,15 @@ export function clearSessionCookie(res, config) {
   res.clearCookie(COOKIE_NAME, cookieOptions(config));
 }
 
-/** Sets req.sessionToken and req.user (the raw user row, or null). */
+/**
+ * Sets req.sessionToken, req.user (the raw user row, or null) and
+ * req.hasSessionCookie (a sid cookie came with the request, valid or not).
+ */
 export function loadSession(auth) {
   return function sessionLoader(req, res, next) {
-    req.sessionToken = readCookie(req, COOKIE_NAME);
+    const cookie = readCookie(req, COOKIE_NAME);
+    req.hasSessionCookie = cookie.present;
+    req.sessionToken = cookie.value;
     req.user = auth.userForSession(req.sessionToken);
     next();
   };

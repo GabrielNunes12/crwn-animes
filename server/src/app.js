@@ -2,12 +2,13 @@ import cors from "cors";
 import express from "express";
 import helmet from "helmet";
 import fs from "node:fs";
+import http from "node:http";
 import path from "node:path";
 import { createAuthService } from "./authService.js";
 import { loadConfig, parseTrustProxy } from "./config.js";
 import { HttpError, notFound } from "./errors.js";
 import { createMailer } from "./mail.js";
-import { noStore, requireJsonBody } from "./middleware/security.js";
+import { noStore, requireJsonBody, requireSameOrigin } from "./middleware/security.js";
 import { loadSession } from "./middleware/session.js";
 import { createRatingService } from "./ratingService.js";
 import { createRepository } from "./repository.js";
@@ -48,10 +49,19 @@ function toHttpError(err) {
     case "charset.unsupported":
     case "encoding.unsupported":
       return new HttpError(415, err.message);
-    default:
-      if (err?.expose && err.status >= 400 && err.status < 500) return new HttpError(err.status, err.message);
+    default: {
+      // A malformed %-escape in a route parameter ("/api/videos/%FF"): the router throws a URIError (status 400).
+      if (err instanceof URIError) {
+        return new HttpError(400, "The URL contains an invalid %-escape.", { url: "Malformed percent-encoding." }, "VALIDATION_ERROR");
+      }
+      // Any other client error raised by Express or a middleware: its status, no stack in the log.
+      const status = Number(err?.status ?? err?.statusCode);
+      if (Number.isInteger(status) && status >= 400 && status < 500) {
+        return new HttpError(status, err.expose && err.message ? err.message : (http.STATUS_CODES[status] ?? "Bad request."));
+      }
       console.error(err);
       return new HttpError(500, "Something went wrong on our side.", {}, "INTERNAL_ERROR");
+    }
   }
 }
 
@@ -87,7 +97,8 @@ export function createApp({ db, config: overrides = {}, mailer, fetchVideoInfo =
   // ---- API ----
   app.use("/api", cors({ origin: config.clientOrigins, credentials: true }));
   app.use("/api", noStore); // catalog GETs switch to a public cache in their router
-  app.use("/api", requireJsonBody, express.json({ limit: "20kb" }));
+  // Bodies must be JSON (415) and writes must come from the app's own origin (403 CROSS_SITE_REQUEST).
+  app.use("/api", requireJsonBody, requireSameOrigin(config), express.json({ limit: "20kb" }));
   app.use("/api", loadSession(auth));
 
   app.use("/api/auth", authRoutes({ auth, config }));
