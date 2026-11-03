@@ -138,13 +138,31 @@ export async function loginViaApi(request, { email, password }) {
   return api(request, "POST", "/api/auth/login", { email, password }, { expectStatus: 200 });
 }
 
+/**
+ * Every item of a paginated admin list (`{ items, total }`, API v1.3):
+ * GET /api/admin/videos or /api/admin/series, following limit/offset to the end.
+ * `params` are extra query parameters (q, status, availability).
+ */
+export async function listAll(admin, endpoint, params = {}) {
+  const items = [];
+  for (let offset = 0; ; offset += 100) {
+    const query = new URLSearchParams({ ...params, limit: "100", offset: String(offset) });
+    const res = await admin.get(`${endpoint}?${query}`);
+    if (!res.ok()) throw new Error(`GET ${endpoint}?${query} → ${res.status()} ${await res.text()}`);
+    const page = await res.json();
+    expect(page, `${endpoint} returns { items, total }`).toMatchObject({ items: expect.any(Array), total: expect.any(Number) });
+    items.push(...page.items);
+    if (page.items.length === 0 || offset + 100 >= page.total) return items;
+  }
+}
+
 /** Creates a series (or returns the existing one with that slug). */
 export async function ensureSeries(admin, { name, slug, aliases = [], genres = [], synopsis = null }) {
   const res = await admin.post("/api/admin/series", { data: { name, slug, aliases, genres, synopsis } });
   if (res.status() === 201) return (await res.json()).series;
   if (res.status() === 409) {
-    const all = await (await admin.get("/api/admin/series")).json();
-    return all.find((s) => s.slug === slug);
+    const found = (await listAll(admin, "/api/admin/series", { q: name })).find((s) => s.slug === slug);
+    return found ?? (await listAll(admin, "/api/admin/series")).find((s) => s.slug === slug);
   }
   throw new Error(`POST /api/admin/series → ${res.status()} ${await res.text()}`);
 }
