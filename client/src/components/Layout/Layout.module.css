@@ -189,6 +189,15 @@
     justify-content: flex-end;
     gap: var(--space-1);
   }
+  /* Narrow phones: the language switcher stays available in the footer. */
+  @media (max-width: 30rem) {
+    .actions .lang {
+      display: none;
+    }
+    .logo {
+      font-size: var(--step-0);
+    }
+  }
   .iconBtn {
     min-block-size: 2.5rem;
     min-inline-size: 2.5rem;
