@@ -1,0 +1,357 @@
+@layer components {
+  .shell {
+    display: grid;
+    grid-template-rows: auto auto 1fr auto;
+    min-block-size: 100dvh;
+  }
+  .skip {
+    position: absolute;
+    inset-inline-start: var(--space-3);
+    inset-block-start: -10rem;
+    z-index: 100;
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius);
+    background: var(--primary-fill);
+    color: var(--on-accent);
+    font-weight: 700;
+  }
+  .skip:focus {
+    inset-block-start: var(--space-3);
+  }
+  .progress {
+    position: fixed;
+    inset-inline: 0;
+    inset-block-start: 0;
+    z-index: 60;
+    block-size: 3px;
+    background: var(--gradient-brand);
+    transform-origin: left;
+    scale: 0 1;
+    opacity: 0;
+    transition:
+      scale 0s,
+      opacity 300ms;
+  }
+  .progress[data-active="true"] {
+    opacity: 1;
+    scale: 0.85 1;
+    transition:
+      scale 8s cubic-bezier(0.1, 0.8, 0.2, 1),
+      opacity 100ms;
+  }
+
+  /* ----- header: sticky glass bar ----- */
+  .header {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 50;
+    border-block-end: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
+    background: var(--glass);
+    backdrop-filter: saturate(1.6) blur(14px);
+    -webkit-backdrop-filter: saturate(1.6) blur(14px);
+  }
+  @supports (animation-timeline: scroll()) {
+    .header {
+      animation: header-lift linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0 8rem;
+    }
+    @keyframes header-lift {
+      to {
+        box-shadow: 0 10px 30px -18px oklch(0% 0 0 / 0.7);
+        border-block-end-color: var(--border);
+      }
+    }
+  }
+  .headerInner {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+      "logo actions"
+      "nav nav"
+      "search search";
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+    padding-block: var(--space-2);
+  }
+  @media (min-width: 52rem) {
+    .headerInner {
+      grid-template-columns: auto auto 1fr auto;
+      grid-template-areas: "logo nav search actions";
+      min-block-size: var(--header-h);
+      gap: var(--space-4);
+    }
+  }
+  .logo {
+    grid-area: logo;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text);
+    font-family: var(--font-heading);
+    font-weight: 800;
+    font-size: var(--step-1);
+    text-decoration: none;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+  }
+  .logo:hover {
+    color: var(--text);
+  }
+  .logo svg {
+    transition: rotate var(--dur) var(--ease-spring);
+  }
+  .logo:hover svg {
+    rotate: -8deg;
+  }
+  .nav {
+    grid-area: nav;
+    display: flex;
+    gap: var(--space-1);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .navLink {
+    padding: 0.4rem 0.8rem;
+    border-radius: var(--radius-pill);
+    color: var(--muted);
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    transition:
+      color var(--dur-fast),
+      background-color var(--dur-fast);
+  }
+  .navLink:hover {
+    color: var(--text);
+    background: var(--elevated);
+  }
+  .navLink[aria-current="page"] {
+    color: var(--text);
+    background: var(--primary-soft);
+    box-shadow: inset 0 -2px 0 var(--primary);
+  }
+  .search {
+    grid-area: search;
+    position: relative;
+    display: flex;
+    align-items: center;
+    max-inline-size: 30rem;
+    inline-size: 100%;
+    justify-self: stretch;
+  }
+  @media (min-width: 52rem) {
+    .search {
+      justify-self: center;
+    }
+  }
+  .searchIcon {
+    position: absolute;
+    inset-inline-start: 0.85rem;
+    color: var(--muted);
+    pointer-events: none;
+  }
+  .searchInput {
+    inline-size: 100%;
+    min-block-size: 2.5rem;
+    padding: 0.45rem 2.5rem 0.45rem 2.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: color-mix(in oklch, var(--bg) 70%, transparent);
+    color: var(--text);
+    transition:
+      border-color var(--dur-fast),
+      box-shadow var(--dur-fast),
+      background-color var(--dur-fast);
+  }
+  .searchInput::placeholder {
+    color: var(--muted);
+  }
+  .searchInput:focus-visible {
+    outline: none;
+    border-color: var(--secondary);
+    box-shadow: var(--ring);
+    background: var(--bg);
+  }
+  .searchKbd {
+    position: absolute;
+    inset-inline-end: 0.75rem;
+    color: var(--muted);
+    pointer-events: none;
+  }
+  .search:focus-within .searchKbd {
+    display: none;
+  }
+  .actions {
+    grid-area: actions;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-1);
+  }
+  .iconBtn {
+    min-block-size: 2.5rem;
+    min-inline-size: 2.5rem;
+  }
+  .lang {
+    display: inline-flex;
+  }
+  .langSelect {
+    min-block-size: 2.5rem;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text);
+    font-size: var(--step--1);
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .langSelect option {
+    background: var(--surface);
+    color: var(--text);
+  }
+  .authLinks {
+    display: flex;
+    gap: var(--space-1);
+  }
+  @media (max-width: 23rem) {
+    .authLinks :global(.btn-ghost) {
+      padding-inline: 0.5rem;
+    }
+  }
+
+  .menu {
+    position: relative;
+  }
+  .menuButton {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-block-size: 2.5rem;
+    padding: 0.2rem 0.6rem 0.2rem 0.2rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    list-style: none;
+    cursor: pointer;
+  }
+  .menuButton::-webkit-details-marker {
+    display: none;
+  }
+  .avatar {
+    display: grid;
+    place-items: center;
+    inline-size: 2rem;
+    block-size: 2rem;
+    border-radius: 50%;
+    background: var(--gradient-brand);
+    color: var(--on-accent);
+    font-weight: 800;
+  }
+  .menuName {
+    max-inline-size: 8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+    font-size: var(--step--1);
+  }
+  @media (max-width: 30rem) {
+    .menuName {
+      display: none;
+    }
+    .menuButton {
+      padding-inline-end: 0.2rem;
+    }
+  }
+  .menuPanel {
+    position: absolute;
+    inset-inline-end: 0;
+    inset-block-start: calc(100% + 0.5rem);
+    display: grid;
+    min-inline-size: 13rem;
+    padding: var(--space-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    animation: menu-in var(--dur) var(--ease-out);
+  }
+  @keyframes menu-in {
+    from {
+      opacity: 0;
+      translate: 0 -0.4rem;
+    }
+  }
+  .menuEmail {
+    padding: var(--space-2);
+    color: var(--muted);
+    font-size: var(--step--1);
+    overflow-wrap: anywhere;
+    border-block-end: 1px solid var(--border);
+    margin-block-end: var(--space-1);
+  }
+  .menuItem {
+    display: block;
+    padding: 0.55rem var(--space-2);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    text-align: start;
+    text-decoration: none;
+    font-weight: 500;
+  }
+  .menuItem:hover {
+    background: var(--elevated);
+    color: var(--text);
+  }
+
+  .main {
+    min-inline-size: 0;
+    padding-block-end: var(--space-8);
+  }
+  .main:focus {
+    outline: none;
+  }
+
+  /* ----- footer ----- */
+  .footer {
+    border-block-start: 1px solid var(--border);
+    background: color-mix(in oklch, var(--surface) 60%, transparent);
+    padding-block: var(--space-6);
+  }
+  .footerInner {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--space-5);
+  }
+  .footerBrand {
+    font-family: var(--font-heading);
+    font-weight: 800;
+    font-size: var(--step-1);
+  }
+  .footerNav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-4);
+  }
+  .footerNav a,
+  .linkButton {
+    color: var(--muted);
+    font-weight: 500;
+  }
+  .footerNav a:hover,
+  .linkButton:hover {
+    color: var(--text);
+  }
+  .linkButton {
+    padding: 0;
+    border: 0;
+    background: none;
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+  }
+}

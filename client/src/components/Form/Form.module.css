@@ -1,0 +1,49 @@
+@layer components {
+  .pwWrap {
+    position: relative;
+  }
+  .pwWrap :global(.input) {
+    padding-inline-end: 4.5rem;
+  }
+  .reveal {
+    position: absolute;
+    inset-block: 0.3rem;
+    inset-inline-end: 0.3rem;
+    padding-inline: 0.75rem;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: var(--elevated);
+    color: var(--text);
+    font-size: var(--step--1);
+    font-weight: 600;
+  }
+  .pwHint {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .meter {
+    display: inline-grid;
+    grid-template-columns: repeat(4, 1.6rem);
+    gap: 3px;
+  }
+  .meter span {
+    block-size: 5px;
+    border-radius: var(--radius-pill);
+    background: var(--border-strong);
+    transition: background-color var(--dur);
+  }
+  .meter[data-score="1"] span:nth-child(-n + 1) {
+    background: var(--danger);
+  }
+  .meter[data-score="2"] span:nth-child(-n + 2) {
+    background: var(--warning);
+  }
+  .meter[data-score="3"] span:nth-child(-n + 3) {
+    background: var(--secondary);
+  }
+  .meter[data-score="4"] span {
+    background: var(--success);
+  }
+}

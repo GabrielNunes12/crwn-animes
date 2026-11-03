@@ -1,0 +1,61 @@
+@layer components {
+  .frame {
+    position: relative;
+    display: block;
+    overflow: hidden;
+    inline-size: 100%;
+    background: var(--skeleton);
+    border-radius: inherit;
+  }
+  .frame[data-state="loading"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(100deg, transparent 20%, var(--skeleton-shine) 50%, transparent 80%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s linear infinite;
+  }
+  .frame img {
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+    opacity: 0;
+    filter: blur(14px);
+    scale: 1.04;
+    transition:
+      opacity 500ms var(--ease-out),
+      filter 600ms var(--ease-out),
+      scale 600ms var(--ease-out);
+  }
+  .frame[data-state="loaded"] img {
+    opacity: 1;
+    filter: none;
+    scale: 1;
+  }
+  .fallback {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: var(--gradient-brand);
+    color: var(--on-accent);
+    font-family: var(--font-heading);
+    font-weight: 800;
+    font-size: clamp(1.25rem, 6cqi, 2.5rem);
+    opacity: 0.85;
+  }
+  @keyframes shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .frame img {
+      filter: none;
+      scale: 1;
+    }
+  }
+}

@@ -1,0 +1,166 @@
+@layer components {
+  .page {
+    position: relative;
+    isolation: isolate;
+  }
+  .banner {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: 0;
+    z-index: -1;
+    block-size: 26rem;
+    background-image:
+      linear-gradient(to bottom, color-mix(in oklch, var(--bg) 40%, transparent), var(--bg)),
+      var(--cover, var(--gradient-brand));
+    background-size: cover;
+    background-position: center 30%;
+    filter: blur(24px) saturate(1.2);
+    opacity: 0.55;
+    mask-image: linear-gradient(to bottom, black 40%, transparent);
+  }
+  .top {
+    display: grid;
+    gap: var(--space-5);
+    padding-block-start: var(--space-6);
+    grid-template-columns: 1fr;
+  }
+  @media (min-width: 40rem) {
+    .top {
+      grid-template-columns: minmax(10rem, 15rem) 1fr;
+      align-items: end;
+    }
+  }
+  .cover {
+    inline-size: min(100%, 14rem);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-lift);
+  }
+  @media (min-width: 40rem) {
+    .cover {
+      inline-size: 100%;
+    }
+  }
+  .info {
+    display: grid;
+    gap: var(--space-3);
+    justify-items: start;
+  }
+  .info ul {
+    padding: 0;
+  }
+  .kicker a {
+    color: var(--muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: var(--step--1);
+    text-decoration: none;
+  }
+  .title {
+    font-size: var(--step-4);
+  }
+  .synopsis {
+    max-inline-size: 65ch;
+  }
+  .listTitle {
+    margin-block-end: var(--space-4);
+  }
+  .season + .season {
+    margin-block-start: var(--space-6);
+  }
+  .seasonTitle {
+    margin-block-end: var(--space-3);
+    color: var(--muted);
+  }
+  .list {
+    container-type: inline-size;
+    display: grid;
+    gap: var(--space-2);
+    padding: 0;
+  }
+  .item {
+    display: grid;
+    grid-template-columns: 7.5rem 1fr auto;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    text-decoration: none;
+    transition:
+      border-color var(--dur-fast),
+      background-color var(--dur-fast),
+      translate var(--dur) var(--ease-out);
+  }
+  a.item:hover {
+    color: var(--text);
+    border-color: color-mix(in oklch, var(--primary) 60%, var(--border));
+    background: var(--elevated);
+    translate: 4px 0;
+  }
+  .disabled {
+    opacity: 0.5;
+    filter: grayscale(1);
+    cursor: not-allowed;
+  }
+  [data-done] .item .epTitle {
+    color: var(--muted);
+  }
+  .thumb {
+    position: relative;
+    display: block;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+  .bar {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-end: 0;
+    block-size: 3px;
+    background: linear-gradient(to right, var(--primary) var(--p), color-mix(in oklch, var(--bg) 60%, transparent) var(--p));
+  }
+  .text {
+    display: grid;
+    min-inline-size: 0;
+    gap: 0.1rem;
+  }
+  .epLabel {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-weight: 700;
+  }
+  .epTitle {
+    color: var(--muted);
+    font-size: var(--step--1);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .unavail {
+    color: var(--warning);
+    font-size: var(--step--1);
+    font-weight: 600;
+  }
+  .check {
+    display: grid;
+    place-items: center;
+    inline-size: 1.8rem;
+    block-size: 1.8rem;
+    border-radius: 50%;
+    background: var(--success);
+    color: var(--on-accent);
+    font-weight: 900;
+  }
+  .state {
+    min-inline-size: 1.8rem;
+  }
+  @container (inline-size < 22rem) {
+    .item {
+      grid-template-columns: 5.5rem 1fr auto;
+    }
+  }
+}

@@ -1,0 +1,48 @@
+@layer components {
+  .list {
+    display: flex;
+    gap: var(--space-1);
+    padding: var(--space-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--surface);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tab {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-block-size: 2.5rem;
+    padding: 0.4rem 1rem;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--muted);
+    font-weight: 600;
+    transition:
+      background-color var(--dur-fast),
+      color var(--dur-fast);
+  }
+  .tab:hover {
+    color: var(--text);
+  }
+  .tab[aria-selected="true"] {
+    background: var(--primary-fill);
+    color: var(--on-accent);
+  }
+  .count {
+    min-inline-size: 1.4rem;
+    padding: 0 0.35rem;
+    border-radius: var(--radius-pill);
+    background: color-mix(in oklch, currentColor 18%, transparent);
+    font-size: 0.75rem;
+  }
+  .panel {
+    padding-block-start: var(--space-5);
+  }
+  .panel:focus-visible {
+    outline-offset: 4px;
+  }
+}

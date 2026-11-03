@@ -1,0 +1,16 @@
+@layer components {
+  .grid {
+    display: grid;
+    gap: var(--space-5);
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+    align-items: start;
+  }
+  .grid h2 {
+    font-size: var(--step-1);
+  }
+  .ok {
+    min-block-size: 1.2em;
+    color: var(--success);
+    font-size: var(--step--1);
+  }
+}

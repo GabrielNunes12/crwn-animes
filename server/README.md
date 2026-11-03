@@ -1,0 +1,66 @@
+# Crwn Animes — API server
+
+Express 5 + SQLite (better-sqlite3). Implements [`docs/API.md`](../docs/API.md).
+Node ≥ 20.
+
+## Run
+
+```sh
+cd server
+npm install
+cp .env.example .env      # optional; every setting has a default
+npm run dev               # http://localhost:4000, restarts on change
+```
+
+In development no SMTP server is needed: e-mails go to an in-memory outbox
+(`GET /api/dev/outbox`) and verification/reset links are printed to the console.
+In production, if `../client/dist/index.html` exists the server also serves the
+built React app and falls back to `index.html` for client-side routes.
+
+## Scripts
+
+| Script | What it does |
+|---|---|
+| `npm start` | Start the API (`src/index.js`). |
+| `npm run dev` | Same, with `node --watch`. |
+| `npm test` | All tests (`node --test`): classifier, auth, sessions, admin, ratings, catalog, GDPR, headers. In-memory DB, fake YouTube lookups. |
+| `npm run make-admin -- someone@example.com` | Promote an existing account to admin. |
+
+## Environment
+
+See [`.env.example`](.env.example) — each variable is documented there.
+`DATABASE_FILE` is resolved relative to `server/` and `.env` is read from
+`server/.env`, whatever directory you start the process from.
+
+## Layout
+
+- `src/app.js` — `createApp({ db, config, mailer, fetchVideoInfo })`, no `listen` (tests use it).
+- `src/index.js` — loads `.env`, opens the DB, starts background jobs, listens.
+- `src/routes/` — `auth`, `me`, `catalog`, `ratings`, `admin`, `dev`.
+- `src/*Service.js` — auth, ratings, videos; `src/mail.js` — e-mails (pt-BR + en).
+- `src/classifier.js` — works out section/series/season/number from a YouTube title.
+- `src/db.js` — schema + migrations (`PRAGMA user_version`); `src/retention.js` — cleanup and YouTube health-check jobs.
+
+## Data we store and why
+
+| Table | Personal data | Why | Kept until |
+|---|---|---|---|
+| `users` | e-mail, display name, scrypt password hash, privacy-consent time | login, show your name, prove consent | account deleted; **unverified accounts are deleted after 7 days** |
+| `sessions` | SHA-256 of the session token, user id, expiry | stay logged in | 30-day expiry, purged hourly |
+| `email_tokens` | SHA-256 of the token, user id, purpose (`verify`/`reset`), expiry | confirm e-mail, reset password | used, or expired (24 h / 1 h), purged hourly |
+| `ratings` | user id, video id, score, reaction | the rating feature | account deleted |
+| `rating_activity` | **not personal data**: per-video, per-day counts, no user id | "trending" | 30 days |
+
+Never stored: IP addresses (the rate limiter keeps them in memory only, for 15
+minutes), user agents, analytics, the e-mail language choice. Nothing logs
+e-mail addresses or passwords. The only cookie is the essential `sid`
+(httpOnly, SameSite=Lax, Secure in production). Users can export their data
+(`GET /api/me/export`) and delete their account (`DELETE /api/me`).
+
+## Background jobs (in-process, unref'd timers)
+
+- Retention: at startup and hourly — purge expired sessions/tokens, unverified
+  accounts older than 7 days, rating activity older than 30 days.
+- YouTube health check: hourly ticks re-check videos not checked in 24 h via
+  oEmbed; 401/403/404 marks a video `unavailable` (hidden from latest/top-rated/
+  trending/random). Admins can also run it with `POST /api/admin/videos/health-check`.

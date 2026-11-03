@@ -116,7 +116,8 @@ const SEASON_PATTERNS = [
 ];
 
 const NUMBER_PATTERNS = {
-  anime: [/ s\d{1,2} ?e(\d{1,4}) /, / (?:episode|episodio|ep) ?(\d{1,4}) /],
+  // Spanish titles call anime episodes "Capítulo" too, so it is a last resort here.
+  anime: [/ s\d{1,2} ?e(\d{1,4}) /, / (?:episode|episodio|ep) ?(\d{1,4}) /, / (?:capitulo|cap) ?(\d{1,4}) /],
   manga: [/ (?:chapter|chap|ch|capitulo|cap) ?(\d{1,4}) /],
 };
 
