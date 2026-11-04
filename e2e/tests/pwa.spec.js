@@ -800,7 +800,7 @@ test.describe("offline page accessibility", () => {
     await expect(page.getByRole("button", { name: "Tentar novamente" })).toBeFocused();
 
     // An English browser on the production server (CSP: no inline script): /offline.js picks English.
-    const en = await newGuardedContext(browser, { locale: "en-US", storageState: { cookies: [], origins: [] }, serviceWorkers: "block" });
+    const en = await newGuardedContext(browser, { locale: "en-US", serviceWorkers: "block" });
     try {
       const enPage = await en.newPage();
       const violations = await trackCsp(enPage);

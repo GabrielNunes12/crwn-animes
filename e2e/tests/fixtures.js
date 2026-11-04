@@ -59,9 +59,19 @@ export async function guardNetwork(context) {
   return blocked;
 }
 
-/** A new browser context with the network guard (for a second "device"). */
+/** No cookies, no localStorage: a visitor who has never been to the site. */
+export const EMPTY_STATE = Object.freeze({ cookies: [], origins: [] });
+
+/**
+ * A new browser context with the network guard (for a second "device"), logged out unless
+ * `options.storageState` says otherwise. Inside a test, browser.newContext() fills in every
+ * option it is not given from the test's `use` options, storageState included: in a spec with
+ * test.use({ storageState: ADMIN_STATE }) a "second device" would otherwise start with the
+ * shared admin's sid, and logging another account in from it (createUser, loginViaApi) rotates
+ * that sid, so every later test using .auth/admin.json gets 401 for the rest of the run.
+ */
 export async function newGuardedContext(browser, options = {}) {
-  const context = await browser.newContext({ locale: "pt-BR", ...options });
+  const context = await browser.newContext({ locale: "pt-BR", storageState: EMPTY_STATE, ...options });
   context.blockedRequests = await guardNetwork(context);
   return context;
 }

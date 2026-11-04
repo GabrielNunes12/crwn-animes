@@ -49,17 +49,9 @@ async function seedBoardSeries(admin, prefix, spec) {
   return { ...series, id: created.id, v: Object.fromEntries(spec.map(([key], i) => [key, videos[i]])) };
 }
 
-/**
- * An anonymous browser context with the network guard. The storage state is set explicitly:
- * contexts made with browser.newContext() inside a test pick up the test's `use` options, here
- * the shared admin session — and logging another account in from a context that carries the
- * admin's sid would rotate (kill) that shared session.
- */
-const anonymousContext = (browser, baseURL) => newGuardedContext(browser, { baseURL, storageState: { cookies: [], origins: [] } });
-
 /** A verified user in its own browser context (with the network guard), who rates videos through the API. */
 async function newFan(browser, baseURL) {
-  const context = await anonymousContext(browser, baseURL);
+  const context = await newGuardedContext(browser, { baseURL });
   await createUser(context.request, { email: uniqueEmail("fan"), displayName: "Fã do Quadro" });
   const rate = async (video, score, reaction = null) => {
     const res = await context.request.put(`/api/videos/${video.id}/rating`, { data: { score, reaction } });
@@ -70,7 +62,7 @@ async function newFan(browser, baseURL) {
 
 /** Runs fn(page) on `path` in a brand-new anonymous context (no HTTP cache from earlier visits). */
 async function asVisitor(browser, baseURL, path, fn) {
-  const context = await anonymousContext(browser, baseURL);
+  const context = await newGuardedContext(browser, { baseURL });
   try {
     const page = await context.newPage();
     await page.goto(path);
@@ -411,7 +403,7 @@ test.describe("series board", () => {
 
     /** The series page in a fresh context whose localStorage holds `progress` (written once, before the app boots). */
     const withProgress = async (fn) => {
-      const context = await anonymousContext(browser, baseURL);
+      const context = await newGuardedContext(browser, { baseURL });
       await context.addInitScript(
         ([key, value]) => {
           if (sessionStorage.getItem("e2e:progress-seeded")) return;
@@ -854,7 +846,7 @@ test.describe("draft preview", () => {
     });
 
     await test.step("a normal user is sent home (“só para administradores”) and gets 403 from the API", async () => {
-      const context = await anonymousContext(browser, baseURL);
+      const context = await newGuardedContext(browser, { baseURL });
       await createUser(context.request, { email: uniqueEmail("nopreview"), displayName: "Curioso" });
       const p = await context.newPage();
       await p.goto(`/admin/preview/${video.id}`);
@@ -886,7 +878,7 @@ test.describe("draft preview", () => {
 test.describe("stable ids (v1.6: never reused)", () => {
   test("a video and a series deleted forever: the next ones get new, higher ids; the old ids stay 404 everywhere", async ({ admin, browser, baseURL }) => {
     const S = await seedBoardSeries(admin, "Ids", [["Um", "anime", 1, 1]]);
-    const visitor = await anonymousContext(browser, baseURL);
+    const visitor = await newGuardedContext(browser, { baseURL });
     const publicStatus = async (path) => (await visitor.request.get(`${API_ORIGIN}${path}`)).status();
 
     await test.step("video: the newest video, deleted forever → the next video's id is higher; /api/videos/<old id> stays 404", async () => {

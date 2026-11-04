@@ -18,14 +18,13 @@
 // formatted by the page's own Intl (pt-BR), like the app does, so ICU differences between Node and
 // Chromium cannot make a test fail.
 import { request as playwrightRequest } from "@playwright/test";
-import { test, expect, ADMIN_STATE, createUser, expectNoSeriousViolations, fakeYouTubeId, newGuardedContext, seedSeries, uniqueEmail } from "./fixtures.js";
+import { test, expect, ADMIN_STATE, EMPTY_STATE, createUser, expectNoSeriousViolations, fakeYouTubeId, newGuardedContext, seedSeries, uniqueEmail } from "./fixtures.js";
 
 test.use({ storageState: ADMIN_STATE });
 
 const tagOf = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 /** Letters only: a title without any digit has no (guessed) episode number. */
 const lettersOf = (n = 10) => Array.from({ length: n }, () => "abcdefghijklmnopqrstuvwxyz"[Math.floor(Math.random() * 26)]).join("");
-const EMPTY_STATE = { cookies: [], origins: [] };
 
 /** docs/API.md v1.6: the stable reason keys and the Portuguese label the tab shows for each. */
 const REASON_PT = {
@@ -701,7 +700,7 @@ test.describe("admin metrics (Métricas)", () => {
 
   test("a normal user gets 403 from the API and never sees the tab (sent home, no request); a visitor gets 401 and the login page", async ({ browser, baseURL }) => {
     await test.step("normal user", async () => {
-      const context = await newGuardedContext(browser, { baseURL, storageState: EMPTY_STATE });
+      const context = await newGuardedContext(browser, { baseURL });
       try {
         await createUser(context.request, { email: uniqueEmail("nometrics"), displayName: "Sem Métricas" });
         for (const path of ["/api/admin/metrics", "/api/admin/metrics?days=7", "/api/admin/metrics?days=90"]) {
@@ -728,7 +727,7 @@ test.describe("admin metrics (Métricas)", () => {
     });
 
     await test.step("visitor", async () => {
-      const context = await newGuardedContext(browser, { baseURL, storageState: EMPTY_STATE });
+      const context = await newGuardedContext(browser, { baseURL });
       try {
         const page = await context.newPage();
         const sent = trackMetricsRequests(page);
