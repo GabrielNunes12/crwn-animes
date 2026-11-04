@@ -130,7 +130,9 @@ test.describe("privacy", () => {
       await page.getByLabel("Senha", { exact: true }).fill(user.password);
       await page.locator("main form").getByRole("button", { name: "Entrar" }).click();
       await expect(headerUser(page, user.displayName)).toBeVisible();
-      expect(new URL(page.url()).hostname).toBe("localhost");
+      // The header updates before the router finishes navigating (the next page's chunk
+      // loads first), so wait for the URL itself: a hostile ?next= must land on our own "/".
+      await expect(page).toHaveURL(`${API_ORIGIN}/`);
       await loginStillHere(page, context);
     }
   });
