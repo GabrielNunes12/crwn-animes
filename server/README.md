@@ -41,7 +41,7 @@ changes; above 50,000 URLs `/sitemap.xml` becomes a sitemap index of
 |---|---|
 | `npm start` | Start the API (`src/index.js`). |
 | `npm run dev` | Same, with `node --watch`. |
-| `npm test` | All tests (`node --test`): classifier, auth, sessions, admin, ratings, catalog, search, pagination/seasons, SEO/sitemap, GDPR, headers, trash, admin board, thumbnails, PWA files, stable ids (migration 14), admin metrics. In-memory DB, fake YouTube lookups and thumbnails (nothing reaches youtube.com / ytimg.com), a temporary thumbnail cache per server, a temporary fake `client/dist` (`createApp({ config: { clientDist } })`). |
+| `npm test` | All tests (`node --test`): classifier, auth, sessions, admin, ratings, catalog, search, pagination/seasons, SEO/sitemap, GDPR, headers, trash, admin board, thumbnails (both sizes, v1.7), PWA files, stable ids (migration 14), admin metrics. In-memory DB, fake YouTube lookups and thumbnails (nothing reaches youtube.com / ytimg.com), a temporary thumbnail cache per server, a temporary fake `client/dist` (`createApp({ config: { clientDist } })`). |
 | `npm run make-admin -- someone@example.com` | Promote an existing account to admin. |
 | `node src/scripts/bench-admin-lists.js [50000]` | Times the paginated admin lists, `/api/latest` and `/api/search` over HTTP on a throwaway database with that many videos (1% of them and 10 series in the trash; p50/p95). |
 | `node src/scripts/bench-admin-metrics.js [50000] [1000000] [--analyze]` | Builds a schema-13 throwaway database (videos, ratings over the last 90 days, trash, cached thumbnails), times the upgrade (migrations 14–15), then `GET /api/admin/metrics?days=7/30/90` over HTTP and the service call alone (p50/p95). |
@@ -106,34 +106,44 @@ See [`.env.example`](.env.example) — each variable is documented there.
   `videoIds` must be exactly that season's set (400); then it renumbers 1..n (changing videos go through `-n`
   first so the unique slot index never collides) and pins each number as `overrides.number`; `GET /api/admin/videos/:id/preview` returns any non-purged video (pending/trashed too).
 
-## Same-origin images: thumbnails and series covers (v1.5)
+## Same-origin images: thumbnails and series covers (v1.5, responsive thumbnails v1.7)
 
 `src/imageCache.js` (shared cache and fetch machinery), `src/thumbnails.js`, `src/covers.js`, `src/netPolicy.js`,
 `src/routes/images.js`. A visitor's browser never contacts Google or a cover host: the CSP `img-src` is
-`'self' data:`. `Video.thumbnailUrl` is `/api/thumbs/<youtubeVideoId>.jpg` (`null` for a trashed video);
+`'self' data:`. Thumbnails come in two sizes (`THUMB_SIZES`): `GET /api/thumbs/<id>.jpg` is YouTube's
+`hqdefault` (480×360) and `GET /api/thumbs/<id>-m.jpg` its `mqdefault` (320×180); everything below applies to
+both, each size being a cache key of its own (`thumbKey()`: `<id>` / `<id>-m`). `Video.thumbnailUrl` is
+`/api/thumbs/<youtubeVideoId>.jpg` and `Video.thumbnailSrcSet` (v1.7, public and admin) is
+`"/api/thumbs/<id>-m.jpg 320w, /api/thumbs/<id>.jpg 480w"` — both `null` for a trashed video;
 `Series.coverUrl` is `/api/covers/<seriesId>.img?v=<first 8 hex of SHA-256(source URL)>` (`null` without a cover
 or for a trashed series). Admin responses add `coverSourceUrl` (the URL the admin typed; `publicSeries()` strips
 it from public ones); admin create/patch still take `coverUrl` as that source, and it must be `https:`, default
-port, no user name/password (else 400). `og:image` and JSON-LD `image`/`thumbnailUrl` are `APP_URL` + the path.
+port, no user name/password (else 400). `og:image` and JSON-LD `image`/`thumbnailUrl` are `APP_URL` + the path
+(always the 480w `<id>.jpg`; the srcset never reaches SEO markup).
 `robots.txt` has `Allow: /api/thumbs/` and `Allow: /api/covers/` before `Disallow: /api/`.
 
-1. **The database decides first** (404, nothing goes upstream): `GET /api/thumbs/:id.jpg` needs exactly
-   `<11 × [A-Za-z0-9_-]>.jpg` and a live video (published or pending, not trashed) with `availability: "ok"`;
+1. **The database decides first** (404, nothing goes upstream): `GET /api/thumbs/:file` needs exactly
+   `<11 × [A-Za-z0-9_-]>.jpg` or `<11 × [A-Za-z0-9_-]>-m.jpg`, matched on the path as sent (case-sensitive, no
+   `%`-escapes such as `%2Dm`, no trailing slash, no `-M`/`-mq`/`.JPG`/… variants: one URL per image), and a live
+   video (published or pending, not trashed) with `availability: "ok"`;
    `GET /api/covers/:seriesId.img` needs a live series with a cover (`?v=` only busts browser caches).
-2. **Cache** (`THUMB_CACHE_DIR`, `THUMB_CACHE_MB` for both kinds): files `<id>.jpg` and
+2. **Cache** (`THUMB_CACHE_DIR`, `THUMB_CACHE_MB` for both kinds): files `<id>.jpg`, `<id>-m.jpg` and
    `cover-<seriesId>-<hash>.<jpg|png|webp|avif>`, named from validated keys only, written to a `.tmp` file and
    renamed; just before the rename the owner must still exist (a purge mid-download leaves nothing). LRU by size
    (in-memory index); a hit refreshes the file's mtime (at most once a minute) and the first-use scan orders
    files by mtime, so the LRU order survives restarts. Leftover `.tmp` files are deleted, other files never touched.
-3. **Upstream** (on a miss): single-flight per key; at most 4 fetches at once per kind, up to 256 waiting
-   (beyond: 502 at once). A failed key answers **502 without any upstream request for 10 minutes** (bounded
-   memory, 10,000 keys; a new cover URL is a new key). Misses (requests that start or join a fetch) are
-   limited per IP, thumbnails and covers together: `IMAGE_MISS_RATE_MAX` per 5 minutes (default 300), then
-   **429** with `Retry-After`; cache hits and remembered failures do not count.
-4. **Thumbnails** (`fetchYoutubeThumbnail`, injectable `fetchThumbnail(id)`): `GET
-   https://i.ytimg.com/vi/<id>/hqdefault.jpg`, 5 s (body included), redirects refused, `200` + `image/jpeg` + JPEG
+3. **Upstream** (on a miss): single-flight per key (so per ID **and** size); at most 4 fetches at once per kind
+   (both thumbnail sizes share the thumbnails' 4), up to 256 waiting (beyond: 502 at once). A failed key answers
+   **502 without any upstream request for 10 minutes** (bounded memory, 10,000 keys; per size, so a failed `-m`
+   does not block `<id>.jpg`; a new cover URL is a new key). Misses (requests that start or join a fetch, either
+   thumbnail size) are limited per IP, thumbnails and covers together: `IMAGE_MISS_RATE_MAX` per 5 minutes
+   (default 300), then **429** with `Retry-After`; cache hits and remembered failures do not count.
+4. **Thumbnails** (`fetchYoutubeThumbnail(id, { size })`, injectable `fetchThumbnail(id, size)` with `size`
+   `"hq"` or `"mq"`): `GET https://i.ytimg.com/vi/<id>/hqdefault.jpg` (or `mqdefault.jpg` for `-m`; any other
+   size is a 502 that never becomes a URL), 5 s (body included), redirects refused, `200` + `image/jpeg` + JPEG
    bytes + ≤ 512 KB (a larger `Content-Length` refused at once, a stream cancelled past 512 KB). Tests only:
-   `THUMB_UPSTREAM` (a base URL) replaces `https://i.ytimg.com` outside production; with `NODE_ENV=production`
+   `THUMB_UPSTREAM` (a base URL) replaces `https://i.ytimg.com` outside production (a fake must serve both
+   `/vi/<id>/hqdefault.jpg` and `/vi/<id>/mqdefault.jpg`); with `NODE_ENV=production`
    the server refuses to start while it is set, and `createApp` ignores it there anyway (`thumbnailUpstream()`).
 5. **Covers: SSRF rules** (`fetchCover`, injectable `fetchCover(url)`; its `lookup`/`request` are injectable for
    tests): `https:` only, port 443 only, no credentials. The host name is resolved once (`dns.promises.lookup`,
@@ -148,7 +158,8 @@ port, no user name/password (else 400). `og:image` and JSON-LD `image`/`thumbnai
    `public, max-age=604800` and the validated type; both `X-Content-Type-Options: nosniff`,
    `Cross-Origin-Resource-Policy: same-origin`. The routes sit before the session loader (no cookie lookup,
    never a `Set-Cookie`). Errors are `private, no-store` JSON; upstream problems are one generic 502, never logged.
-7. **Removal**: delete-forever and the 7-day trash purge delete the files of those videos and series; the
+7. **Removal**: delete-forever and the 7-day trash purge delete the files of those videos (both sizes,
+   `thumbKeys()`) and series; the
    hourly retention run then deletes cached files that belong to nothing any more (a swapped YouTube upload,
    a replaced cover URL, a crash between purge and delete). The trash keeps files (restore) but answers 404.
 

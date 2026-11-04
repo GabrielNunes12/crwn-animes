@@ -3,6 +3,7 @@ import { seriesRoute, videoRoute } from "./routing.js";
 import { canonicalGenres, genreKey, genreSpellings, sortGenres } from "./genres.js";
 import { TRASH_TTL_MS } from "./retention.js";
 import { NEEDLE_MATCH, NEEDLE_RANK, searchNormalize, searchText } from "./search.js";
+import { thumbnailPath, thumbnailSrcSet } from "./thumbnails.js";
 
 const parseJson = (text, fallback) => {
   try {
@@ -57,9 +58,6 @@ export function publicSeries(series) {
 const NEW_FOR_MS = 7 * 24 * 60 * 60 * 1000;
 const NOW_ISO = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 
-/** Video.thumbnailUrl: GET /api/thumbs/<id>.jpg (src/routes/images.js). IDs are [A-Za-z0-9_-]{11}. */
-const thumbnailPath = (youtubeVideoId) => `/api/thumbs/${youtubeVideoId}.jpg`;
-
 // Full video, as admins see it. Public responses go through publicVideo().
 function toVideo(row) {
   const video = {
@@ -68,8 +66,10 @@ function toVideo(row) {
     title: row.source_title,
     channel: row.channel,
     // Same-origin (v1.5): the server fetches and caches it, the browser never contacts Google before Play.
-    // A trashed video's is null (/api/thumbs answers 404 for it).
+    // A trashed video's is null (/api/thumbs answers 404 for it), and so is its srcset.
     thumbnailUrl: row.deleted_at ? null : thumbnailPath(row.youtube_video_id),
+    // v1.7: "/api/thumbs/<id>-m.jpg 320w, /api/thumbs/<id>.jpg 480w" (src/thumbnails.js).
+    thumbnailSrcSet: row.deleted_at ? null : thumbnailSrcSet(row.youtube_video_id),
     section: row.section,
     seriesId: row.series_id,
     seriesSlug: row.series_slug ?? null,

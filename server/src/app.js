@@ -25,7 +25,7 @@ import { coverHash, createCoverSource, fetchCover as fetchCoverImage, parseCover
 import { createImageCache } from "./imageCache.js";
 import { rateLimit } from "./middleware/rateLimit.js";
 import { imageRoutes } from "./routes/images.js";
-import { createThumbnailSource, fetchYoutubeThumbnail } from "./thumbnails.js";
+import { createThumbnailSource, fetchYoutubeThumbnail, parseThumbKey, thumbKeys } from "./thumbnails.js";
 import { createVideoService } from "./videoService.js";
 import { fetchVideoInfo as youtubeFetchVideoInfo } from "./youtube.js";
 
@@ -83,12 +83,16 @@ export function toHttpError(err) {
  */
 function createImages({ repo, config, fetchThumbnail, fetchCover }) {
   // A cached file stays only while it belongs to something: a video (live or trashed)
-  // with that YouTube ID, or a series (live or trashed) whose CURRENT cover URL has that hash.
+  // with that YouTube ID (either size, "<id>" or "<id>-m"), or a series (live or trashed)
+  // whose CURRENT cover URL has that hash.
   const belongs = (key) => {
     const cover = parseCoverKey(key);
-    if (!cover) return repo.thumbnailState(key) !== null;
-    const source = repo.coverSource(cover.seriesId)?.sourceUrl;
-    return Boolean(source) && coverHash(source) === cover.hash;
+    if (cover) {
+      const source = repo.coverSource(cover.seriesId)?.sourceUrl;
+      return Boolean(source) && coverHash(source) === cover.hash;
+    }
+    const thumb = parseThumbKey(key);
+    return Boolean(thumb) && repo.thumbnailState(thumb.id) !== null;
   };
   const cache = createImageCache({
     dir: config.thumbCacheDir,
@@ -106,9 +110,9 @@ function createImages({ repo, config, fetchThumbnail, fetchCover }) {
       name: "images",
       message: "Too many images requested. Please wait a few minutes.",
     }),
-    /** Files of videos/series deleted for good (delete-forever, the 7-day purge). */
+    /** Files of videos/series deleted for good (delete-forever, the 7-day purge): every thumbnail size. */
     purge({ youtubeIds = [], seriesIds = [] } = {}) {
-      cache.remove(youtubeIds);
+      cache.remove(thumbKeys(youtubeIds));
       const gone = new Set(seriesIds);
       if (gone.size > 0) cache.removeMatching((key) => gone.has(parseCoverKey(key)?.seriesId));
     },
@@ -124,8 +128,9 @@ function createImages({ repo, config, fetchThumbnail, fetchCover }) {
  * @param config          settings from loadConfig() (missing keys get defaults)
  * @param mailer          { send(message), outbox } (default: createMailer(config))
  * @param fetchVideoInfo  async (youtubeVideoId) => { title, channel } (default: YouTube oEmbed)
- * @param fetchThumbnail  async (youtubeVideoId) => Buffer of a JPEG ≤ 512 KB, throws on failure
- *                        (default: hqdefault.jpg from i.ytimg.com, or from THUMB_UPSTREAM outside
+ * @param fetchThumbnail  async (youtubeVideoId, size) => Buffer of a JPEG ≤ 512 KB, throws on failure;
+ *                        size "hq" (GET /api/thumbs/<id>.jpg) or "mq" (<id>-m.jpg) (default:
+ *                        <size>default.jpg from i.ytimg.com, or from THUMB_UPSTREAM outside
  *                        production; src/thumbnails.js)
  * @param fetchCover      async (sourceUrl) => { body, type }, throws on failure (default: the
  *                        SSRF-guarded fetch of src/covers.js)
@@ -141,7 +146,7 @@ export function createApp({
   const config = { ...loadConfig({}), ...overrides };
   mailer ??= createMailer(config);
   const thumbBaseUrl = thumbnailUpstream(config); // i.ytimg.com in production, whatever THUMB_UPSTREAM says
-  fetchThumbnail ??= (id) => fetchYoutubeThumbnail(id, { baseUrl: thumbBaseUrl });
+  fetchThumbnail ??= (id, size) => fetchYoutubeThumbnail(id, { size, baseUrl: thumbBaseUrl });
 
   const repo = createRepository(db);
   const videos = createVideoService({ repo, fetchVideoInfo });

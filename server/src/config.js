@@ -35,7 +35,7 @@ export function parseTrustProxy(value) {
   );
 }
 
-/** Where thumbnails are fetched from by default (GET <base>/vi/<id>/hqdefault.jpg). */
+/** Where thumbnails are fetched from by default (GET <base>/vi/<id>/hqdefault.jpg and mqdefault.jpg). */
 export const THUMB_UPSTREAM_DEFAULT = "https://i.ytimg.com";
 
 /**
@@ -118,7 +118,7 @@ export function loadConfig(env = process.env) {
     sitemapMaxUrls: 50_000, // per sitemap file (protocol limit); tests lower it
     // Built React app served in production; relative paths resolve from server/.
     clientDist: path.resolve(SERVER_DIR, env.CLIENT_DIST || "../client/dist"),
-    // Same-origin YouTube thumbnails (GET /api/thumbs/<id>.jpg): on-disk LRU cache, created on first use.
+    // Same-origin YouTube thumbnails (GET /api/thumbs/<id>.jpg and <id>-m.jpg): on-disk LRU cache, created on first use.
     thumbCacheDir: path.resolve(SERVER_DIR, env.THUMB_CACHE_DIR || "./data/thumbs"),
     thumbCacheMb: Math.max(0, int(env.THUMB_CACHE_MB, 200)), // 0 = keep nothing on disk
     // Same-origin thumbnails/covers: upstream fetches (cache misses) per IP per 5 minutes (429 beyond).

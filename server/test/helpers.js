@@ -77,8 +77,9 @@ export class Client {
  * Starts the app on port 0 with an in-memory DB.
  * fake.titles[id] sets what "YouTube" answers; fake.gone has IDs that answer 404;
  * fake.down makes every lookup fail like a network error; fake.delayMs slows lookups.
- * Thumbnails never leave the process: `fetchThumbnail` (default: records the ID in
- * fake.thumbCalls and answers fakeJpeg(id); null = the app's real default, for
+ * Thumbnails never leave the process: `fetchThumbnail(id, size)` (default: records the
+ * cache key — the ID, or "<id>-m" for the 320w size — in fake.thumbCalls and answers
+ * fakeJpeg(thatKey); null = the app's real default, for
  * THUMB_UPSTREAM tests against a local fake) and a fresh temporary THUMB_CACHE_DIR
  * (`thumbDir`, removed by close() unless config.thumbCacheDir was given). Covers
  * likewise: `fetchCover` (default: records the URL in fake.coverCalls, answers
@@ -91,9 +92,10 @@ export async function startServer({ config = {}, mailer: customMailer, fetchThum
   const ownThumbDir = config.thumbCacheDir ? null : fs.mkdtempSync(path.join(os.tmpdir(), "crwn-thumbs-"));
   const thumbDir = config.thumbCacheDir ?? ownThumbDir;
   if (fetchThumbnail === undefined) {
-    fetchThumbnail = async (id) => {
-      fake.thumbCalls.push(id);
-      return fakeJpeg(id);
+    fetchThumbnail = async (id, size) => {
+      const key = size === "mq" ? `${id}-m` : id;
+      fake.thumbCalls.push(key);
+      return fakeJpeg(key);
     };
   }
   if (fetchCover === undefined) {

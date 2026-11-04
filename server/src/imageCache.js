@@ -2,8 +2,9 @@
 // (src/covers.js) share (docs/API.md v1.5):
 //
 // - createImageCache(): one on-disk LRU cache (THUMB_CACHE_DIR, THUMB_CACHE_MB).
-//   A key is an 11-char YouTube ID (thumbnail) or "cover-<seriesId>-<8 hex>";
-//   the file is "<key>.<jpg|png|webp|avif>", built from a validated key only.
+//   A key is an 11-char YouTube ID (its hqdefault thumbnail), that ID + "-m"
+//   (its mqdefault thumbnail, v1.7) or "cover-<seriesId>-<8 hex>"; the file is
+//   "<key>.<jpg|png|webp|avif>", built from a validated key only.
 //   Writes go to a temporary file and are renamed; just before the rename
 //   `isKnown(key)` must still hold, so an image purged mid-download leaves
 //   nothing. Index changes (rename, evict, remove) are synchronous. A hit
@@ -22,7 +23,7 @@ import { HttpError } from "./errors.js";
 export const IMAGE_TYPES = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif" };
 const TYPE_OF_EXT = Object.fromEntries(Object.entries(IMAGE_TYPES).map(([type, ext]) => [ext, type]));
 
-const KEY = String.raw`[A-Za-z0-9_-]{11}|cover-[1-9]\d{0,15}-[0-9a-f]{8}`;
+const KEY = String.raw`[A-Za-z0-9_-]{11}(?:-m)?|cover-[1-9]\d{0,15}-[0-9a-f]{8}`;
 /** A cache key: nothing else ever becomes a file name. */
 export const CACHE_KEY = new RegExp(`^(?:${KEY})$`);
 const CACHE_FILE = new RegExp(`^(${KEY})\\.(jpg|png|webp|avif)$`);
