@@ -6,7 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { after, before, describe, test } from "node:test";
-import { openDatabase } from "../src/db.js";
+import { SCHEMA_VERSION, openDatabase } from "../src/db.js";
 import { createRatingService } from "../src/ratingService.js";
 import { createRepository } from "../src/repository.js";
 import { TRASH_TTL_MS, purgeTrash, startRetention } from "../src/retention.js";
@@ -614,7 +614,7 @@ describe("migration 13", () => {
 
       const db = openDatabase(file);
       try {
-        assert.equal(db.pragma("user_version", { simple: true }), 13);
+        assert.equal(db.pragma("user_version", { simple: true }), SCHEMA_VERSION);
         assert.deepEqual(db.prepare("SELECT * FROM series_stats").all(), before);
         assert.deepEqual(db.prepare("SELECT n, total FROM rating_totals").get(), { n: 3, total: 6 });
         const sql = (name) => db.prepare("SELECT sql FROM sqlite_master WHERE name = ?").get(name).sql;

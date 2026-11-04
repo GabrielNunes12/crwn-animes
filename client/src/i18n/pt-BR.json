@@ -561,7 +561,8 @@
       "pending": "Pendentes",
       "published": "Publicados",
       "broken": "Quebrados",
-      "trash": "Lixeira"
+      "trash": "Lixeira",
+      "metrics": "Métricas"
     },
     "status": {
       "published": "Publicado",
@@ -836,6 +837,88 @@
       "availability": "Disponibilidade",
       "available": "Disponível no YouTube",
       "none": "—"
+    },
+    "metrics": {
+      "title": "Métricas",
+      "hint": "Só totais anônimos do catálogo e das avaliações — nada por usuário.",
+      "period": "Período",
+      "periodDays": "{days} dias",
+      "updatedAt": "Atualizado às {time}",
+      "updatedLive": "Métricas atualizadas às {time} — últimos {days} dias.",
+      "refreshing": "Atualizando…",
+      "tiles": {
+        "series": "Séries",
+        "seriesDetail": "{anime} com anime · {manga} com mangá",
+        "anime": "Vídeos de anime",
+        "manga": "Vídeos de mangá",
+        "inSeries": {
+          "one": "em {count} série",
+          "other": "em {count} séries"
+        },
+        "pending": "Pendentes",
+        "oldest": "o mais antigo {when}",
+        "queueEmpty": "Fila vazia",
+        "unavailable": "Indisponíveis",
+        "unavailableDetail": "Veja a aba Quebrados",
+        "trash": "Vídeos na lixeira",
+        "trashDetail": {
+          "one": "e {count} série",
+          "other": "e {count} séries"
+        },
+        "ratings": "Avaliações",
+        "average": "média {avg} de 5",
+        "thumbs": "Miniaturas em cache",
+        "thumbsDetail": {
+          "one": "{size} · {count} falha lembrada",
+          "other": "{size} · {count} falhas lembradas"
+        }
+      },
+      "chart": {
+        "title": "Avaliações por dia",
+        "showTable": "Ver tabela",
+        "keys": "Passe o mouse sobre o gráfico ou foque nele e use as setas ← → para ver cada dia.",
+        "lead": "Avaliações por dia nos últimos {days} dias",
+        "total": {
+          "one": "{count} avaliação no total",
+          "other": "{count} avaliações no total"
+        },
+        "peak": "pico de {count} em {day}",
+        "emptyDays": {
+          "one": "{count} dia sem avaliações",
+          "other": "{count} dias sem avaliações"
+        },
+        "none": "nenhuma avaliação",
+        "zero": "Nenhuma avaliação",
+        "empty": "Nenhuma avaliação neste período.",
+        "caption": "Avaliações por dia, últimos {days} dias",
+        "day": "Dia",
+        "count": "Avaliações",
+        "average": "Média",
+        "noAverage": "sem média",
+        "avg": "média {avg}"
+      },
+      "pending": {
+        "title": "Fila de pendentes",
+        "empty": "A fila está vazia.",
+        "count": "Na fila",
+        "median": "Idade mediana",
+        "oldest": "Mais antigo",
+        "reasons": "Motivos mais comuns",
+        "noReasons": "Nenhum motivo registrado.",
+        "reason": {
+          "noSection": "Não deu para saber se é anime ou mangá",
+          "noSeries": "Sem série",
+          "noNumber": "Sem número de episódio ou capítulo",
+          "slotTaken": "O lugar do episódio/capítulo já tem um vídeo publicado",
+          "ready": "Completo e com o lugar livre: pronto para publicar"
+        }
+      },
+      "top": {
+        "title": "Séries mais bem avaliadas",
+        "hint": "Média bayesiana, com 3 avaliações ou mais. O nome abre o quadro da série.",
+        "empty": "Ainda não há séries com 3 avaliações ou mais.",
+        "avg": "média {avg}"
+      }
     }
   },
   "genre": {

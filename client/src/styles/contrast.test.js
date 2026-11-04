@@ -59,6 +59,22 @@ describe("colour contrast", () => {
     }
   });
 
+  it("chart marks (admin Métricas) are ≥ 3:1 against the card and tooltip surfaces in both themes (WCAG 1.4.11)", () => {
+    for (const light of [false, true]) {
+      const vars = theme(light);
+      for (const mark of ["var(--chart-mark)", "var(--chart-mark-active)"]) {
+        for (const around of ["var(--surface)", "var(--elevated)", "var(--bg)"]) {
+          expect(contrast(resolve(vars, mark), resolve(vars, around)), `${light ? "light" : "dark"} ${mark} on ${around}`).toBeGreaterThanOrEqual(3);
+        }
+      }
+    }
+    // The (prefers-color-scheme: light) block must match the manual light theme.
+    const media = tokens.slice(tokens.indexOf("@media (prefers-color-scheme: light)"), tokens.indexOf(':root[data-theme="light"] {'));
+    for (const name of ["--chart-mark", "--chart-mark-active"]) {
+      expect(media.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1]).toBe(theme(true)[name]);
+    }
+  });
+
   /** "a, :where(b, c):hover" → ["a", ":where(b, c):hover"] (commas inside parentheses don't split). */
   function splitSelectors(list) {
     const out = [];

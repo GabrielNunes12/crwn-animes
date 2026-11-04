@@ -443,7 +443,183 @@ const MIGRATIONS = [
       BEGIN ${BUMP_VERSION} END;
     `);
   },
+
+  // 14: ids are never reused (v1.6). Without AUTOINCREMENT SQLite hands out
+  // max(id) + 1, so deleting the newest video/series for good (delete forever,
+  // the 7-day purge) gave its id to the next one, and a cached
+  // /api/videos/<id> could show another video. Rebuilds series and videos as
+  // INTEGER PRIMARY KEY AUTOINCREMENT, keeping every row, id, index, trigger
+  // and foreign key (see rebuildWithAutoincrement).
+  (db) => rebuildWithAutoincrement(db),
+
+  // 15: admin metrics (v1.6). rating_days = rating_activity summed per day
+  // (anonymous, like its source; triggers keep it equal to
+  // SELECT day, SUM(count), SUM(score_sum) FROM rating_activity GROUP BY day,
+  // whoever writes, retention and FK cascades included), so the daily ratings
+  // chart reads at most 90 rows instead of every (video, day) row. A partial
+  // index counts unavailable live videos without scanning the table.
+  `
+  CREATE TABLE rating_days (
+    day        TEXT PRIMARY KEY,
+    count      INTEGER NOT NULL,
+    score_sum  INTEGER NOT NULL
+  ) WITHOUT ROWID;
+  INSERT INTO rating_days (day, count, score_sum)
+    SELECT day, SUM(count), SUM(score_sum) FROM rating_activity GROUP BY day
+    HAVING SUM(count) <> 0 OR SUM(score_sum) <> 0;
+
+  CREATE TRIGGER rating_days_insert AFTER INSERT ON rating_activity BEGIN
+    ${addRatingDay("NEW", "+")}
+    ${dropEmptyRatingDay("NEW")}
+  END;
+  CREATE TRIGGER rating_days_update AFTER UPDATE OF day, count, score_sum ON rating_activity BEGIN
+    ${addRatingDay("OLD", "-")}
+    ${addRatingDay("NEW", "+")}
+    ${dropEmptyRatingDay("OLD")}
+    ${dropEmptyRatingDay("NEW")}
+  END;
+  CREATE TRIGGER rating_days_delete AFTER DELETE ON rating_activity BEGIN
+    ${addRatingDay("OLD", "-")}
+    ${dropEmptyRatingDay("OLD")}
+  END;
+
+  CREATE INDEX videos_unavailable ON videos (availability, deleted_at)
+    WHERE availability = 'unavailable' AND deleted_at IS NULL;
+  `,
 ];
+
+// ---- migration 14: AUTOINCREMENT rebuild of series and videos ----
+
+// The current definitions (migrations 1, 2, 4, 9, 13), column for column, with
+// AUTOINCREMENT. `{name}` is the temporary table name.
+const AUTOINCREMENT_TABLES = [
+  {
+    table: "series",
+    create: `
+      CREATE TABLE {name} (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        slug         TEXT NOT NULL UNIQUE,
+        name         TEXT NOT NULL,
+        aliases      TEXT NOT NULL DEFAULT '[]',
+        genres       TEXT NOT NULL DEFAULT '[]',
+        cover_url    TEXT,
+        created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+        synopsis     TEXT,
+        search_text  TEXT NOT NULL DEFAULT '',
+        deleted_at   TEXT
+      )`,
+    columns: ["id", "slug", "name", "aliases", "genres", "cover_url", "created_at", "synopsis", "search_text", "deleted_at"],
+  },
+  {
+    table: "videos",
+    create: `
+      CREATE TABLE {name} (
+        id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+        youtube_video_id     TEXT NOT NULL UNIQUE,
+        source_title         TEXT NOT NULL,
+        channel              TEXT,
+        section              TEXT CHECK (section IN ('anime', 'manga')),
+        series_id            INTEGER REFERENCES series(id) ON DELETE CASCADE,
+        season               INTEGER NOT NULL DEFAULT 1,
+        number               INTEGER,
+        status               TEXT NOT NULL CHECK (status IN ('published', 'pending')),
+        classification       TEXT NOT NULL DEFAULT '{}',
+        overrides            TEXT NOT NULL DEFAULT '{}',
+        created_at           TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at           TEXT NOT NULL DEFAULT (datetime('now')),
+        published_at         TEXT,
+        availability         TEXT NOT NULL DEFAULT 'ok' CHECK (availability IN ('ok', 'unavailable')),
+        checked_at           TEXT,
+        title_search         TEXT NOT NULL DEFAULT '',
+        deleted_at           TEXT,
+        trashed_with_series  INTEGER NOT NULL DEFAULT 0
+      )`,
+    columns: [
+      "id", "youtube_video_id", "source_title", "channel", "section", "series_id", "season", "number", "status",
+      "classification", "overrides", "created_at", "updated_at", "published_at", "availability", "checked_at",
+      "title_search", "deleted_at", "trashed_with_series",
+    ],
+  },
+];
+
+/**
+ * SQLite's 12-step table rebuild (https://sqlite.org/lang_altertable.html#otheralter),
+ * for series then videos, inside the migration's transaction with foreign keys
+ * off (migrate() checks them all afterwards):
+ *   1. remember the SQL of every index on the two tables and of every trigger or
+ *      view that is on them or mentions them (the rating triggers on `ratings`
+ *      read `videos`), and drop those triggers/views: a rename re-parses the
+ *      schema, and a trigger naming the dropped table would make it fail;
+ *   2. per table: create it again with AUTOINCREMENT, copy every row (ids
+ *      included, no trigger fires: the new table has none yet), drop the old one,
+ *      rename. Other tables' foreign keys name the table (`REFERENCES videos(id)`),
+ *      so they resolve to the new one; the copy is checked row for row (counts);
+ *   3. re-create the indexes (partial and covering ones verbatim), then the
+ *      triggers and views, from the remembered SQL;
+ *   4. sqlite_sequence = the current max id (never lower than what it holds), so
+ *      new ids start above every id still in use. Ids deleted before this
+ *      migration above that max are unknowable; from here on none is reused.
+ * Aggregates (series_stats, rating_totals, video_rating_stats, rating_activity,
+ * catalog_version) are not touched: the rows they describe are the same.
+ */
+function rebuildWithAutoincrement(db) {
+  const names = AUTOINCREMENT_TABLES.map((t) => t.table);
+  const mentions = new RegExp(`\\b(${names.join("|")})\\b`, "i");
+  const objects = db
+    .prepare("SELECT type, name, tbl_name, sql FROM sqlite_master WHERE type IN ('index', 'trigger', 'view') AND sql IS NOT NULL ORDER BY rowid")
+    .all()
+    .filter((o) => names.includes(o.tbl_name) || (o.type !== "index" && mentions.test(o.sql)));
+  const hadStats = Boolean(
+    db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_stat1'").get() &&
+      db.prepare(`SELECT 1 FROM sqlite_stat1 WHERE tbl IN (${names.map(() => "?").join(", ")})`).get(...names)
+  );
+
+  for (const o of objects) {
+    if (o.type === "trigger") db.exec(`DROP TRIGGER "${o.name}"`);
+    if (o.type === "view") db.exec(`DROP VIEW "${o.name}"`);
+  }
+
+  for (const { table, create, columns } of AUTOINCREMENT_TABLES) {
+    const temp = `${table}_v14`;
+    const list = columns.join(", ");
+    const before = db.prepare(`SELECT COUNT(*) AS n, COALESCE(MAX(id), 0) AS max FROM "${table}"`).get();
+    db.exec(create.replace("{name}", temp));
+    db.exec(`INSERT INTO ${temp} (${list}) SELECT ${list} FROM "${table}" ORDER BY id`);
+    const copied = db.prepare(`SELECT COUNT(*) AS n, COALESCE(MAX(id), 0) AS max FROM ${temp}`).get();
+    if (copied.n !== before.n || copied.max !== before.max) throw new Error(`Rebuilding ${table} lost rows.`);
+    db.exec(`DROP TABLE "${table}"`);
+    db.exec(`ALTER TABLE ${temp} RENAME TO ${table}`);
+  }
+
+  // Indexes first (their tables exist again), then triggers and views, in their original order.
+  for (const o of objects.filter((x) => x.type === "index")) db.exec(o.sql);
+  for (const o of objects.filter((x) => x.type !== "index")) db.exec(o.sql);
+
+  for (const table of names) {
+    const max = db.prepare(`SELECT COALESCE(MAX(id), 0) AS max FROM ${table}`).get().max;
+    const row = db.prepare("SELECT seq FROM sqlite_sequence WHERE name = ?").get(table);
+    if (row) db.prepare("UPDATE sqlite_sequence SET seq = ? WHERE name = ?").run(Math.max(row.seq, max), table);
+    else db.prepare("INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)").run(table, max);
+  }
+  if (hadStats) db.exec(names.map((t) => `ANALYZE ${t};`).join(" "));
+}
+
+// ---- migration 15: rating_days trigger bodies ----
+
+// Function declarations: migration 15 is SQL built when MIGRATIONS is defined.
+
+/** Adds (+) or removes (-) the rating_activity row `ref` (NEW/OLD) to/from its day. */
+function addRatingDay(ref, sign) {
+  return `
+    INSERT INTO rating_days (day, count, score_sum) VALUES (${ref}.day, ${sign}${ref}.count, ${sign}${ref}.score_sum)
+      ON CONFLICT (day) DO UPDATE SET count = count + excluded.count, score_sum = score_sum + excluded.score_sum;`;
+}
+
+/** Days back at zero leave the table (absent = no activity). */
+function dropEmptyRatingDay(ref) {
+  return `
+    DELETE FROM rating_days WHERE day = ${ref}.day AND count = 0 AND score_sum = 0;`;
+}
 
 function parseList(text) {
   try {

@@ -561,7 +561,8 @@
       "pending": "Pending",
       "published": "Published",
       "broken": "Broken",
-      "trash": "Trash"
+      "trash": "Trash",
+      "metrics": "Metrics"
     },
     "status": {
       "published": "Published",
@@ -836,6 +837,88 @@
       "availability": "Availability",
       "available": "Available on YouTube",
       "none": "—"
+    },
+    "metrics": {
+      "title": "Metrics",
+      "hint": "Only anonymous totals for the catalog and ratings — nothing per user.",
+      "period": "Period",
+      "periodDays": "{days} days",
+      "updatedAt": "Updated at {time}",
+      "updatedLive": "Metrics updated at {time} — last {days} days.",
+      "refreshing": "Refreshing…",
+      "tiles": {
+        "series": "Series",
+        "seriesDetail": "{anime} with anime · {manga} with manga",
+        "anime": "Anime videos",
+        "manga": "Manga videos",
+        "inSeries": {
+          "one": "in {count} series",
+          "other": "in {count} series"
+        },
+        "pending": "Pending",
+        "oldest": "oldest {when}",
+        "queueEmpty": "Queue empty",
+        "unavailable": "Unavailable",
+        "unavailableDetail": "See the Broken tab",
+        "trash": "Videos in the trash",
+        "trashDetail": {
+          "one": "and {count} series",
+          "other": "and {count} series"
+        },
+        "ratings": "Ratings",
+        "average": "average {avg} of 5",
+        "thumbs": "Cached thumbnails",
+        "thumbsDetail": {
+          "one": "{size} · {count} failure remembered",
+          "other": "{size} · {count} failures remembered"
+        }
+      },
+      "chart": {
+        "title": "Ratings per day",
+        "showTable": "Show table",
+        "keys": "Hover over the chart, or focus it and use the ← → arrow keys, to see each day.",
+        "lead": "Ratings per day over the last {days} days",
+        "total": {
+          "one": "{count} rating in total",
+          "other": "{count} ratings in total"
+        },
+        "peak": "peak of {count} on {day}",
+        "emptyDays": {
+          "one": "{count} day without ratings",
+          "other": "{count} days without ratings"
+        },
+        "none": "no ratings",
+        "zero": "No ratings",
+        "empty": "No ratings in this period.",
+        "caption": "Ratings per day, last {days} days",
+        "day": "Day",
+        "count": "Ratings",
+        "average": "Average",
+        "noAverage": "no average",
+        "avg": "average {avg}"
+      },
+      "pending": {
+        "title": "Pending queue",
+        "empty": "The queue is empty.",
+        "count": "In the queue",
+        "median": "Median age",
+        "oldest": "Oldest",
+        "reasons": "Most common reasons",
+        "noReasons": "No reasons recorded.",
+        "reason": {
+          "noSection": "Couldn’t tell whether it’s anime or manga",
+          "noSeries": "No series",
+          "noNumber": "No episode or chapter number",
+          "slotTaken": "Its episode/chapter slot already has a published video",
+          "ready": "Complete and its slot is free: ready to publish"
+        }
+      },
+      "top": {
+        "title": "Top-rated series",
+        "hint": "Bayesian average, 3 ratings or more. Each name opens the series board.",
+        "empty": "No series has 3 or more ratings yet.",
+        "avg": "average {avg}"
+      }
     }
   },
   "genre": {
