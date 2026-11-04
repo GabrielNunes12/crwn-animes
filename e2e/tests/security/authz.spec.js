@@ -33,6 +33,15 @@ function adminRoutes() {
     ["POST", "/api/admin/videos/health-check", null],
     ["PATCH", `/api/admin/videos/${vid}`, { section: "manga" }],
     ["DELETE", `/api/admin/videos/${vid}`, null],
+    // v1.4: board, reorder, draft preview and the trash.
+    ["GET", `/api/admin/series/${sid}`, null],
+    ["PUT", `/api/admin/series/${sid}/order`, { section: "anime", season: 1, videoIds: seed.videos.map((v) => v.id).reverse() }],
+    ["GET", `/api/admin/videos/${vid}/preview`, null],
+    ["GET", "/api/admin/trash", null],
+    ["POST", `/api/admin/trash/series/${sid}/restore`, null],
+    ["POST", `/api/admin/trash/videos/${vid}/restore`, null],
+    ["DELETE", `/api/admin/trash/series/${sid}`, null],
+    ["DELETE", `/api/admin/trash/videos/${vid}`, null],
     ["GET", "/api/admin/does-not-exist", null],
     // Express routing tricks: case, trailing slash, double slash, encoded slash.
     ["GET", "/api/ADMIN/series", null],
@@ -53,6 +62,12 @@ async function expectAdminUntouched(admin) {
   expect(pwned, "no video was created").toEqual([]);
   const pwnedSeries = (await (await admin.get("/api/admin/series?q=pwned")).json()).items;
   expect(pwnedSeries, "no series was created").toEqual([]);
+  // v1.4: nothing was moved to the trash and the episode order was not changed.
+  const trash = await (await admin.get("/api/admin/trash")).json();
+  expect(trash.series.filter((x) => x.slug === SERIES.slug), "the canary series is not in the trash").toEqual([]);
+  expect(trash.videos.filter((v) => v.seriesId === seed.series.id), "no canary video is in the trash").toEqual([]);
+  const board = await (await admin.get(`/api/admin/series/${seed.series.id}`)).json();
+  expect(board.sections.anime.videos.map((v) => [v.id, v.number]), "the canary episodes keep their order").toEqual(seed.videos.map((v, i) => [v.id, i + 1]));
 }
 
 test.describe("authorisation", () => {
@@ -265,7 +280,7 @@ test.describe("authorisation", () => {
       const res = await anon.get(path);
       expect(res.status(), path).toBe(200);
       const text = await res.text();
-      expect(text, `${path}: admin-only fields`).not.toMatch(/"classification"|"overrides"|"reasons"/);
+      expect(text, `${path}: admin-only fields`).not.toMatch(/"classification"|"overrides"|"reasons"|"deletedAt"|"purgeAt"/);
       expect(text, `${path}: user data`).not.toMatch(/@e2e\.test|password|"email"/);
     }
     await anon.dispose();

@@ -1,10 +1,11 @@
 // Journey 3: an admin builds a series, adds videos (auto-classified and
-// pending), fixes a pending one, edits the series, deletes a video and the series.
+// pending), fixes a pending one, edits the series, moves a video and the series
+// to the trash (API v1.4: DELETE is a 7-day soft delete), then deletes them forever.
 import { test, expect, ADMIN_STATE, fakeYouTubeId, listAll } from "./fixtures.js";
 
 test.use({ storageState: ADMIN_STATE });
 
-test("admin: series CRUD, add videos, fix a pending one, delete video and series", async ({ page, admin }) => {
+test("admin: series CRUD, add videos, fix a pending one, trash a video and the series, delete them forever", async ({ page, admin }) => {
   test.setTimeout(90_000);
   const ep3 = fakeYouTubeId("adEp3");
   const ch7 = fakeYouTubeId("adCh7");
@@ -115,41 +116,67 @@ test("admin: series CRUD, add videos, fix a pending one, delete video and series
     await expect(page.getByText("Saga do Teste")).toBeVisible();
   });
 
-  await test.step("delete a video (confirm dialog)", async () => {
+  await test.step("move a video to the trash (confirm dialog)", async () => {
     await page.goto("/admin?tab=published");
     await searchVideos("E2E Saga Chapter 7");
     const row = panel.getByRole("listitem").filter({ hasText: "E2E Saga Chapter 7 manga" });
-    await row.getByRole("button", { name: "Excluir" }).click();
-    const dialog = page.getByRole("dialog", { name: "Excluir este vídeo?" });
+    await row.getByRole("button", { name: "Mover para a lixeira" }).click();
+    const dialog = page.getByRole("dialog", { name: "Mover este vídeo para a lixeira?" });
     await expect(dialog).toBeVisible();
-    await dialog.getByRole("button", { name: "Excluir" }).click();
+    await expect(dialog).toContainText("fica 7 dias na lixeira");
+    await dialog.getByRole("button", { name: "Mover para a lixeira" }).click();
     await expect(dialog).toBeHidden();
-    await expect(panel.getByRole("status")).toHaveText("E2E Saga Chapter 7 manga excluído.");
+    await expect(panel.getByRole("status")).toHaveText("E2E Saga Chapter 7 manga foi para a lixeira.");
     await expect(row).toHaveCount(0);
     await page.goto("/manga/e2e-saga/chapter/7");
     await expect(page.getByRole("heading", { level: 1, name: "Página não encontrada" })).toBeVisible();
   });
 
-  await test.step("delete the series (cancel first, then confirm)", async () => {
+  await test.step("move the series to the trash (cancel first, then confirm)", async () => {
     await page.goto("/admin");
     await searchSeries();
-    await seriesRow().getByRole("button", { name: "Excluir" }).click();
-    const dialog = page.getByRole("dialog", { name: "Excluir E2E Saga?" });
+    await seriesRow().getByRole("button", { name: "Mover para a lixeira" }).click();
+    const dialog = page.getByRole("dialog", { name: "Mover E2E Saga para a lixeira?" });
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "Cancelar" }).click();
     await expect(dialog).toBeHidden();
     await expect(seriesRow()).toHaveCount(1);
 
-    await seriesRow().getByRole("button", { name: "Excluir" }).click();
-    await dialog.getByRole("button", { name: "Excluir" }).click();
+    await seriesRow().getByRole("button", { name: "Mover para a lixeira" }).click();
+    await dialog.getByRole("button", { name: "Mover para a lixeira" }).click();
     await expect(dialog).toBeHidden();
-    await expect(page.getByRole("status").filter({ hasText: "E2E Saga excluída." })).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: "E2E Saga foi para a lixeira." })).toBeVisible();
     await expect(seriesRow()).toHaveCount(0);
 
-    // v1.1: deleting a series deletes its videos.
+    // v1.4: a trashed series takes its live videos with it — they leave the admin lists and the site...
     const all = await listAll(admin, "/api/admin/videos");
     expect(all.filter((v) => [ep3, ch7, unknown].includes(v.youtubeVideoId))).toEqual([]);
     await page.goto("/anime/e2e-saga/episode/3");
     await expect(page.getByRole("heading", { level: 1, name: "Página não encontrada" })).toBeVisible();
+    // ...and wait in the trash: the series with the 2 videos trashed along with it, the chapter on its own.
+    const trash = await (await admin.get("/api/admin/trash")).json();
+    expect(trash.series.filter((s) => s.slug === "e2e-saga")).toEqual([expect.objectContaining({ name: "E2E Saga", videoCount: 2 })]);
+    expect(trash.videos.filter((v) => [ep3, ch7, unknown].includes(v.youtubeVideoId)).map((v) => v.youtubeVideoId)).toEqual([ch7]);
+  });
+
+  await test.step("Lixeira: delete the series forever → it and all its videos are gone for good", async () => {
+    await page.goto("/admin");
+    await tab("Lixeira").click();
+    const seriesItem = panel.getByRole("listitem").filter({ hasText: "e2e-saga" });
+    await expect(seriesItem).toContainText("E2E Saga");
+    await expect(panel.getByRole("listitem").filter({ hasText: "E2E Saga Chapter 7 manga" })).toHaveCount(1);
+    await seriesItem.getByRole("button", { name: "Apagar para sempre" }).click();
+    const dialog = page.getByRole("dialog", { name: "Apagar “E2E Saga” para sempre?" });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Apagar para sempre" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(panel.getByRole("status").filter({ hasText: "para sempre" })).toHaveText("“E2E Saga” foi apagado para sempre.");
+    await expect(seriesItem).toHaveCount(0);
+    // Deleting a series forever deletes every video of it, including the chapter trashed on its own.
+    await expect(panel.getByRole("listitem").filter({ hasText: "E2E Saga Chapter 7 manga" })).toHaveCount(0);
+    const trash = await (await admin.get("/api/admin/trash")).json();
+    expect(trash.series.filter((s) => s.slug === "e2e-saga")).toEqual([]);
+    expect(trash.videos.filter((v) => [ep3, ch7, unknown].includes(v.youtubeVideoId))).toEqual([]);
+    expect((await listAll(admin, "/api/admin/series", { q: "E2E Saga" })).filter((s) => s.slug === "e2e-saga")).toEqual([]);
   });
 });

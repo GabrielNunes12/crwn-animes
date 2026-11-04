@@ -92,15 +92,38 @@ test.describe("SQL / NoSQL-style injection", () => {
         expect([200, 400], url).toContain(res.status());
         expectNoLeak(await res.text(), url);
       }
-      for (const [method, url] of [["PATCH", `/api/admin/series/${e}`], ["DELETE", `/api/admin/series/${e}`], ["PATCH", `/api/admin/videos/${e}`], ["DELETE", `/api/admin/videos/${e}`]]) {
-        const res = await admin.fetch(url, { method, ...(method === "PATCH" ? { data: { name: "x" } } : {}) });
+      const ids = [
+        ["PATCH", `/api/admin/series/${e}`],
+        ["DELETE", `/api/admin/series/${e}`],
+        ["PATCH", `/api/admin/videos/${e}`],
+        ["DELETE", `/api/admin/videos/${e}`],
+        // v1.4: board, reorder, draft preview, trash.
+        ["GET", `/api/admin/series/${e}`],
+        ["PUT", `/api/admin/series/${e}/order`],
+        ["GET", `/api/admin/videos/${e}/preview`],
+        ["POST", `/api/admin/trash/series/${e}/restore`],
+        ["POST", `/api/admin/trash/videos/${e}/restore`],
+        ["DELETE", `/api/admin/trash/series/${e}`],
+        ["DELETE", `/api/admin/trash/videos/${e}`],
+      ];
+      for (const [method, url] of ids) {
+        const data = method === "PATCH" ? { name: "x" } : method === "PUT" ? { section: "anime", season: 1, videoIds: [video.id] } : undefined;
+        const res = await admin.fetch(url, { method, ...(data ? { data } : {}) });
         expect([400, 404], `${method} ${url}`).toContain(res.status());
+        expectNoLeak(await res.text(), `${method} ${url}`);
+      }
+      // Payloads inside a reorder body are refused, and never renumber anything.
+      for (const data of [{ section: p, season: 1, videoIds: [video.id] }, { section: "anime", season: p, videoIds: [video.id] }, { section: "anime", season: 1, videoIds: [p] }]) {
+        const res = await admin.put(`/api/admin/series/${video.seriesId}/order`, { data });
+        expect(res.status(), `PUT order ${JSON.stringify(data)}`).toBe(400);
+        expectNoLeak(await res.text(), `PUT order ${JSON.stringify(data)}`);
       }
       // Payloads in admin bodies are stored as data or refused, never executed.
       const res = await admin.post("/api/admin/videos", { data: { url: p, title: p } });
       expect([400, 422], `POST /api/admin/videos url=${p}`).toContain(res.status());
     }
     expect((await admin.get(`/api/videos/${video.id}`)).status()).toBe(200);
+    expect((await (await admin.get(`/api/videos/${video.id}`)).json()).video.number).toBe(1);
   });
 
   test("login / register / forgot with injection payloads: 400/401/202 only, admin is never logged in", async () => {
