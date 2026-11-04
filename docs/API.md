@@ -406,6 +406,30 @@ before pressing Play.
   admin-chosen series covers.
 - No personal data involved (requests are not logged; the cache key is the public video ID).
 
+### Review fixes (cycle 5)
+- `robots.txt` adds `Allow: /api/thumbs/` and `Allow: /api/covers/` before `Disallow: /api/`, so
+  crawlers can read the og:image / JSON-LD images.
+- Failed upstream fetches are remembered per ID for 10 minutes (bounded map): repeat requests answer
+  `502` without contacting the upstream. Videos with `availability: "unavailable"` never trigger an
+  upstream fetch (`404`). Cache misses are rate-limited per IP. A cache hit refreshes the file's
+  last-use time so LRU eviction survives restarts.
+- Trashed videos have `thumbnailUrl: null` in admin responses (the client shows its placeholder).
+
+## Same-origin series covers (privacy)
+Series covers set by admins (any https URL) are now also fetched **by the server**:
+`GET /api/covers/:seriesId.img` → the cover image, cached like thumbnails (same cache dir, same cap).
+- Public and admin `Series.coverUrl` becomes `/api/covers/<id>.img?v=<8-char hash of the source URL>`
+  (or `null`); admin responses add `coverSourceUrl` (the URL the admin typed), and admin
+  create/patch keep taking `coverUrl` as the source URL.
+- **SSRF protection** (an admin-typed URL is fetched by the server): `https:` only, port 443 only, no
+  credentials; the hostname is resolved and the request is pinned to the resolved address, which must
+  be a public unicast IP (no loopback, private, link-local, CGNAT, multicast, reserved, IPv4-mapped or
+  unique-local IPv6); no redirects; `200` with `image/jpeg|png|webp|avif` and matching magic bytes;
+  ≤ 2 MB; 5 s timeout; same single-flight, concurrency cap, failure memory and per-IP miss limit as
+  thumbnails. Served with `Content-Type` of the validated type, `nosniff`, CORP same-origin,
+  `Cache-Control: public, max-age=604800` (the `?v=` changes when the source URL changes).
+- Unknown/trashed series → `404`. The CSP `img-src` becomes `'self' data:` (no external images at all).
+
 ## PWA
 - `GET /manifest.webmanifest` (from the client build): name "Crwn Animes", short_name "Crwn",
   `start_url: "/"`, `display: "standalone"`, theme/background colours from the Midnight Sakura tokens,
@@ -415,8 +439,10 @@ before pressing Play.
   - navigations: network-first with a 3 s timeout, falling back to the cached shell, then to an
     offline page (`/offline.html`, pt-BR/en, "Você está offline", retry button).
   - public catalog GETs (`/api/sections`, `/api/genres`, `/api/latest`, `/api/top-rated`,
-    `/api/trending`, `/api/:section/series*`, `/api/videos/:id` without `/rating`, `/api/search`,
-    `/api/thumbs/*`): stale-while-revalidate, capped (e.g. 150 entries; thumbs 300) with LRU.
+    `/api/trending`, `/api/:section/series*`, `/api/videos/:id` without `/rating`, `/api/search`
+    **without a `q`**, `/api/thumbs/*`, `/api/covers/*`): stale-while-revalidate, capped (e.g. 150 entries;
+    images 300) with LRU. Searches with a `q` are never cached (search terms stay off the device).
+    "Clear watch history" also deletes the `crwn-api-*` cache.
   - **never cached**: `/api/auth/*`, `/api/me*`, `/api/admin/*`, any `/rating` route, `/api/dev/*`,
     `/api/random`, non-GET requests, responses with `Cache-Control: private` or `no-store`.
   - an update flow: when a new SW is waiting, the app shows "Nova versão disponível — Atualizar"
