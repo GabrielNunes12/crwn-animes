@@ -4,6 +4,7 @@ import { RatingBadge } from "./RatingBadge.jsx";
 import { useT } from "../../i18n/useT.js";
 import { sectionLabel, videoLabel } from "../../lib/format.js";
 import { entryCompleted } from "../../lib/progress.js";
+import { THUMB_SIZES } from "../../lib/images.js";
 import styles from "./Cards.module.css";
 
 export function VideoCard({ video, progress, showSeries = true }) {
@@ -15,7 +16,7 @@ export function VideoCard({ video, progress, showSeries = true }) {
     <article className={styles.card}>
       <Link to={video.route ?? "#"} className={styles.link}>
         <div className={styles.media}>
-          <LazyImage src={video.thumbnailUrl} alt="" ratio="16 / 9" width={480} height={270} fallbackLabel={video.seriesName ?? video.title} />
+          <LazyImage src={video.thumbnailUrl} srcSet={video.thumbnailSrcSet} sizes={THUMB_SIZES.card} alt="" ratio="16 / 9" width={480} height={270} fallbackLabel={video.seriesName ?? video.title} />
           <div className={styles.badges}>
             {video.section && <span className={`badge badge-${video.section}`}>{sectionLabel(t, video.section)}</span>}
             {video.isNew && <span className="badge badge-new">{t("common.new")}</span>}

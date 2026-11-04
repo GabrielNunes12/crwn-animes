@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { LazyImage } from "../LazyImage/LazyImage.jsx";
 import { useT } from "../../i18n/useT.js";
 import { formatTime } from "../../lib/progress.js";
+import { THUMB_SIZES, thumbSrcSetOf } from "../../lib/images.js";
 import styles from "./Cards.module.css";
 
 export function ContinueCard({ entry, onRemove }) {
@@ -12,7 +13,7 @@ export function ContinueCard({ entry, onRemove }) {
     <article className={styles.card}>
       <Link to={entry.route} className={styles.link}>
         <div className={styles.media}>
-          <LazyImage src={entry.thumb} alt="" ratio="16 / 9" fallbackLabel={title} />
+          <LazyImage src={entry.thumb} srcSet={thumbSrcSetOf(entry.thumb)} sizes={THUMB_SIZES.card} alt="" ratio="16 / 9" width={480} height={270} fallbackLabel={title} />
           <span className={styles.progress} style={{ "--p": `${pct}%` }} role="img" aria-label={t("series.progress", { percent: pct })} />
         </div>
         <div className={styles.body}>

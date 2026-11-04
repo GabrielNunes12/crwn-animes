@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { I18nContext } from "./context.js";
 import { createI18n, LOCALES, loadMessages, messagesLoaded } from "./core.js";
 import { initialLocale } from "./locale.js";
@@ -12,26 +12,30 @@ import { LOCALE_KEY } from "../lib/prefs.js";
  */
 export function I18nProvider({ children, locale: initial }) {
   const [locale, setLocaleState] = useState(() => initial ?? initialLocale());
-  const wanted = useRef(locale);
+  // The language asked for last; differs from `locale` while its dictionary is downloading.
+  const [requested, setRequested] = useState(locale);
 
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
 
+  useEffect(() => {
+    if (requested === locale) return undefined;
+    let cancelled = false; // a newer choice wins over a dictionary that arrives late
+    loadMessages(requested).then(
+      () => !cancelled && setLocaleState(requested),
+      () => !cancelled && setRequested(locale), // offline and not cached: stay in the current language
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [requested, locale]);
+
   const setLocale = useCallback((next) => {
     if (!LOCALES.includes(next)) return;
     writeString(LOCALE_KEY, next);
-    wanted.current = next;
-    if (messagesLoaded(next)) {
-      setLocaleState(next);
-      return;
-    }
-    loadMessages(next).then(
-      () => {
-        if (wanted.current === next) setLocaleState(next); // the last choice wins
-      },
-      () => {}, // offline and not cached: stay in the current language
-    );
+    if (messagesLoaded(next)) setLocaleState(next);
+    setRequested(next);
   }, []);
 
   const value = useMemo(() => createI18n(locale, setLocale), [locale, setLocale]);

@@ -1,10 +1,12 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { serviceWorkerPlugin } from "./scripts/vite-plugin-sw.js";
+import { fontPreloadPlugin } from "./scripts/vite-plugin-font-preload.js";
 
 export default defineConfig({
   // serviceWorkerPlugin: dist/sw.js (docs/API.md v1.5), production builds only.
-  plugins: [react(), serviceWorkerPlugin()],
+  // fontPreloadPlugin: preloads the Latin font subset (docs/API.md v1.7), production builds only.
+  plugins: [react(), serviceWorkerPlugin(), fontPreloadPlugin()],
   server: {
     port: 5173,
     strictPort: true,

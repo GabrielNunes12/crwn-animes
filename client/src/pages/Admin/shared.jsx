@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { useT } from "../../i18n/useT.js";
 import { videoLabel } from "../../lib/format.js";
 import { LazyImage } from "../../components/LazyImage/LazyImage.jsx";
+import { THUMB_SIZES } from "../../lib/images.js";
 import styles from "./Admin.module.css";
 
 export function StatusBadge({ status, availability, trashed = false }) {
@@ -44,7 +45,7 @@ export function VideoSummary({ video }) {
   return (
     <div className={styles.summary}>
       <span className={styles.thumb}>
-        <LazyImage src={video.thumbnailUrl} alt="" width={160} height={90} fallbackLabel={video.seriesName ?? video.title} />
+        <LazyImage src={video.thumbnailUrl} srcSet={video.thumbnailSrcSet} sizes={THUMB_SIZES.admin} alt="" width={160} height={90} fallbackLabel={video.seriesName ?? video.title} />
       </span>
       <div className="stack" style={{ "--stack-gap": "0.3rem", minInlineSize: 0 }}>
         <StatusBadge status={video.status} availability={video.availability} trashed={Boolean(video.deletedAt)} />

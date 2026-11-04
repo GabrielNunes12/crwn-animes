@@ -325,6 +325,10 @@
 
   .main {
     min-inline-size: 0;
+    /* At least one full viewport (vh = the largest one on mobile): the footer always starts
+       below the fold, so a page replacing its short loading skeleton never pushes a visible
+       footer down (layout shift, docs/API.md v1.7 CLS budget). */
+    min-block-size: 100vh;
     padding-block-end: var(--space-8);
   }
   .main:focus {

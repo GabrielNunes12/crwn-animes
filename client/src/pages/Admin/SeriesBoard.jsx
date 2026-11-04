@@ -12,6 +12,7 @@ import { pickSeason, seasonsOf } from "../../lib/seasons.js";
 import { ErrorText } from "./shared.jsx";
 import { VideoEditForm } from "./VideoEditForm.jsx";
 import { LazyImage } from "../../components/LazyImage/LazyImage.jsx";
+import { THUMB_SIZES } from "../../lib/images.js";
 import styles from "./SeriesBoard.module.css";
 
 const SECTIONS = ["anime", "manga"];
@@ -480,7 +481,7 @@ function Board({ board, error, loading, reload, updateVideos }) {
                   {i + 1}
                 </span>
                 <span className={styles.thumb}>
-                  <LazyImage src={v.thumbnailUrl} alt="" width={96} height={54} fallbackLabel={v.title} />
+                  <LazyImage src={v.thumbnailUrl} srcSet={v.thumbnailSrcSet} sizes={THUMB_SIZES.admin} alt="" width={96} height={54} fallbackLabel={v.title} />
                 </span>
                 <div className={styles.text}>
                   <p id={labelId} className={styles.label}>

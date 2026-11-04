@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { sameOriginImage } from "../../lib/images.js";
+import { sameOriginImage, sameOriginSrcSet } from "../../lib/images.js";
 import styles from "./LazyImage.module.css";
 
 function initials(label = "") {
@@ -14,9 +14,14 @@ function initials(label = "") {
  * parent with `fill`. A missing (null) source, one on another origin, or a load error shows the
  * gradient placeholder with the initials of `fallbackLabel`: the one fallback for every
  * thumbnail and cover in the app.
+ * `srcSet` + `sizes` (docs/API.md v1.7: Video.thumbnailSrcSet) let the browser pick the
+ * 320w or 480w file; the srcset is dropped unless every candidate is same-origin.
+ * Lazy by default; `eager` (with fetchPriority="high") is for the one hero/poster image a
+ * page shows first.
  */
-export function LazyImage({ src: rawSrc, alt = "", ratio = "16 / 9", width = 480, height = 270, className = "", fallbackLabel = "", eager = false, fill = false, ...rest }) {
+export function LazyImage({ src: rawSrc, srcSet: rawSrcSet, sizes, alt = "", ratio = "16 / 9", width = 480, height = 270, className = "", fallbackLabel = "", eager = false, fill = false, ...rest }) {
   const src = sameOriginImage(rawSrc);
+  const srcSet = src ? sameOriginSrcSet(rawSrcSet) : null;
   const [state, setState] = useState("loading");
   const [prevSrc, setPrevSrc] = useState(src);
   if (src !== prevSrc) {
@@ -43,6 +48,8 @@ export function LazyImage({ src: rawSrc, alt = "", ratio = "16 / 9", width = 480
             if (img?.complete && img.naturalWidth > 0 && state === "loading") setState("loaded");
           }}
           src={src}
+          srcSet={srcSet ?? undefined}
+          sizes={srcSet ? sizes : undefined}
           alt={alt}
           width={width}
           height={height}

@@ -11,6 +11,7 @@ import { useShortcuts } from "../../hooks/useShortcuts.js";
 import { useTitle } from "../../hooks/useTitle.js";
 import { useT } from "../../i18n/useT.js";
 import { videoLabel } from "../../lib/format.js";
+import { THUMB_SIZES } from "../../lib/images.js";
 import { watchMeta } from "../../lib/meta.js";
 import { AUTOPLAY_KEY, getBool, setBool } from "../../lib/prefs.js";
 import { entryCompleted, pruneSeriesProgress } from "../../lib/progress.js";
@@ -145,7 +146,7 @@ function WatchView({ section, video, series, prev, next, videos }) {
                 <li key={v.id} data-unavailable={unavailable || undefined}>
                   <Link to={v.route} className={styles.sideItem} aria-current={current ? "page" : undefined}>
                     <span className={styles.sideThumb}>
-                      <LazyImage src={v.thumbnailUrl} alt="" ratio="16 / 9" width={120} height={68} />
+                      <LazyImage src={v.thumbnailUrl} srcSet={v.thumbnailSrcSet} sizes={THUMB_SIZES.side} alt="" ratio="16 / 9" width={120} height={68} />
                     </span>
                     <span className={styles.sideText}>
                       <span className={styles.sideLabel}>{videoLabel(t, v)}</span>

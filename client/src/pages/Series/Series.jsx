@@ -8,7 +8,7 @@ import { useProgressMap } from "../../hooks/useProgress.js";
 import { useTitle } from "../../hooks/useTitle.js";
 import { useT } from "../../i18n/useT.js";
 import { truncateWords, videoLabel } from "../../lib/format.js";
-import { sameOriginImage } from "../../lib/images.js";
+import { sameOriginImage, THUMB_SIZES } from "../../lib/images.js";
 import { genreHref } from "../../lib/search.js";
 import { formatTime, pruneSeriesProgress, resumePosition, seriesProgress } from "../../lib/progress.js";
 import { pickSeason, seasonsOf } from "../../lib/seasons.js";
@@ -47,7 +47,7 @@ function EpisodeRow({ video: v, entry: p, done, index }) {
   const content = (
     <>
       <span className={styles.thumb}>
-        <LazyImage src={v.thumbnailUrl} alt="" ratio="16 / 9" width={160} height={90} />
+        <LazyImage src={v.thumbnailUrl} srcSet={v.thumbnailSrcSet} sizes={THUMB_SIZES.row} alt="" ratio="16 / 9" width={160} height={90} />
         {pct > 0 && !done && <span className={styles.bar} style={{ "--p": `${pct}%` }} />}
       </span>
       <span className={styles.text}>
@@ -141,7 +141,7 @@ function SeriesView({ section, series, videos, seasons: apiSeasons }) {
       <div className="container">
         <div className={styles.top}>
           <div className={styles.cover}>
-            <LazyImage src={series.coverUrl} alt={t("series.coverAlt", { name: series.name })} ratio="2 / 3" width={300} height={450} fallbackLabel={series.name} eager />
+            <LazyImage src={series.coverUrl} alt={t("series.coverAlt", { name: series.name })} ratio="2 / 3" width={300} height={450} fallbackLabel={series.name} eager fetchPriority="high" />
           </div>
           <div className={styles.info}>
             <p className={styles.kicker}>

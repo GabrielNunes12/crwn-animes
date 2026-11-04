@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useDeferredValue, useState } from "react";
 import { Link, useLoaderData, useNavigate } from "react-router";
 import { catalogApi } from "../../api/client.js";
 import { useAuth } from "../../auth/useAuth.js";
@@ -92,11 +92,82 @@ function SurpriseButton() {
   );
 }
 
+/** The card rows and genres (each fails soft and shows its own placeholder while loading). */
+function HomeRows({ data, progress }) {
+  const { t } = useT();
+  return (
+    <>
+        <AsyncView resolve={data.latest} fallback={<RowSkeleton />}>
+          {(latest) => (
+            <>
+              <VideoRow id="new-title" title={t("home.new")} videos={latest.filter((v) => v.isNew).slice(0, 12)} progress={progress} />
+              {latest.length > 0 && (
+                <section className="container mt-7" aria-labelledby="latest-title">
+                  <Reveal variant="scroll" className="section-head">
+                    <h2 id="latest-title">{t("home.latest")}</h2>
+                    <span className="hint">{t("common.videoCount", { count: Math.min(latest.length, 12) })}</span>
+                  </Reveal>
+                  <ul className="grid-videos" role="list">
+                    {latest.slice(0, 12).map((v, i) => (
+                      <Reveal as="li" key={v.id} index={i % 4}>
+                        <VideoCard video={v} progress={progress[v.youtubeVideoId]} />
+                      </Reveal>
+                    ))}
+                  </ul>
+                </section>
+              )}
+            </>
+          )}
+        </AsyncView>
+
+        <AsyncView resolve={data.trending} fallback={<RowSkeleton />}>
+          {(videos) => <VideoRow id="trending-title" title={t("home.trending")} videos={videos} progress={progress} />}
+        </AsyncView>
+        <AsyncView resolve={data.topAnime} fallback={null}>
+          {(videos) => (
+            <VideoRow id="top-anime-title" title={t("home.topAnime")} videos={videos} progress={progress} more={<Link to="/anime">{t("common.seeAll")}</Link>} />
+          )}
+        </AsyncView>
+        <AsyncView resolve={data.topManga} fallback={null}>
+          {(videos) => (
+            <VideoRow id="top-manga-title" title={t("home.topManga")} videos={videos} progress={progress} more={<Link to="/manga">{t("common.seeAll")}</Link>} />
+          )}
+        </AsyncView>
+
+        <AsyncView resolve={data.genres} fallback={null}>
+          {(genres) =>
+            genres?.length ? (
+              <section className="container mt-7" aria-labelledby="genres-title">
+                <Reveal variant="scroll" className="section-head">
+                  <h2 id="genres-title">{t("home.genres")}</h2>
+                </Reveal>
+                <ul className="cluster" role="list">
+                  {genres.map((g, i) => (
+                    <Reveal as="li" key={g} index={i}>
+                      <Link className="chip" to={genreHref(g)}>
+                        {g}
+                      </Link>
+                    </Reveal>
+                  ))}
+                </ul>
+              </section>
+            ) : null
+          }
+        </AsyncView>
+    </>
+  );
+}
+
 export function Component() {
   const data = useLoaderData();
   const { t } = useT();
   const progress = useProgressMap();
   useMeta({ title: `${SITE_NAME} · ${t("meta.homeTitle")}` });
+  // The hero (the page's largest paint) commits first; the card rows below it render in a
+  // second, interruptible pass — even when their data is already there — so one big render
+  // never delays the hero or blocks input (docs/API.md v1.7). Until then they show the same
+  // placeholders as while their data loads.
+  const rowsReady = useDeferredValue(true, false);
 
   return (
     <>
@@ -165,64 +236,14 @@ export function Component() {
 
       <ContinueRow />
 
-      <AsyncView resolve={data.latest} fallback={<RowSkeleton />}>
-        {(latest) => (
-          <>
-            <VideoRow id="new-title" title={t("home.new")} videos={latest.filter((v) => v.isNew).slice(0, 12)} progress={progress} />
-            {latest.length > 0 && (
-              <section className="container mt-7" aria-labelledby="latest-title">
-                <Reveal variant="scroll" className="section-head">
-                  <h2 id="latest-title">{t("home.latest")}</h2>
-                  <span className="hint">{t("common.videoCount", { count: Math.min(latest.length, 12) })}</span>
-                </Reveal>
-                <ul className="grid-videos" role="list">
-                  {latest.slice(0, 12).map((v, i) => (
-                    <Reveal as="li" key={v.id} index={i % 4}>
-                      <VideoCard video={v} progress={progress[v.youtubeVideoId]} />
-                    </Reveal>
-                  ))}
-                </ul>
-              </section>
-            )}
-          </>
-        )}
-      </AsyncView>
-
-      <AsyncView resolve={data.trending} fallback={<RowSkeleton />}>
-        {(videos) => <VideoRow id="trending-title" title={t("home.trending")} videos={videos} progress={progress} />}
-      </AsyncView>
-      <AsyncView resolve={data.topAnime} fallback={null}>
-        {(videos) => (
-          <VideoRow id="top-anime-title" title={t("home.topAnime")} videos={videos} progress={progress} more={<Link to="/anime">{t("common.seeAll")}</Link>} />
-        )}
-      </AsyncView>
-      <AsyncView resolve={data.topManga} fallback={null}>
-        {(videos) => (
-          <VideoRow id="top-manga-title" title={t("home.topManga")} videos={videos} progress={progress} more={<Link to="/manga">{t("common.seeAll")}</Link>} />
-        )}
-      </AsyncView>
-
-      <AsyncView resolve={data.genres} fallback={null}>
-        {(genres) =>
-          genres?.length ? (
-            <section className="container mt-7" aria-labelledby="genres-title">
-              <Reveal variant="scroll" className="section-head">
-                <h2 id="genres-title">{t("home.genres")}</h2>
-              </Reveal>
-              <ul className="cluster" role="list">
-                {genres.map((g, i) => (
-                  <Reveal as="li" key={g} index={i}>
-                    <Link className="chip" to={genreHref(g)}>
-                      {g}
-                    </Link>
-                  </Reveal>
-                ))}
-              </ul>
-            </section>
-          ) : null
-        }
-      </AsyncView>
-
+      {rowsReady ? (
+        <HomeRows data={data} progress={progress} />
+      ) : (
+        <>
+          <RowSkeleton />
+          <RowSkeleton />
+        </>
+      )}
     </>
   );
 }

@@ -10,6 +10,7 @@ import { ListEmpty, ListHeading, ListSearch, Pager } from "./ListControls.jsx";
 import { useAdminList } from "./useAdminList.js";
 import { videoLabel } from "../../lib/format.js";
 import { LazyImage } from "../../components/LazyImage/LazyImage.jsx";
+import { THUMB_SIZES } from "../../lib/images.js";
 import styles from "./Admin.module.css";
 
 export function VideoListTab({ status, series }) {
@@ -69,7 +70,7 @@ export function VideoListTab({ status, series }) {
           <li key={v.id} className={styles.videoRow}>
             <div className={styles.videoHead}>
               <span className={styles.thumb}>
-                <LazyImage src={v.thumbnailUrl} alt="" width={160} height={90} fallbackLabel={v.seriesName ?? v.title} />
+                <LazyImage src={v.thumbnailUrl} srcSet={v.thumbnailSrcSet} sizes={THUMB_SIZES.admin} alt="" width={160} height={90} fallbackLabel={v.seriesName ?? v.title} />
               </span>
               <div className="stack" style={{ "--stack-gap": "0.3rem", minInlineSize: 0 }}>
                 <StatusBadge status={v.status} availability={v.availability} />
