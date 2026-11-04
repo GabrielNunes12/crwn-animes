@@ -8,6 +8,7 @@ import { createAuthService } from "./authService.js";
 import { loadConfig, parseTrustProxy, thumbnailUpstream } from "./config.js";
 import { HttpError, notFound } from "./errors.js";
 import { createMailer } from "./mail.js";
+import { createMetricsService } from "./metricsService.js";
 import { noStore, requireJsonBody, requireSameOrigin } from "./middleware/security.js";
 import { loadSession } from "./middleware/session.js";
 import { createRatingService } from "./ratingService.js";
@@ -148,9 +149,10 @@ export function createApp({
   const images = createImages({ repo, config, fetchThumbnail, fetchCover });
   const trash = createTrashService({ db, repo, videos, onPurged: images.purge });
   const auth = createAuthService({ db, config, mailer, beforeDeleteUser: ratings.removeAllForUser });
+  const metrics = createMetricsService({ db, repo, images }); // anonymous aggregates only (v1.6)
 
   const app = express();
-  app.locals.services = { repo, videos, trash, auth, ratings, mailer, config, images };
+  app.locals.services = { repo, videos, trash, auth, ratings, mailer, config, images, metrics };
   app.set("trust proxy", parseTrustProxy(config.trustProxy)); // throws on "true"/garbage
   app.set("etag", "weak");
 
@@ -173,7 +175,7 @@ export function createApp({
 
   app.use("/api/auth", authRoutes({ auth, config }));
   app.use("/api/me", meRoutes({ auth, ratings, config }));
-  app.use("/api/admin", adminRoutes({ repo, videos, trash }));
+  app.use("/api/admin", adminRoutes({ repo, videos, trash, metrics }));
   // The dev outbox only exists when e-mails are not really sent.
   if (!config.isProduction && !config.smtp) app.use("/api/dev", devRoutes({ mailer }));
   app.use("/api", ratingRoutes({ repo, ratings }));

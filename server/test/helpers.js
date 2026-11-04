@@ -192,7 +192,8 @@ export function quickUser(srv, email, role = "user") {
  * Every derived table equals a fresh aggregation in which trashed rows count as
  * "not there": series_stats (live published videos of live series, their
  * ratings), rating_totals (ratings of live videos). video_rating_stats and
- * rating_activity are per video and keep a trashed video's ratings until purge.
+ * rating_activity are per video and keep a trashed video's ratings until purge;
+ * rating_days is rating_activity summed per day (v1.6; skipped on an older schema).
  */
 export function assertFresh(db, step) {
   assert.deepEqual(
@@ -234,6 +235,16 @@ export function assertFresh(db, step) {
         FROM ratings GROUP BY video_id, day ORDER BY video_id, day`)
       .all(),
     `${step}: rating_activity`
+  );
+  const hasRatingDays = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'rating_days'").get();
+  if (hasRatingDays) assert.deepEqual(
+    db.prepare("SELECT day, count, score_sum FROM rating_days ORDER BY day").all(),
+    db
+      .prepare(`
+        SELECT day, SUM(count) AS count, SUM(score_sum) AS score_sum FROM rating_activity
+        GROUP BY day HAVING SUM(count) <> 0 OR SUM(score_sum) <> 0 ORDER BY day`)
+      .all(),
+    `${step}: rating_days (rating_activity per day)`
   );
   assert.equal(
     db.prepare("SELECT COUNT(*) AS n FROM videos v JOIN series s ON s.id = v.series_id WHERE v.deleted_at IS NULL AND s.deleted_at IS NOT NULL").get().n,

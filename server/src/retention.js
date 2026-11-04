@@ -1,13 +1,17 @@
 // Deletes personal data we no longer need (see docs/API.md, "Personal data we keep"):
 // expired sessions and e-mail tokens, accounts never verified within 7 days,
-// anonymous rating activity older than 30 days, and series/videos that have
+// anonymous rating activity older than 90 days, and series/videos that have
 // been in the trash for 7 days (with their ratings, cached thumbnails and covers).
 
 const DAY = 24 * 60 * 60 * 1000;
 const UNVERIFIED_TTL_MS = 7 * DAY;
 /** How long a trashed series/video (and its ratings) is kept before the purge. */
 export const TRASH_TTL_MS = 7 * DAY;
-const ACTIVITY_DAYS = 30;
+/**
+ * Days of anonymous rating activity kept (no user id: not personal data). 90 since v1.6 (was 30),
+ * for the admin metrics' 90-day chart; /api/trending only reads the last 7.
+ */
+export const RATING_ACTIVITY_DAYS = 90;
 const HOUR = 60 * 60 * 1000;
 
 /** Moves the WAL into the main file and truncates it, so erased rows leave no copy behind. */
@@ -22,7 +26,7 @@ export function checkpoint(db) {
 export function purgeExpired(db, now = new Date()) {
   const at = now.toISOString();
   const unverifiedBefore = new Date(now.getTime() - UNVERIFIED_TTL_MS).toISOString();
-  const activityBefore = new Date(now.getTime() - ACTIVITY_DAYS * DAY).toISOString().slice(0, 10);
+  const activityBefore = new Date(now.getTime() - RATING_ACTIVITY_DAYS * DAY).toISOString().slice(0, 10);
   const result = db.transaction(() => ({
     sessions: db.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(at).changes,
     emailTokens: db.prepare("DELETE FROM email_tokens WHERE expires_at <= ?").run(at).changes,

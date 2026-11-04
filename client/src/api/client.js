@@ -187,4 +187,11 @@ export const adminApi = {
   /** Delete forever (204), ratings included. */
   purgeSeries: (id) => apiFetch(`/admin/trash/series/${enc(id)}`, { method: "DELETE" }),
   purgeVideo: (id) => apiFetch(`/admin/trash/videos/${enc(id)}`, { method: "DELETE" }),
+
+  // v1.6 — anonymous aggregates for the Métricas tab
+  /**
+   * GET /api/admin/metrics?days= (7–90) → { generatedAt, catalog, pendingQueue, ratings,
+   * topSeries, thumbnails }. `days` is always sent explicitly.
+   */
+  metrics: ({ days } = {}, opts) => apiFetch("/admin/metrics", { ...opts, query: { days } }),
 };

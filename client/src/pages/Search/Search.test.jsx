@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Component as Search } from "./Search.jsx";
 import { jsonResponse, mockFetch, renderApp } from "../../test/utils.jsx";
 import { resetGenresCache } from "../../hooks/useGenres.js";
+import { DEBOUNCE_MS } from "../../lib/search.js";
 
 const routes = [{ path: "/search", Component: Search }];
 
@@ -60,16 +61,32 @@ describe("Search page", () => {
 
   it("debounces typing into ?q= and syncs the box on back/forward", async () => {
     resetGenresCache();
-    mockFetch((url) => (url.startsWith("/api/genres") ? [200, []] : [200, { items: [], total: 0 }]));
+    const fetchFn = mockFetch((url) => (url.startsWith("/api/genres") ? [200, []] : [200, { items: [], total: 0 }]));
     const { router } = renderApp(null, { routes, path: "/search" });
-    const user = userEvent.setup();
     const box = screen.getByLabelText("Name or alternative title");
-    await user.type(box, "one piece");
-    // Nothing is committed while typing…
-    expect(router.state.location.search).toBe("");
-    // …then once, after the pause.
-    await waitFor(() => expect(new URLSearchParams(router.state.location.search).get("q")).toBe("one piece"));
-    expect(screen.getByLabelText("Sort by")).toHaveValue("relevance");
+    const sort = screen.getByLabelText("Sort by");
+    const queries = () => searchCalls(fetchFn).filter((u) => u.searchParams.has("q")).map((u) => u.searchParams.get("q"));
+
+    // The debounce runs on a fake clock, so the machine's load can never fire it early (a
+    // real-timer `user.type` stalled ≥ 250 ms by the parallel suite could). Only setTimeout is faked;
+    // shouldAdvanceTime keeps RTL's own setTimeout(0) waits working (they only detect jest).
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+    try {
+      // Nine keystrokes in one synchronous burst: no clock tick can run between them.
+      act(() => [..."one piece"].forEach((_, i) => fireEvent.change(box, { target: { value: "one piece".slice(0, i + 1) } })));
+      act(() => vi.advanceTimersByTime(DEBOUNCE_MS - 1));
+      // Nothing is committed while typing…
+      expect(router.state.location.search).toBe("");
+      // …then once, as soon as the pause is long enough.
+      act(() => vi.advanceTimersByTime(1));
+      await waitFor(() => expect(new URLSearchParams(router.state.location.search).get("q")).toBe("one piece"));
+      // The router commits its state in a React transition, so router.state runs a render
+      // ahead of the DOM: wait for the DOM itself (reading it right after router.state was the flake).
+      await waitFor(() => expect(sort).toHaveValue("relevance"));
+      await waitFor(() => expect(queries()).toEqual(["one piece"]));
+    } finally {
+      vi.useRealTimers();
+    }
 
     await act(() => router.navigate(-1));
     expect(router.state.location.search).toBe("");

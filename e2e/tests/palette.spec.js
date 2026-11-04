@@ -55,6 +55,24 @@ async function typeQuery(page) {
   await expect(options(page).nth(2)).toHaveText(/Ver todos os resultados para “paleta kaiju”/);
 }
 
+/** The palette's <dialog> element, open or not (a closed one has no role in the accessibility tree). */
+const paletteElement = (page) => page.locator("dialog").filter({ has: page.locator("h2", { hasText: "Busca rápida" }) });
+
+/**
+ * Esc, then waits for the dialog's native `close` event, which the browser fires in a later task.
+ * The palette still reacts to that event, and one that arrives after the palette was reopened
+ * used to close it again (fixed in CommandPalette; the regression test is below): waiting for it
+ * keeps these tests independent of that timing.
+ */
+async function escapeAndWaitForClose(page) {
+  await paletteElement(page).evaluate((d) => {
+    window.__paletteClosed = new Promise((resolve) => d.addEventListener("close", () => resolve(), { once: true }));
+  });
+  await page.keyboard.press("Escape");
+  await page.evaluate(() => window.__paletteClosed);
+  await expect(dialog(page)).toBeHidden();
+}
+
 test.describe("command palette", () => {
   test("Ctrl+K opens it, typing shows suggestions, ArrowDown + Enter opens the second series", async ({ page }) => {
     await openHome(page);
@@ -94,8 +112,7 @@ test.describe("command palette", () => {
       await expect(dialog(page)).toBeVisible();
       await expect(combobox(page)).toBeFocused();
       await combobox(page).fill("pal");
-      await page.keyboard.press("Escape");
-      await expect(dialog(page)).toBeHidden();
+      await escapeAndWaitForClose(page);
       await expectFocused(page, trigger(page));
     });
 
@@ -104,8 +121,7 @@ test.describe("command palette", () => {
       await expect(dialog(page)).toBeVisible();
       await expect(combobox(page)).toHaveValue("");
       await expect(options(page)).toHaveCount(0);
-      await page.keyboard.press("Escape");
-      await expect(dialog(page)).toBeHidden();
+      await escapeAndWaitForClose(page);
     });
 
     await test.step("Ctrl+K works while typing in the header search box, and focus goes back there", async () => {
@@ -115,8 +131,7 @@ test.describe("command palette", () => {
       await page.keyboard.press("Control+k");
       await expect(dialog(page)).toBeVisible();
       await expect(combobox(page)).toBeFocused();
-      await page.keyboard.press("Escape");
-      await expect(dialog(page)).toBeHidden();
+      await escapeAndWaitForClose(page);
       await expectFocused(page, siteSearch);
       await expect(siteSearch).toHaveValue("abc");
     });
@@ -158,5 +173,46 @@ test.describe("command palette", () => {
     await page.keyboard.press("ArrowDown");
     await expect(options(page).nth(1)).toHaveAttribute("aria-selected", "true");
     await expectNoSeriousViolations(page, "palette (suggestions)");
+  });
+
+  // App bug (client/src/components/CommandPalette/CommandPalette.jsx): closing calls dialog.close(),
+  // whose native `close` event the browser fires in a LATER task, and the <dialog>'s
+  // onClose={() => open && close()} handler does not check that the dialog is still closed. If
+  // Ctrl+K reopens the palette before that event arrives (a fast Esc → Ctrl+K, or simply a busy
+  // main thread: it made "Escape closes it…" flaky in full runs), the stale event closes the new
+  // palette at once (fixed: the handler now ignores `close` while the dialog is open again). Here Esc
+  // and Ctrl+K are dispatched in ONE task, so the event always comes after the reopen: regression test.
+  test("Esc then Ctrl+K at once: the palette stays open (the previous close's late `close` event must not close it)", async ({ page }) => {
+    await openHome(page);
+    await page.keyboard.press("Control+k");
+    await expect(dialog(page)).toBeVisible();
+    await expect(combobox(page)).toBeFocused();
+    await paletteElement(page).evaluate((d) => {
+      window.__closeEvents = [];
+      // Capture phase on the document: runs before React's own listener on the dialog.
+      document.addEventListener("close", (e) => e.target === d && window.__closeEvents.push(d.open ? "while open" : "while closed"), true);
+    });
+
+    const steps = await paletteElement(page).evaluate(async (d) => {
+      // Microtasks only (React flushes discrete updates and their effects in microtasks):
+      // no new task may start, so the `close` event queued by d.close() cannot run in between.
+      const flush = async (until) => {
+        for (let i = 0; i < 50 && !until(); i++) await Promise.resolve();
+        return until();
+      };
+      const input = document.activeElement;
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+      const closed = await flush(() => !d.open);
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true, cancelable: true }));
+      const reopened = await flush(() => d.open);
+      return { closed, reopened };
+    });
+    expect(steps, "Esc closed the dialog and Ctrl+K reopened it within one task").toEqual({ closed: true, reopened: true });
+
+    // The browser now delivers the first close's event, to a dialog that is open again.
+    await expect.poll(() => page.evaluate(() => window.__closeEvents[0])).toBe("while open");
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 100))));
+    await expect(dialog(page), "the reopened palette is still open").toBeVisible({ timeout: 2_000 });
+    await expect(combobox(page)).toBeFocused();
   });
 });

@@ -17,14 +17,14 @@ import { describe, test } from "node:test";
 import { createApp } from "../src/app.js";
 import { openDatabase } from "../src/db.js";
 import { createMailer } from "../src/mail.js";
-import { purgeExpired } from "../src/retention.js";
+import { RATING_ACTIVITY_DAYS, purgeExpired } from "../src/retention.js";
 import { Client, PASSWORD, addVideo, lastEmail, signUp, startServer, tokenFrom } from "./helpers.js";
 
 const sha256 = (value) => createHash("sha256").update(String(value)).digest("hex");
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const DAY = 86_400_000;
 const isoDaysAgo = (n) => new Date(Date.now() - n * DAY).toISOString();
-const ACTIVITY_DAYS = 30;
+const ACTIVITY_DAYS = RATING_ACTIVITY_DAYS;
 
 async function withServer(options, fn) {
   const srv = await startServer(options);
@@ -298,7 +298,7 @@ describe("GET /api/me/export", () => {
 
 // ============================================================ retention
 describe("retention job (purgeExpired)", () => {
-  test("unverified > 7 days and every token of it, expired sessions, activity > 30 days go; afterwards no table holds a trace of the purged account", () =>
+  test("unverified > 7 days and every token of it, expired sessions, activity > 90 days go; afterwards no table holds a trace of the purged account", () =>
     withServer({}, async (srv) => {
       const keep = await signUp(srv, { email: "keeper@example.com", displayName: "Keeper" });
       const keepId = (await keep.get("/api/auth/me")).body.user.id;
@@ -316,16 +316,24 @@ describe("retention job (purgeExpired)", () => {
       assert.equal(ghostTokens.length, 2, "verify + reset");
       srv.db.prepare("UPDATE users SET created_at = ? WHERE id = ?").run(isoDaysAgo(8), ghost.id);
       srv.db.prepare("UPDATE users SET created_at = ? WHERE email = 'recent.signup@example.com'").run(isoDaysAgo(6));
-      // An expired session of a verified user and anonymous activity of 31 days ago.
+      // An expired session of a verified user, anonymous activity of 91 days ago (goes) and of 31 and 89 days ago
+      // (kept: 90 days since v1.6, for the admin metrics).
       srv.db.prepare("INSERT INTO sessions (token_hash, user_id, expires_at, epoch) VALUES (?, ?, ?, 0)").run(sha256("expired"), keepId, isoDaysAgo(1));
-      srv.db.prepare("INSERT INTO rating_activity (video_id, day, count, score_sum) VALUES (?, ?, 2, 7)").run(video.id, isoDaysAgo(31).slice(0, 10));
+      const activity = srv.db.prepare("INSERT INTO rating_activity (video_id, day, count, score_sum) VALUES (?, ?, ?, ?)");
+      activity.run(video.id, isoDaysAgo(91).slice(0, 10), 2, 7);
+      for (const days of [31, 89]) activity.run(video.id, isoDaysAgo(days).slice(0, 10), 0, 0); // emptied rows: no rating behind them
 
       const result = purgeExpired(srv.db);
       assert.deepEqual(result, { sessions: 1, emailTokens: 0, unverifiedUsers: 1, ratingActivity: 1 });
       assert.deepEqual(traces(srv.db, { needles: ["ghost.signup@example.com", "Ghost Signup Name", ghost.password_hash, ...ghostTokens], userId: ghost.id }), []);
       assert.equal(srv.db.prepare("SELECT COUNT(*) AS n FROM users WHERE email = 'recent.signup@example.com'").get().n, 1, "6 days: kept");
       assert.equal(srv.db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE user_id = ?").get(keepId).n, 1, "the live session stays");
-      assert.equal(srv.db.prepare("SELECT COUNT(*) AS n FROM rating_activity WHERE day < ?").get(isoDaysAgo(30).slice(0, 10)).n, 0);
+      assert.equal(srv.db.prepare("SELECT COUNT(*) AS n FROM rating_activity WHERE day < ?").get(isoDaysAgo(90).slice(0, 10)).n, 0);
+      assert.deepEqual(
+        srv.db.prepare("SELECT day FROM rating_activity WHERE day < ? ORDER BY day").pluck().all(isoDaysAgo(7).slice(0, 10)),
+        [isoDaysAgo(89).slice(0, 10), isoDaysAgo(31).slice(0, 10)],
+        "31 and 89 days: kept"
+      );
       assert.ok((await keep.get("/api/auth/me")).body.user, "the verified account still works");
       assertAggregates(srv.db, "after purge");
 

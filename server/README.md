@@ -41,9 +41,10 @@ changes; above 50,000 URLs `/sitemap.xml` becomes a sitemap index of
 |---|---|
 | `npm start` | Start the API (`src/index.js`). |
 | `npm run dev` | Same, with `node --watch`. |
-| `npm test` | All tests (`node --test`): classifier, auth, sessions, admin, ratings, catalog, search, pagination/seasons, SEO/sitemap, GDPR, headers, trash, admin board, thumbnails, PWA files. In-memory DB, fake YouTube lookups and thumbnails (nothing reaches youtube.com / ytimg.com), a temporary thumbnail cache per server, a temporary fake `client/dist` (`createApp({ config: { clientDist } })`). |
+| `npm test` | All tests (`node --test`): classifier, auth, sessions, admin, ratings, catalog, search, pagination/seasons, SEO/sitemap, GDPR, headers, trash, admin board, thumbnails, PWA files, stable ids (migration 14), admin metrics. In-memory DB, fake YouTube lookups and thumbnails (nothing reaches youtube.com / ytimg.com), a temporary thumbnail cache per server, a temporary fake `client/dist` (`createApp({ config: { clientDist } })`). |
 | `npm run make-admin -- someone@example.com` | Promote an existing account to admin. |
 | `node src/scripts/bench-admin-lists.js [50000]` | Times the paginated admin lists, `/api/latest` and `/api/search` over HTTP on a throwaway database with that many videos (1% of them and 10 series in the trash; p50/p95). |
+| `node src/scripts/bench-admin-metrics.js [50000] [1000000] [--analyze]` | Builds a schema-13 throwaway database (videos, ratings over the last 90 days, trash, cached thumbnails), times the upgrade (migrations 14–15), then `GET /api/admin/metrics?days=7/30/90` over HTTP and the service call alone (p50/p95). |
 
 ## Environment
 
@@ -79,8 +80,9 @@ See [`.env.example`](.env.example) — each variable is documented there.
   are always season 1, 8 `series_stats` / `rating_totals` / `catalog_version` + triggers, 9 `videos.title_search` +
   admin list indexes, 10 session epochs, 11 `series_version` (keys the classifier's pre-normalised catalog),
   12 `video_rating_stats` + triggers (per-video rating count/sum for every video list and `/api/top-rated`),
-  13 the trash (below).
+  13 the trash (below), 14 `series`/`videos` rebuilt as `AUTOINCREMENT`, 15 `rating_days` + `videos_unavailable` (both v1.6, below).
   `catalog_version` keys the in-memory genre and sitemap caches.); `src/retention.js` — cleanup and YouTube health-check jobs.
+- `src/metricsService.js` — `GET /api/admin/metrics` (v1.6, below).
 - Trash (v1.4, `src/trashService.js`, migration 13): `DELETE /api/admin/{series,videos}/:id` set `deleted_at`; a series
   takes its live videos with it (same `deleted_at`, `trashed_with_series = 1`), so `videos.deleted_at` alone says
   whether a video is visible. Every live query filters `deleted_at IS NULL` (public reads, sitemap, SEO, genres,
@@ -150,6 +152,65 @@ port, no user name/password (else 400). `og:image` and JSON-LD `image`/`thumbnai
    hourly retention run then deletes cached files that belong to nothing any more (a swapped YouTube upload,
    a replaced cover URL, a crash between purge and delete). The trash keeps files (restore) but answers 404.
 
+## Stable ids and admin metrics (v1.6)
+
+**Ids are never reused (migration 14).** `series.id` and `videos.id` are `INTEGER PRIMARY KEY AUTOINCREMENT`, so a
+deleted-forever or purged id is never handed out again (a cached `/api/videos/<id>` can never show another video).
+SQLite cannot add `AUTOINCREMENT` in place, so the migration (a JS step, `rebuildWithAutoincrement()` in `src/db.js`)
+does the documented 12-step rebuild inside its transaction, with foreign keys off as `migrate()` already does:
+1. it remembers the SQL of every index on the two tables and of every trigger/view on them or mentioning them
+   (the `ratings_stats_*` triggers on `ratings` read `videos`) and drops those triggers first — a rename re-parses
+   the schema and fails on a trigger that names a missing table;
+2. per table (series, then videos): `CREATE TABLE <t>_v14` with the exact current columns, defaults and checks plus
+   `AUTOINCREMENT`, copy every row with its id (no trigger fires: the new table has none yet; counts and max id are
+   checked), `DROP TABLE`, `ALTER TABLE … RENAME`. Other tables' foreign keys name the table (`REFERENCES videos(id)
+   ON DELETE CASCADE` in `ratings`, `rating_activity`, `video_rating_stats`; `videos.series_id` → `series`), so they
+   resolve to the new table unchanged;
+3. re-creates the indexes (the partial and covering ones verbatim), then the triggers, from the remembered SQL;
+4. sets `sqlite_sequence` to the current max id of each table (never lower than what it holds). An id deleted
+   *before* the upgrade above that max cannot be known and may be handed out once more; never again after it.
+   If `sqlite_stat1` had statistics for the tables, they are rebuilt (`ANALYZE`).
+Aggregates (`series_stats`, `rating_totals`, `video_rating_stats`, `rating_activity`, `catalog_version`) are not
+touched: the rows they describe are the same. `migrate()` runs `PRAGMA foreign_key_check` afterwards, and
+`openDatabase()` runs `wal_checkpoint(TRUNCATE)` once whenever a migration ran (the rebuild otherwise leaves a WAL
+nearly the size of the database until the next truncating checkpoint).
+`test/stable-ids.test.js` builds a v13 database through the real services (series, published/pending/unavailable/
+trashed videos, a trashed series, users, sessions, e-mail tokens, ratings on four days, `ANALYZE`), upgrades it and
+checks every row of every table byte for byte, columns/foreign keys/indexes (`PRAGMA table_xinfo`, `foreign_key_list`,
+`index_list`/`index_xinfo`), every index and trigger SQL, `sqlite_sequence`, `foreign_key_check`, `integrity_check`,
+aggregates against fresh recounts (`assertFresh`), that the triggers still fire (rate, trash, restore, purge, cascades,
+version bumps), and that deleting the newest video/series (delete forever, hard delete, the 7-day purge) and adding
+one gives a new id; plus the HTTP round trip (delete forever, add again → a new id, the old one stays 404).
+50k videos / 1M ratings upgrade (migrations 14–15) in ~1.7–1.9 s.
+
+**Admin metrics.** `GET /api/admin/metrics?days=` (admin, `Cache-Control: private, no-store`; `days` 7–90, default
+30, else 400 `VALIDATION_ERROR` on `days`). Read in one transaction from the catalog and anonymous aggregates only
+— never `users`, `sessions`, `email_tokens` or the `ratings` rows (`test/metrics.test.js` records every statement the
+service runs and checks its text and, via `EXPLAIN`, every table SQLite opens: `series`, `videos`, `series_stats`,
+`rating_totals`, `rating_days`):
+- `catalog`: live series; per section, series with a live published video there and those videos (`series_stats`,
+  like `/api/sections`); live pending and live unavailable videos (partial index `videos_unavailable`); the trash
+  (every trashed video, those trashed with their series included).
+- `pendingQueue`: count, `oldestAt` / `medianAgeHours` by `created_at` (the median is read straight off
+  `videos_status_created` with `OFFSET`), and `byReason` — `{ key, reason, count }`, most frequent first, worked out
+  from each pending video's current columns (one video can count under several; the stored classifier reasons also
+  list what was found and can be stale). Keys: `no-section`, `no-series`, `series-trashed` (no series, and the
+  admin-picked `overrides.seriesSlug` is in the trash), `no-number`, `guessed-number` (no number but a
+  `suggestedNumber`), `slot-taken` (a live published video holds its slot), `ready` (complete, slot free). Every
+  pending video has at least one, so `other` is never sent (clients fall back to `reason` for unknown keys).
+- `ratings`: `total`/`average` of live videos (`rating_totals`); `daily` = the last `days` UTC days, oldest first,
+  `{ day, count, average }` (`0`/`null` on quiet days; `average` is `null` below 3 ratings that day, so no single
+  person's score shows — `count` stays) from `rating_days`, which triggers on `rating_activity` keep
+  equal to its per-day sums (retention and FK cascades included; a trashed video's ratings count until its purge,
+  like `rating_activity`). `rating_activity` is kept 90 days (was 30) so `?days=90` is complete; `/api/trending`
+  still reads only the last 7.
+- `topSeries`: `repo.search({ sort: "top" })` — the `/api/search?sort=top` Bayesian ranking ((C·m + sum)/(C + n),
+  C = 5, m = site mean) — first 10 (series, section) rows with n ≥ 3; `average` is the plain mean (1 decimal).
+- `thumbnails`: the same-origin image cache (`THUMB_CACHE_DIR`, thumbnails plus the series covers sharing it): files,
+  bytes, and remembered upstream failures (thumbnails + covers).
+Bench (`bench-admin-metrics.js`, 50k videos, 1M ratings / ~1M `rating_activity` rows over 90 days, 2,500 pending):
+p50 ~6 ms, p95 6–10 ms over HTTP (service call alone: p50 ~4.7 ms), whatever `days` (budget: 20 ms).
+
 ## Data we store and why
 
 | Table | Personal data | Why | Kept until |
@@ -158,7 +219,8 @@ port, no user name/password (else 400). `og:image` and JSON-LD `image`/`thumbnai
 | `sessions` | SHA-256 of the session token, user id, expiry, epoch | stay logged in | 30-day expiry, purged hourly; at most 20 per user (a login drops the oldest) |
 | `email_tokens` | SHA-256 of the token, user id, purpose (`verify`/`reset`), expiry | confirm e-mail, reset password | used, or expired (24 h / 1 h), purged hourly |
 | `ratings` | user id, video id, score, reaction | the rating feature | account deleted, or 7 days after its video went to the trash |
-| `rating_activity` | **not personal data**: per-video, per-day counts, no user id | "trending" | 30 days |
+| `rating_activity` | **not personal data**: per-video, per-day counts, no user id | "trending", admin metrics | 90 days (30 before v1.6) |
+| `rating_days` | **not personal data**: `rating_activity` summed per day (site-wide) | admin metrics | as long as `rating_activity` |
 
 Never stored: IP addresses (the rate limiter keeps them, IPv6 by /64, in a
 capped in-memory map for 15 minutes), user agents, analytics, the e-mail language choice. The thumbnail cache
@@ -185,7 +247,7 @@ E-mail addresses with control characters (`\p{Cc}`: NUL, ESC, DEL, C1) are refus
 ## Background jobs (in-process, unref'd timers)
 
 - Retention: at startup and hourly — purge expired sessions/tokens, unverified
-  accounts older than 7 days, rating activity older than 30 days, series/videos trashed 7 days ago (with ratings
+  accounts older than 7 days, rating activity older than 90 days, series/videos trashed 7 days ago (with ratings
   and cached images), then cached images that belong to nothing any more.
 - YouTube health check: hourly ticks re-check videos not checked in 24 h via
   oEmbed; 401/403/404 marks a video `unavailable` (hidden from latest/top-rated/

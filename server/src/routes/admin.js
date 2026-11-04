@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { SECTIONS, parseYouTubeId } from "../classifier.js";
 import { HttpError, notFound, validationError } from "../errors.js";
+import { METRICS_DAYS } from "../metricsService.js";
 import { requireAdmin } from "../middleware/session.js";
 import { slugify } from "../routing.js";
 import { searchNeedle } from "../search.js";
@@ -116,7 +117,7 @@ function readOrder(body) {
   return { section, season, videoIds: body.videoIds, expected: body.expected };
 }
 
-export function adminRoutes({ repo, videos, trash }) {
+export function adminRoutes({ repo, videos, trash, metrics }) {
   const router = Router();
   router.use(requireAdmin);
 
@@ -271,6 +272,15 @@ export function adminRoutes({ repo, videos, trash }) {
   router.delete("/videos/:id", (req, res) => {
     trash.trashVideo(videoId(req));
     res.status(204).end();
+  });
+
+  // ---- metrics (v1.6): anonymous aggregates only, never cached ----
+  router.get("/metrics", (req, res) => {
+    const r = queryReader(req.query);
+    const days = r.int("days", METRICS_DAYS);
+    r.done();
+    res.set("Cache-Control", "private, no-store");
+    res.json(metrics.get({ days }));
   });
 
   // ---- trash ----

@@ -10,10 +10,11 @@ import { BulkTab } from "./BulkTab.jsx";
 import { VideoListTab } from "./VideoListTab.jsx";
 import { BrokenTab } from "./BrokenTab.jsx";
 import { TrashTab } from "./TrashTab.jsx";
+import { MetricsTab } from "./MetricsTab.jsx";
 import { ErrorText } from "./shared.jsx";
 import styles from "./Admin.module.css";
 
-const TABS = ["series", "add", "bulk", "pending", "published", "broken", "trash"];
+const TABS = ["series", "add", "bulk", "pending", "published", "broken", "trash", "metrics"];
 
 export function Component() {
   const { t } = useT();
@@ -72,6 +73,7 @@ export function Component() {
         {tab === "published" && <VideoListTab key="published" status="published" series={series} />}
         {tab === "broken" && <BrokenTab series={series} />}
         {tab === "trash" && <TrashTab reloadSeries={reloadSeries} />}
+        {tab === "metrics" && <MetricsTab />}
       </Tabs>
     </div>
   );

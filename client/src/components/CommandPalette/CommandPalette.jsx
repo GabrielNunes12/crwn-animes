@@ -132,7 +132,13 @@ export function CommandPalette({ open, onClose }) {
       ref={dialogRef}
       className={`dialog ${styles.palette}`}
       aria-labelledby={`${ids}-title`}
-      onClose={() => open && close()}
+      // The browser fires `close` in a task AFTER dialog.close(). If the palette was reopened in
+      // between (Esc, then Ctrl+K at once), that late event belongs to the previous close: the
+      // dialog is open again, so it is ignored. A close the browser makes itself still lands here.
+      onClose={() => {
+        if (dialogRef.current?.open) return;
+        if (open) close();
+      }}
       onCancel={(e) => {
         e.preventDefault();
         close();

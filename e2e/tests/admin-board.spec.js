@@ -877,3 +877,76 @@ test.describe("draft preview", () => {
     });
   });
 });
+
+// v1.6: series.id and videos.id are AUTOINCREMENT, so an id deleted forever is never handed out
+// again (no cached /api/videos/<id> can ever show another video under an old id). Without it,
+// SQLite reuses max(id) + 1: deleting the newest row and inserting the next one would reuse the id.
+// Other specs insert in parallel, so the assertion is "strictly greater", which only AUTOINCREMENT
+// guarantees whatever ran in between.
+test.describe("stable ids (v1.6: never reused)", () => {
+  test("a video and a series deleted forever: the next ones get new, higher ids; the old ids stay 404 everywhere", async ({ admin, browser, baseURL }) => {
+    const S = await seedBoardSeries(admin, "Ids", [["Um", "anime", 1, 1]]);
+    const visitor = await anonymousContext(browser, baseURL);
+    const publicStatus = async (path) => (await visitor.request.get(`${API_ORIGIN}${path}`)).status();
+
+    await test.step("video: the newest video, deleted forever → the next video's id is higher; /api/videos/<old id> stays 404", async () => {
+      const created = await admin.post("/api/admin/videos", {
+        data: { url: `https://youtu.be/${fakeYouTubeId("idold")}`, title: `${S.name} Dois`, section: "anime", seriesSlug: S.slug, number: 2 },
+      });
+      expect(created.status()).toBe(201);
+      const old = (await created.json()).video;
+      expect(old.status).toBe("published");
+      expect(await publicStatus(`/api/videos/${old.id}`)).toBe(200);
+
+      expect((await admin.delete(`/api/admin/videos/${old.id}`)).status()).toBe(204);
+      expect((await admin.delete(`/api/admin/trash/videos/${old.id}`)).status()).toBe(204);
+      expect(await publicStatus(`/api/videos/${old.id}`)).toBe(404);
+
+      // A different YouTube video in the very same slot …
+      const next = await admin.post("/api/admin/videos", {
+        data: { url: `https://youtu.be/${fakeYouTubeId("idnew")}`, title: `${S.name} Dois de novo`, section: "anime", seriesSlug: S.slug, number: 2 },
+      });
+      expect(next.status()).toBe(201);
+      const fresh = (await next.json()).video;
+      expect(fresh).toMatchObject({ status: "published", route: `/anime/${S.slug}/episode/2` });
+      expect(fresh.id, "the deleted id is not reused").not.toBe(old.id);
+      expect(fresh.id, "ids only grow").toBeGreaterThan(old.id);
+      // … and the deleted one re-added: also a new id.
+      const readd = await admin.post("/api/admin/videos", { data: { url: `https://youtu.be/${old.youtubeVideoId}`, title: old.title, section: "anime", seriesSlug: S.slug, number: 3 } });
+      expect(readd.status()).toBe(201);
+      const again = (await readd.json()).video;
+      expect(again.id).toBeGreaterThan(fresh.id);
+
+      // The old id answers 404 for everyone, the new ones answer with themselves.
+      expect(await publicStatus(`/api/videos/${old.id}`)).toBe(404);
+      expect(await publicStatus(`/api/videos/${old.id}/rating`)).toBe(404);
+      expect((await admin.get(`/api/admin/videos/${old.id}/preview`)).status()).toBe(404);
+      expect((await admin.patch(`/api/admin/videos/${old.id}`, { data: { number: 9 } })).status()).toBe(404);
+      const body = await (await visitor.request.get(`${API_ORIGIN}/api/videos/${fresh.id}`)).json();
+      expect(body.video).toMatchObject({ id: fresh.id, youtubeVideoId: fresh.youtubeVideoId, route: `/anime/${S.slug}/episode/2` });
+    });
+
+    await test.step("series: deleted forever → a new series with the same slug gets a higher id; the old id stays 404", async () => {
+      const T = await seedBoardSeries(admin, "IdsSerie", [["Unico", "anime", 1, 1]]);
+      expect((await admin.delete(`/api/admin/series/${T.id}`)).status()).toBe(204);
+      expect((await admin.delete(`/api/admin/trash/series/${T.id}`)).status()).toBe(204);
+      expect((await admin.get(`/api/admin/series/${T.id}`)).status()).toBe(404);
+      expect(await publicStatus(`/api/videos/${T.v.Unico.id}`)).toBe(404);
+
+      const recreated = await admin.post("/api/admin/series", { data: { name: T.name, slug: T.slug } });
+      expect(recreated.status()).toBe(201);
+      const fresh = (await recreated.json()).series;
+      expect(fresh.id, "ids only grow").toBeGreaterThan(T.id);
+      expect((await admin.get(`/api/admin/series/${T.id}`)).status(), "the old id stays gone").toBe(404);
+      expect((await admin.get(`/api/admin/series/${fresh.id}`)).status()).toBe(200);
+      expect((await admin.patch(`/api/admin/series/${T.id}`, { data: { name: "Fantasma" } })).status()).toBe(404);
+
+      const video = await admin.post("/api/admin/videos", {
+        data: { url: `https://youtu.be/${fakeYouTubeId("idser")}`, title: `${T.name} Novo`, section: "anime", seriesSlug: T.slug, number: 1 },
+      });
+      expect(video.status()).toBe(201);
+      expect((await video.json()).video.id, "a video id is not reused either").toBeGreaterThan(T.v.Unico.id);
+    });
+    await visitor.close();
+  });
+});

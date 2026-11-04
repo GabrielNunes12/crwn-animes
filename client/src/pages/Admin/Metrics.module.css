@@ -1,0 +1,437 @@
+/* Admin "Métricas" tab (v1.6). Marks wear --chart-mark; text wears text tokens only. */
+@layer components {
+  /* One filter row above everything it scopes: period · updated at · refresh. */
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    justify-content: space-between;
+    gap: var(--space-3) var(--space-4);
+  }
+  .updated {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+  }
+  .updated time {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Segmented 7 / 30 / 90 (native radios, same look as the search filter). */
+  .segmented {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    min-inline-size: 0;
+  }
+  .legend {
+    padding: 0;
+    margin-block-end: 0.35rem;
+    font-weight: 600;
+    font-size: var(--step--1);
+  }
+  .segments {
+    display: flex;
+    padding: 0.2rem;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-pill);
+    background: var(--bg);
+  }
+  .segment {
+    position: relative;
+    flex: 1 1 auto;
+    display: flex;
+  }
+  .segment input {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .segment span {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    min-block-size: 2.25rem;
+    padding-inline: 0.9rem;
+    border-radius: var(--radius-pill);
+    color: var(--muted);
+    font-weight: 600;
+    font-size: var(--step--1);
+    white-space: nowrap;
+    transition:
+      background-color var(--dur-fast),
+      color var(--dur-fast);
+  }
+  .segment input:hover + span {
+    color: var(--text);
+  }
+  .segment input:checked + span {
+    background: var(--primary-fill);
+    color: var(--on-accent);
+  }
+  .segment input:focus-visible + span {
+    outline: 2px solid var(--secondary);
+    outline-offset: 2px;
+  }
+
+  /* Refetch keeps the frame: the last numbers stay, dimmed, no skeleton flash. */
+  .body {
+    --stack-gap: var(--space-5);
+  }
+  /* While a refetch runs only the data marks dim; every text keeps its full contrast. */
+  .body[data-stale] .bar,
+  .body[data-stale] .meter > span {
+    opacity: 0.4;
+  }
+  .busy {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--muted);
+    font-size: var(--step--1);
+  }
+  .spinner {
+    inline-size: 0.9em;
+    block-size: 0.9em;
+    border: 2px solid var(--border-strong);
+    border-block-start-color: var(--primary);
+    border-radius: 50%;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .spinner {
+      animation: spin 0.8s linear infinite;
+    }
+  }
+  @keyframes spin {
+    to {
+      rotate: 1turn;
+    }
+  }
+
+  /* KPI tiles */
+  .tiles {
+    display: grid;
+    gap: var(--space-3);
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 9.5rem), 1fr));
+    margin: 0;
+  }
+  /* Eight tiles: two even rows of four on wide screens (never seven and an orphan). */
+  @media (min-width: 60rem) {
+    .tiles {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+  .tile {
+    display: grid;
+    align-content: start;
+    gap: var(--space-1);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    min-inline-size: 0;
+  }
+  .tile dt {
+    color: var(--muted);
+    font-size: var(--step--1);
+    font-weight: 600;
+  }
+  .tile dd {
+    margin: 0;
+  }
+  /* Proportional figures on standalone values (tabular only where numbers align in columns). */
+  .value {
+    font-family: var(--font-heading);
+    font-size: var(--step-2);
+    font-weight: 650;
+    line-height: 1.1;
+  }
+  .detail {
+    color: var(--muted);
+    font-size: var(--step--1);
+    overflow-wrap: anywhere;
+  }
+
+  /* Panels (chart, pending queue, top series) */
+  .panel {
+    display: grid;
+    gap: var(--space-3);
+    min-inline-size: 0;
+    padding: var(--space-4);
+  }
+  @media (min-width: 40rem) {
+    .panel {
+      padding: var(--space-5);
+    }
+  }
+  .panel h3 {
+    font-size: var(--step-1);
+  }
+  .panelHead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2) var(--space-3);
+  }
+  .split {
+    display: grid;
+    gap: var(--space-5);
+    align-items: start;
+  }
+  @media (min-width: 60rem) {
+    .split {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+  }
+  .subhead {
+    font-size: var(--step-0);
+    font-weight: 650;
+  }
+
+  /* The chart. Its height includes the x-axis band, so the card never scrolls inside. */
+  .plot {
+    position: relative;
+    min-inline-size: 0;
+  }
+  .svg {
+    display: block;
+    max-inline-size: 100%;
+    overflow: visible;
+    border-radius: var(--radius-sm);
+    touch-action: pan-y;
+  }
+  .svg:focus-visible {
+    outline: 2px solid var(--secondary);
+    outline-offset: 4px;
+  }
+  .grid {
+    stroke: var(--border);
+    stroke-width: 1;
+    shape-rendering: crispEdges;
+  }
+  .baseline {
+    stroke: var(--border-strong);
+    stroke-width: 1;
+    shape-rendering: crispEdges;
+  }
+  .tick {
+    fill: var(--muted);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .peak {
+    fill: var(--text);
+    font-size: 0.75rem;
+    font-weight: 650;
+  }
+  .band {
+    fill: transparent;
+  }
+  .band[data-active] {
+    fill: color-mix(in oklch, var(--text) 7%, transparent);
+  }
+  .bar {
+    fill: var(--chart-mark);
+    transition:
+      fill var(--dur-fast),
+      opacity var(--dur-fast);
+  }
+  .bar[data-active] {
+    fill: var(--chart-mark-active);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .bar {
+      transform-box: fill-box;
+      transform-origin: 50% 100%;
+      animation: bar-grow var(--dur) var(--ease-out) both;
+    }
+  }
+  @keyframes bar-grow {
+    from {
+      transform: scaleY(0);
+    }
+  }
+  .emptyNote {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: 40%;
+    text-align: center;
+    color: var(--muted);
+    font-size: var(--step--1);
+    pointer-events: none;
+  }
+  /* Positioned from the plot's left edge with `translate` (set after measuring, clamped
+     inside the chart), so its width never depends on where it is; long dates wrap. */
+  .tooltip {
+    position: absolute;
+    inset-block-start: 0;
+    left: 0;
+    z-index: 1;
+    max-inline-size: 100%;
+    display: grid;
+    gap: 0.1rem;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--elevated);
+    box-shadow: var(--shadow);
+    color: var(--muted);
+    font-size: var(--step--1);
+    overflow-wrap: anywhere;
+    pointer-events: none;
+  }
+  /* Values lead, labels follow. */
+  .tooltip strong {
+    color: var(--text);
+    font-size: var(--step-0);
+  }
+
+  /* Table view (always in the accessibility tree; shown with "Ver tabela"). */
+  .tableScroll {
+    max-block-size: 22rem;
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .tableScroll:focus-visible {
+    outline: 2px solid var(--secondary);
+    outline-offset: 2px;
+  }
+  .table {
+    inline-size: 100%;
+    border-collapse: collapse;
+    font-size: var(--step--1);
+  }
+  .table caption {
+    padding: var(--space-2) var(--space-3);
+    text-align: start;
+    font-weight: 600;
+  }
+  .table th,
+  .table td {
+    padding: var(--space-2) var(--space-3);
+    border-block-start: 1px solid var(--border);
+    text-align: start;
+  }
+  .table thead th {
+    position: sticky;
+    inset-block-start: 0;
+    background: var(--elevated);
+  }
+  .table tbody th {
+    font-weight: 500;
+  }
+  .table td {
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+  }
+  .table thead th:not(:first-child) {
+    text-align: end;
+  }
+
+  /* Pending queue */
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3) var(--space-5);
+    margin: 0;
+  }
+  .facts dt {
+    color: var(--muted);
+    font-size: var(--step--1);
+  }
+  .facts dd {
+    margin: 0;
+    font-weight: 650;
+  }
+  /* Ranked reasons: text + count, and a thin bar in the one chart hue (decorative). */
+  .ranked {
+    display: grid;
+    gap: var(--space-3);
+    padding: 0;
+    list-style: none;
+  }
+  .ranked li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-1) var(--space-3);
+    align-items: baseline;
+    font-size: var(--step--1);
+  }
+  .rankText {
+    overflow-wrap: anywhere;
+  }
+  .rankValue {
+    color: var(--muted);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .meter {
+    grid-column: 1 / -1;
+    display: block;
+    block-size: 6px;
+  }
+  .meter > span {
+    display: block;
+    block-size: 100%;
+    min-inline-size: 6px;
+    border-radius: var(--radius-pill);
+    background: var(--chart-mark);
+  }
+
+  /* Top series */
+  .top {
+    display: grid;
+    gap: var(--space-2);
+    padding-inline-start: 1.6rem;
+  }
+  .top li {
+    padding-block: var(--space-1);
+  }
+  .top li::marker {
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .topName {
+    font-weight: 650;
+    overflow-wrap: anywhere;
+    margin-inline-end: var(--space-2);
+  }
+  .topStat {
+    display: block;
+    color: var(--muted);
+    font-size: var(--step--1);
+  }
+  .star {
+    color: var(--star);
+  }
+
+  @media (forced-colors: active) {
+    .bar,
+    .bar[data-active] {
+      fill: CanvasText;
+    }
+    .band[data-active] {
+      fill: Highlight;
+    }
+    .grid,
+    .baseline {
+      stroke: GrayText;
+    }
+    .tick,
+    .peak {
+      fill: CanvasText;
+    }
+    .meter > span {
+      forced-color-adjust: none;
+      background: CanvasText;
+    }
+    .segment input:checked + span {
+      outline: 2px solid CanvasText;
+    }
+  }
+}

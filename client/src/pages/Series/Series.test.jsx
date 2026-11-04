@@ -68,7 +68,8 @@ describe("Series page — seasons, watched N of M and Continue", () => {
 
     await userEvent.setup().click(within(nav).getByRole("link", { name: "Season 2" }));
     await waitFor(() => expect(router.state.location.search).toBe("?season=2"));
-    expect(within(nav).getByRole("link", { name: "Season 2" })).toHaveAttribute("aria-current", "true");
+    // router.state is updated before React commits it (a transition): wait for the DOM, not the router.
+    await waitFor(() => expect(within(nav).getByRole("link", { name: "Season 2" })).toHaveAttribute("aria-current", "true"));
     expect(within(nav).getByRole("link", { name: "Season 1" })).not.toHaveAttribute("aria-current");
     expect(screen.getByRole("heading", { level: 3, name: "Season 2" })).toBeInTheDocument();
     expect(episodeLinks()).toEqual(["/anime/op/season/2/episode/1", "/anime/op/season/2/episode/2", "/anime/op/season/2/episode/3"]);
