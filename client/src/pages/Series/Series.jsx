@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { Link, useLoaderData, useSearchParams } from "react-router";
-import { catalogApi } from "../../api/client.js";
 import { AsyncView } from "../../components/Await/AsyncView.jsx";
 import { Skeleton } from "../../components/Skeleton/Skeleton.jsx";
 import { LazyImage } from "../../components/LazyImage/LazyImage.jsx";
@@ -15,22 +14,7 @@ import { formatTime, pruneSeriesProgress, resumePosition, seriesProgress } from 
 import { pickSeason, seasonsOf } from "../../lib/seasons.js";
 import styles from "./Series.module.css";
 
-export function loader({ params, request, section }) {
-  // Every season at once: "watched N of M" and the Continue target span the whole
-  // series, and switching seasons (?season=) then needs no request.
-  return { section, data: catalogApi.series(section, params.slug, { signal: request.signal }) };
-}
-
-/** Changing only `?season=` filters what is already loaded — don't refetch. */
-export function shouldRevalidate({ currentUrl, nextUrl, defaultShouldRevalidate }) {
-  if (currentUrl.pathname !== nextUrl.pathname) return defaultShouldRevalidate;
-  const strip = (url) => {
-    const p = new URLSearchParams(url.search);
-    p.delete("season");
-    return p.toString();
-  };
-  return strip(currentUrl) === strip(nextUrl) ? false : defaultShouldRevalidate;
-}
+export { loader, shouldRevalidate } from "./loader.js";
 
 /** Rows past this index skip the reveal animation (one observer per row adds up on long lists). */
 const REVEAL_ROWS = 12;

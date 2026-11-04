@@ -1,5 +1,4 @@
 import { Form, Link, useLoaderData } from "react-router";
-import { catalogApi } from "../../api/client.js";
 import { AsyncView } from "../../components/Await/AsyncView.jsx";
 import { CardGridSkeleton, Skeleton } from "../../components/Skeleton/Skeleton.jsx";
 import { Reveal } from "../../components/Reveal/Reveal.jsx";
@@ -9,18 +8,7 @@ import { useT } from "../../i18n/useT.js";
 import { genreHref } from "../../lib/search.js";
 import styles from "./Section.module.css";
 
-export function loader({ request, section }) {
-  const url = new URL(request.url);
-  const genre = url.searchParams.get("genre") ?? "";
-  const q = url.searchParams.get("q") ?? "";
-  return {
-    section,
-    genre,
-    q,
-    series: catalogApi.seriesList(section, { genre, q }, { signal: request.signal }),
-    genres: catalogApi.genres().catch(() => []),
-  };
-}
+export { loader } from "./loader.js";
 
 function hrefWith(section, { genre, q }) {
   const p = new URLSearchParams();

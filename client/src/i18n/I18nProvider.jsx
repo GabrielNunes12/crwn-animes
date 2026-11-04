@@ -1,17 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { I18nContext } from "./context.js";
-import { createI18n, detectLocale, LOCALES } from "./core.js";
-import { readString, writeString } from "../lib/storage.js";
+import { createI18n, LOCALES, loadMessages, messagesLoaded } from "./core.js";
+import { initialLocale } from "./locale.js";
+import { writeString } from "../lib/storage.js";
 import { LOCALE_KEY } from "../lib/prefs.js";
 
-function initialLocale() {
-  const langs = navigator.languages?.length ? navigator.languages : [navigator.language];
-  return detectLocale(readString(LOCALE_KEY), langs);
-}
-
-/** `locale` prop forces a starting locale (tests). */
+/**
+ * `locale` prop forces a starting locale (tests). Its dictionary must already be loaded
+ * (main.jsx awaits loadMessages() before the first render). Switching to a locale whose
+ * dictionary is not loaded yet keeps the current language until its chunk arrives.
+ */
 export function I18nProvider({ children, locale: initial }) {
   const [locale, setLocaleState] = useState(() => initial ?? initialLocale());
+  const wanted = useRef(locale);
 
   useEffect(() => {
     document.documentElement.lang = locale;
@@ -20,7 +21,17 @@ export function I18nProvider({ children, locale: initial }) {
   const setLocale = useCallback((next) => {
     if (!LOCALES.includes(next)) return;
     writeString(LOCALE_KEY, next);
-    setLocaleState(next);
+    wanted.current = next;
+    if (messagesLoaded(next)) {
+      setLocaleState(next);
+      return;
+    }
+    loadMessages(next).then(
+      () => {
+        if (wanted.current === next) setLocaleState(next); // the last choice wins
+      },
+      () => {}, // offline and not cached: stay in the current language
+    );
   }, []);
 
   const value = useMemo(() => createI18n(locale, setLocale), [locale, setLocale]);

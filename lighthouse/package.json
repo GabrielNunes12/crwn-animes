@@ -1,0 +1,15 @@
+{
+  "name": "crwn-animes-lighthouse",
+  "private": true,
+  "type": "module",
+  "description": "Lighthouse CI for Crwn Animes (docs/API.md v1.7): builds the client, starts the real API with seeded data and the fake thumbnail upstream, audits /, a series page and an episode page against the performance budget.",
+  "scripts": {
+    "test": "node run.mjs"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "devDependencies": {
+    "@lhci/cli": "0.15.1"
+  }
+}

@@ -1,9 +1,27 @@
-import ptBR from "./pt-BR.json";
-import en from "./en.json";
-
 export const LOCALES = ["pt-BR", "en"];
 export const DEFAULT_LOCALE = "pt-BR";
-export const MESSAGES = { "pt-BR": ptBR, en };
+
+// Each dictionary is its own chunk, kept out of the entry bundle (docs/API.md v1.7): main.jsx
+// loads the visitor's one in parallel with the first route, and I18nProvider loads another
+// before switching to it. MESSAGES holds the dictionaries loaded so far.
+const IMPORTERS = { "pt-BR": () => import("./pt-BR.json"), en: () => import("./en.json") };
+export const MESSAGES = {};
+
+/** Makes `messages` the dictionary of `locale` (tests register both up front). */
+export function registerMessages(locale, messages) {
+  MESSAGES[locale] = messages;
+}
+
+export const messagesLoaded = (locale) => Boolean(MESSAGES[locale]);
+
+/** Loads (once) the dictionary of a supported locale. Rejects when its chunk cannot be fetched. */
+export async function loadMessages(locale) {
+  if (!MESSAGES[locale]) {
+    if (!Object.hasOwn(IMPORTERS, locale)) throw new Error(`Unsupported locale: ${locale}`);
+    MESSAGES[locale] = (await IMPORTERS[locale]()).default;
+  }
+  return MESSAGES[locale];
+}
 
 /** Saved choice wins; otherwise English browsers get "en", everyone else pt-BR. */
 export function detectLocale(saved, navigatorLanguages = []) {
@@ -31,13 +49,15 @@ function lookup(dict, key) {
  * `{name}` placeholders are interpolated; numbers are formatted for the locale.
  */
 export function createTranslator(locale, messages = MESSAGES) {
-  const chain = [locale, DEFAULT_LOCALE, "en"].filter((l, i, a) => messages[l] && a.indexOf(l) === i);
+  const chain = [locale, DEFAULT_LOCALE, "en"].filter((l, i, a) => a.indexOf(l) === i);
   const plural = new Intl.PluralRules(locale);
   const numberFormat = new Intl.NumberFormat(locale);
 
   return function t(key, vars) {
     let value;
+    // Dictionaries load lazily: only those present when t() runs take part in the fallback.
     for (const l of chain) {
+      if (!messages[l]) continue;
       value = lookup(messages[l], key);
       if (value !== undefined) break;
     }

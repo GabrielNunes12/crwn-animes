@@ -1,0 +1,37 @@
+{
+  "id": "/",
+  "name": "Crwn Animes",
+  "short_name": "Crwn",
+  "description": "Episódios de anime e capítulos de mangá do YouTube, organizados por série e temporada.",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#0b0b14",
+  "background_color": "#0b0b14",
+  "categories": ["entertainment"],
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Anime",
+      "short_name": "Anime",
+      "description": "Todas as séries de anime",
+      "url": "/anime",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Mangá",
+      "short_name": "Mangá",
+      "description": "Todos os mangás em vídeo",
+      "url": "/manga",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

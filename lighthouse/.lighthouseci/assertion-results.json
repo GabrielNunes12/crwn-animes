@@ -1,0 +1,134 @@
+[
+  {
+    "name": "minScore",
+    "expected": 0.9,
+    "actual": 0.61,
+    "values": [
+      0.61
+    ],
+    "operator": ">=",
+    "passed": false,
+    "auditProperty": "performance",
+    "auditId": "categories",
+    "level": "error",
+    "url": "http://localhost:4717/"
+  },
+  {
+    "name": "maxNumericValue",
+    "expected": 2500,
+    "actual": 5314.950375,
+    "values": [
+      5314.950375
+    ],
+    "operator": "<=",
+    "passed": false,
+    "auditId": "largest-contentful-paint",
+    "level": "error",
+    "url": "http://localhost:4717/",
+    "auditTitle": "Largest Contentful Paint",
+    "auditDocumentationLink": "https://developer.chrome.com/docs/lighthouse/performance/lighthouse-largest-contentful-paint/"
+  },
+  {
+    "name": "maxNumericValue",
+    "expected": 204800,
+    "actual": 462055,
+    "values": [
+      462055
+    ],
+    "operator": "<=",
+    "passed": false,
+    "auditProperty": "script.size",
+    "auditId": "resource-summary",
+    "level": "error",
+    "url": "http://localhost:4717/",
+    "auditTitle": "Resources Summary"
+  },
+  {
+    "name": "minScore",
+    "expected": 0.9,
+    "actual": 0.71,
+    "values": [
+      0.71
+    ],
+    "operator": ">=",
+    "passed": false,
+    "auditProperty": "performance",
+    "auditId": "categories",
+    "level": "error",
+    "url": "http://localhost:4717/anime/cronicas-do-farol"
+  },
+  {
+    "name": "maxNumericValue",
+    "expected": 2500,
+    "actual": 4853.548849999999,
+    "values": [
+      4853.548849999999
+    ],
+    "operator": "<=",
+    "passed": false,
+    "auditId": "largest-contentful-paint",
+    "level": "error",
+    "url": "http://localhost:4717/anime/cronicas-do-farol",
+    "auditTitle": "Largest Contentful Paint",
+    "auditDocumentationLink": "https://developer.chrome.com/docs/lighthouse/performance/lighthouse-largest-contentful-paint/"
+  },
+  {
+    "name": "maxNumericValue",
+    "expected": 204800,
+    "actual": 459469,
+    "values": [
+      459469
+    ],
+    "operator": "<=",
+    "passed": false,
+    "auditProperty": "script.size",
+    "auditId": "resource-summary",
+    "level": "error",
+    "url": "http://localhost:4717/anime/cronicas-do-farol",
+    "auditTitle": "Resources Summary"
+  },
+  {
+    "name": "minScore",
+    "expected": 0.9,
+    "actual": 0.71,
+    "values": [
+      0.71
+    ],
+    "operator": ">=",
+    "passed": false,
+    "auditProperty": "performance",
+    "auditId": "categories",
+    "level": "error",
+    "url": "http://localhost:4717/anime/cronicas-do-farol/episode/1"
+  },
+  {
+    "name": "maxNumericValue",
+    "expected": 2500,
+    "actual": 5121.369175,
+    "values": [
+      5121.369175
+    ],
+    "operator": "<=",
+    "passed": false,
+    "auditId": "largest-contentful-paint",
+    "level": "error",
+    "url": "http://localhost:4717/anime/cronicas-do-farol/episode/1",
+    "auditTitle": "Largest Contentful Paint",
+    "auditDocumentationLink": "https://developer.chrome.com/docs/lighthouse/performance/lighthouse-largest-contentful-paint/"
+  },
+  {
+    "name": "maxNumericValue",
+    "expected": 204800,
+    "actual": 469712,
+    "values": [
+      469712
+    ],
+    "operator": "<=",
+    "passed": false,
+    "auditProperty": "script.size",
+    "auditId": "resource-summary",
+    "level": "error",
+    "url": "http://localhost:4717/anime/cronicas-do-farol/episode/1",
+    "auditTitle": "Resources Summary"
+  }
+]

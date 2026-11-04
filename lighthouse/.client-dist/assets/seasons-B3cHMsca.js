@@ -1,0 +1,1 @@
+function e(e,t){return Array.isArray(e)&&e.length?[...e].sort((e,t)=>e-t):[...new Set((t??[]).map(e=>e.season??1))].sort((e,t)=>e-t)}function t(e,t,n){let r=Number(t);return t!=null&&t!==``&&e.includes(r)?r:n&&e.includes(n.season??1)?n.season??1:e[0]??1}export{e as n,t};

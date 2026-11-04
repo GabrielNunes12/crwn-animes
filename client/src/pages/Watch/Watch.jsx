@@ -14,15 +14,9 @@ import { videoLabel } from "../../lib/format.js";
 import { watchMeta } from "../../lib/meta.js";
 import { AUTOPLAY_KEY, getBool, setBool } from "../../lib/prefs.js";
 import { entryCompleted, pruneSeriesProgress } from "../../lib/progress.js";
-import { resolveWatch } from "./resolveWatch.js";
 import styles from "./Watch.module.css";
 
-export function loader({ params, request, section }) {
-  return {
-    section,
-    data: resolveWatch({ section, slug: params.slug, season: params.season, number: params.number, signal: request.signal }),
-  };
-}
+export { loader } from "./loader.js";
 
 function WatchSkeleton() {
   return (

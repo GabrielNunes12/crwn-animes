@@ -14,19 +14,7 @@ import { continueWatching, removeProgress } from "../../lib/progress.js";
 import { genreHref } from "../../lib/search.js";
 import styles from "./Home.module.css";
 
-/** Rows fail soft: a broken row is hidden instead of breaking the page. */
-const soft = (p, fallback = []) => p.catch(() => fallback);
-
-export function loader() {
-  return {
-    sections: soft(catalogApi.sections(), null),
-    genres: soft(catalogApi.genres()),
-    latest: soft(catalogApi.latest({ limit: 24 })),
-    trending: soft(catalogApi.trending(undefined, 12)),
-    topAnime: soft(catalogApi.topRated("anime", 12)),
-    topManga: soft(catalogApi.topRated("manga", 12)),
-  };
-}
+export { loader } from "./loader.js";
 
 function VideoRow({ id, title, videos, progress, more }) {
   if (!videos?.length) return null;
