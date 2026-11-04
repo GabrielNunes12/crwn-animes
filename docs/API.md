@@ -509,6 +509,16 @@ on every thumbnail. SEO keeps the 480w URL.
   `/`, a series page and an episode page (mobile preset, simulated throttling), main JS ≤ 200 KB gzip
   for the initial route, CLS ≤ 0.05, LCP ≤ 2.5 s (simulated).
 
+## Response compression
+- Public text responses are compressed (brotli when accepted, else gzip; `Vary: Accept-Encoding`):
+  hashed `/assets/*` (JS/CSS), the server-rendered HTML shell, `sw.js`, `manifest.webmanifest`,
+  `offline.html`, SVG, `sitemap*.xml`, `robots.txt`, and public catalog JSON (responses with
+  `Cache-Control: public …`). Responses smaller than 1 KB and images are sent as they are.
+- **Never compressed** (BREACH-style length side channels): anything `private`/`no-store`, i.e. every
+  `/api/auth/*`, `/api/me*`, `/api/admin/*`, rating route and error response.
+- Built assets are pre-compressed at build time (`.br` + `.gz` next to each file) and served with the
+  matching `Content-Encoding`, so static files cost no CPU per request; ETags differ per encoding.
+
 ## CI
 A `lighthouse` job builds the client, starts the real server with seeded data (and the fake thumbnail
 upstream), runs `@lhci/cli` against the three URLs with the budgets above as assertions, and uploads
