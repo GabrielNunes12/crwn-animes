@@ -37,9 +37,9 @@ changes; above 50,000 URLs `/sitemap.xml` becomes a sitemap index of
 |---|---|
 | `npm start` | Start the API (`src/index.js`). |
 | `npm run dev` | Same, with `node --watch`. |
-| `npm test` | All tests (`node --test`): classifier, auth, sessions, admin, ratings, catalog, search, pagination/seasons, SEO/sitemap, GDPR, headers. In-memory DB, fake YouTube lookups, a temporary fake `client/dist` (`createApp({ config: { clientDist } })`). |
+| `npm test` | All tests (`node --test`): classifier, auth, sessions, admin, ratings, catalog, search, pagination/seasons, SEO/sitemap, GDPR, headers, trash, admin board. In-memory DB, fake YouTube lookups, a temporary fake `client/dist` (`createApp({ config: { clientDist } })`). |
 | `npm run make-admin -- someone@example.com` | Promote an existing account to admin. |
-| `node src/scripts/bench-admin-lists.js [50000]` | Times the paginated admin lists and `/api/latest` over HTTP on a throwaway database with that many videos (p50/p95). |
+| `node src/scripts/bench-admin-lists.js [50000]` | Times the paginated admin lists, `/api/latest` and `/api/search` over HTTP on a throwaway database with that many videos (1% of them and 10 series in the trash; p50/p95). |
 
 ## Environment
 
@@ -73,8 +73,29 @@ See [`.env.example`](.env.example) — each variable is documented there.
 - `src/db.js` — schema + migrations (`PRAGMA user_version`; an entry is SQL or a JS function: 4–5 `search_text`, 6 genre spellings, 7 manga chapters
   are always season 1, 8 `series_stats` / `rating_totals` / `catalog_version` + triggers, 9 `videos.title_search` +
   admin list indexes, 10 session epochs, 11 `series_version` (keys the classifier's pre-normalised catalog),
-  12 `video_rating_stats` + triggers (per-video rating count/sum for every video list and `/api/top-rated`).
+  12 `video_rating_stats` + triggers (per-video rating count/sum for every video list and `/api/top-rated`),
+  13 the trash (below).
   `catalog_version` keys the in-memory genre and sitemap caches.); `src/retention.js` — cleanup and YouTube health-check jobs.
+- Trash (v1.4, `src/trashService.js`, migration 13): `DELETE /api/admin/{series,videos}/:id` set `deleted_at`; a series
+  takes its live videos with it (same `deleted_at`, `trashed_with_series = 1`), so `videos.deleted_at` alone says
+  whether a video is visible. Every live query filters `deleted_at IS NULL` (public reads, sitemap, SEO, genres,
+  admin lists, the classifier's catalog, re-classification, the health check); `getVideo`/`getSeries*` are live-only,
+  `getAnyVideo`/`getAnySeriesById` include the trash. Aggregates treat trashed rows as absent: `series_stats` covers
+  live videos of live series (stats triggers skip a non-live series; a series trash/restore rebuilds its rows once),
+  `rating_totals` counts ratings of live videos only (trash/restore moves a video's ratings out/in; a hard delete
+  of a live video takes them out in a `BEFORE DELETE` trigger, since FK cascades run after the parent row is gone);
+  `video_rating_stats`/`rating_activity` stay per video and are filtered by the lists. The published-slot unique
+  index ignores trashed videos; restoring a video re-checks its slot (taken → `pending` + reason) and refuses
+  (409) while its series is trashed; restoring a series restores the videos trashed with it, then re-classifies
+  pending videos. A trashed slug stays reserved (409). Purge: `purgeTrash()` in the hourly retention job deletes
+  what was trashed ≥ 7 days ago (ratings cascade) and checkpoints the WAL, like delete-forever.
+  Partial indexes `WHERE deleted_at IS NULL` replace the list indexes; the two admin-list indexes also carry
+  `deleted_at` because SQLite only treats `col = const` partial-index terms as covered (without it the counts
+  scan the table). The unfiltered admin count is `COUNT(*) − trashed` (btree count, no row visits).
+- Admin board (v1.4): `GET /api/admin/series/:id` (per section: seasons + live published videos by season, number);
+  `PUT /api/admin/series/:id/order` checks `videoIds` is exactly that season's set, then renumbers 1..n in one
+  transaction (changing videos go through `-n` first so the unique slot index never collides) and pins each number
+  as `overrides.number`; `GET /api/admin/videos/:id/preview` returns any non-purged video (pending/trashed too).
 
 ## Data we store and why
 
@@ -83,7 +104,7 @@ See [`.env.example`](.env.example) — each variable is documented there.
 | `users` | e-mail, display name, scrypt password hash, privacy-consent time | login, show your name, prove consent | account deleted; **unverified accounts are deleted after 7 days** |
 | `sessions` | SHA-256 of the session token, user id, expiry, epoch | stay logged in | 30-day expiry, purged hourly; at most 20 per user (a login drops the oldest) |
 | `email_tokens` | SHA-256 of the token, user id, purpose (`verify`/`reset`), expiry | confirm e-mail, reset password | used, or expired (24 h / 1 h), purged hourly |
-| `ratings` | user id, video id, score, reaction | the rating feature | account deleted |
+| `ratings` | user id, video id, score, reaction | the rating feature | account deleted, or 7 days after its video went to the trash |
 | `rating_activity` | **not personal data**: per-video, per-day counts, no user id | "trending" | 30 days |
 
 Never stored: IP addresses (the rate limiter keeps them, IPv6 by /64, in a
@@ -110,7 +131,7 @@ E-mail addresses with control characters (`\p{Cc}`: NUL, ESC, DEL, C1) are refus
 ## Background jobs (in-process, unref'd timers)
 
 - Retention: at startup and hourly — purge expired sessions/tokens, unverified
-  accounts older than 7 days, rating activity older than 30 days.
+  accounts older than 7 days, rating activity older than 30 days, series/videos trashed 7 days ago (with ratings).
 - YouTube health check: hourly ticks re-check videos not checked in 24 h via
   oEmbed; 401/403/404 marks a video `unavailable` (hidden from latest/top-rated/
   trending/random). Admins can also run it with `POST /api/admin/videos/health-check`. Runs are single-flight:

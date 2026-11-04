@@ -220,10 +220,11 @@ export function createVideoService({ repo, fetchVideoInfo }) {
           seen.add(id);
         }
         const missing = current.filter((video) => !seen.has(video.id)).map((video) => video.id);
+        const list = (values) => (values.length > 20 ? `${values.slice(0, 20).join(", ")}, …` : values.join(", "));
         const problems = [];
-        if (duplicate.length) problems.push(`listed twice: ${[...new Set(duplicate)].join(", ")}`);
-        if (foreign.length) problems.push(`not published in this season: ${foreign.join(", ")}`);
-        if (missing.length) problems.push(`missing: ${missing.join(", ")}`);
+        if (duplicate.length) problems.push(`listed twice: ${list([...new Set(duplicate)])}`);
+        if (foreign.length) problems.push(`not published in this season: ${list(foreign)}`);
+        if (missing.length) problems.push(`missing: ${list(missing)}`);
         if (problems.length) {
           const message = `List every published video of this season exactly once (${problems.join("; ")}).`;
           throw validationError({ videoIds: message }, message);

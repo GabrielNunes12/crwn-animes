@@ -350,6 +350,10 @@ type TrashedVideo  = Video  & { deletedAt: string; purgeAt: string };
 ```
 A series slug in the trash stays reserved (creating the same slug → `409`) until it is purged or
 deleted forever.
+Trashing a series trashes its live videos with the same timestamp; restoring it brings exactly those
+back (then re-classifies pending videos, so `published` may also contain newly placed ones). Adding a
+YouTube video that is in the trash → `409` ("restore it instead"). Trashed items in admin responses
+carry `deletedAt`/`purgeAt` and `route: null`; public responses never include those fields.
 
 ## Reorder / renumber episodes
 `PUT /api/admin/series/:id/order` body `{ section, season, videoIds: number[] }` → `200 { videos: Video[] }`
@@ -357,7 +361,8 @@ deleted forever.
   (any missing, extra, duplicate or foreign id → `400 VALIDATION_ERROR`).
 - Numbers become `1..n` in that order, atomically (no unique-slot conflict mid-way). Routes change
   accordingly; old episode URLs then 404 (or 301 if they match another video's canonical form).
-- Manga: season is always 1.
+- Manga: season is always 1. At most 2,500 ids per request. Each new number is pinned as a manual
+  override so later edits or re-classification keep it.
 
 ## Board data
 `GET /api/admin/series/:id` (admin, `private, no-store`) → `200 { series, sections }` where
