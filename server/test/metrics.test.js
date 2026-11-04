@@ -23,8 +23,9 @@ const BROKEN_THUMB = vid(23);
  * 3–6 users over the last days (Top 11 and 12: only two 5-star ratings, below n >= 3);
  * Top 5 also has a rated video in the trash; Top 12's anime video is unavailable.
  * Pending: P1 (no section, series or number), P2 (no series), P3 (slot of Top 1 taken),
- * P4 (complete, slot freed when Spare's video went to the trash). Series Gone is in the
- * trash with its two videos.
+ * P4 (complete, slot freed when Spare's video went to the trash), P5 (Top 3, only a bare
+ * number), P6 (bare number, no series: its admin-picked series Gone is in the trash).
+ * Series Gone is in the trash with its three videos.
  */
 async function seedMetrics(srv) {
   const { repo, trash } = srv.services;
@@ -57,11 +58,15 @@ async function seedMetrics(srv) {
   const p2 = await addVideo(srv, 41, "anime episode 3 of something unknown");
   const p3 = await put(42, "top-1", "anime", 1);
   const p4 = await put(43, "spare", "anime", 1);
-  for (const p of [p1, p2, p3, p4]) assert.equal(p.status, "pending");
+  const p5 = await addVideo(srv, 44, "Top 3 anime clip 12");
+  const p6 = await addVideo(srv, 45, "anime random clip 42");
+  for (const p of [p1, p2, p3, p4, p5, p6]) assert.equal(p.status, "pending");
+  assert.equal(p5.classification.suggestedNumber, 12);
+  assert.ok(p5.seriesId);
   trash.trashVideo(spare.id);
   const now = Date.now();
   const setCreated = srv.db.prepare("UPDATE videos SET created_at = ? WHERE id = ?");
-  [p1, p2, p3, p4].forEach((p, i) => setCreated.run(sqliteTime(now - (40 - 10 * i) * HOUR), p.id));
+  [p1, p2, p3, p4, p5, p6].forEach((p, i) => setCreated.run(sqliteTime(now - (60 - 10 * i) * HOUR), p.id));
 
   repo.createSeries({ slug: "gone", name: "Gone" });
   await put(60, "gone", "anime", 1);
@@ -69,7 +74,10 @@ async function seedMetrics(srv) {
   const unavailableTrashed = await put(62, "gone", "anime", 2);
   repo.setAvailability(unavailableTrashed.id, "unavailable");
   trash.trashSeries(repo.getSeries("gone").id);
-  return { users, ratings, p1, p2, p3, p4 };
+  // P6's admin-picked series is in the trash. The API never stores that (an add or patch naming a
+  // trashed series is a 400) but older data or a video restored on its own can carry it.
+  srv.db.prepare("UPDATE videos SET overrides = ? WHERE id = ?").run(JSON.stringify({ seriesSlug: "gone" }), p6.id);
+  return { users, ratings, p1, p2, p3, p4, p5, p6 };
 }
 
 /** The metrics as fresh recounts over the raw tables (videos, series, ratings). */
@@ -195,7 +203,7 @@ describe("GET /api/admin/metrics", () => {
       series: 20,
       anime: { series: 12, videos: 12 },
       manga: { series: 3, videos: 3 },
-      pending: 4,
+      pending: 6,
       unavailable: 1,
       trashed: { series: 1, videos: 5 },
     });
@@ -236,21 +244,39 @@ describe("GET /api/admin/metrics", () => {
   test("pendingQueue: count, oldest, median age (hours) and why, per reason", async () => {
     const { body } = await admin.get(metricsUrl());
     const q = body.pendingQueue;
-    assert.equal(q.count, 4);
+    assert.equal(q.count, 6);
     const created = (p) => srv.db.prepare("SELECT created_at FROM videos WHERE id = ?").pluck().get(p.id);
     assert.equal(q.oldestAt, `${created(seeded.p1).replace(" ", "T")}.000Z`);
-    // Ages 40, 30, 20, 10 hours: the median is the mean of the middle two.
+    // Ages 60, 50, 40, 30, 20, 10 hours: the median is the mean of the middle two.
     const age = (p) => (Date.parse(body.generatedAt) - Date.parse(`${created(p).replace(" ", "T")}Z`)) / HOUR;
-    assert.equal(q.medianAgeHours, round1((age(seeded.p2) + age(seeded.p3)) / 2));
-    assert.equal(q.medianAgeHours, 25);
-    // Most frequent first, ties in alphabetical order.
-    assert.deepEqual(q.byReason, [
-      { reason: PENDING_REASONS.noSeries, count: 2 },
-      { reason: PENDING_REASONS.ready, count: 1 },
-      { reason: PENDING_REASONS.noSection, count: 1 },
-      { reason: PENDING_REASONS.slotTaken, count: 1 },
-      { reason: PENDING_REASONS.noNumber, count: 1 },
-    ]);
+    assert.equal(q.medianAgeHours, round1((age(seeded.p3) + age(seeded.p4)) / 2));
+    assert.equal(q.medianAgeHours, 35);
+    // Most frequent first, ties in PENDING_REASONS order; `key` stable, `reason` the English text.
+    const text = Object.fromEntries(PENDING_REASONS.map((r) => [r.key, r.reason]));
+    assert.deepEqual(
+      q.byReason,
+      [
+        ["no-series", 2], // P1, P2
+        ["guessed-number", 2], // P5, P6
+        ["no-section", 1], // P1
+        ["series-trashed", 1], // P6
+        ["no-number", 1], // P1
+        ["slot-taken", 1], // P3
+        ["ready", 1], // P4
+      ].map(([key, count]) => ({ key, reason: text[key], count }))
+    );
+    for (const r of q.byReason) assert.deepEqual(Object.keys(r), ["key", "reason", "count"]);
+  });
+
+  test("pending reasons: the documented stable keys", () => {
+    assert.deepEqual(
+      PENDING_REASONS.map((r) => r.key),
+      ["no-section", "no-series", "series-trashed", "no-number", "guessed-number", "slot-taken", "ready"]
+    );
+    for (const { key, reason } of PENDING_REASONS) {
+      assert.match(key, /^[a-z0-9-]+$/);
+      assert.ok(reason.length > 0);
+    }
   });
 
   test("an empty catalog: zeros, nulls and empty lists", async () => {
@@ -376,16 +402,16 @@ describe("rating_days (migration 15) is rating_activity summed per day, whoever 
     try {
       const { db } = srv;
       const { repo, trash, auth, metrics } = srv.services;
-      let clock = Date.now() - 40 * DAY;
+      let clock = Date.now() - 100 * DAY; // past the 90 days rating_activity is kept
       const ratings = createRatingService({ db, now: () => new Date(clock) });
       repo.createSeries({ slug: "days", name: "Days" });
       const v1 = await addVideo(srv, 1, "x", { section: "anime", seriesSlug: "days", number: 1 });
       const v2 = await addVideo(srv, 2, "x", { section: "anime", seriesSlug: "days", number: 2 });
       const users = [0, 1, 2].map((i) => quickUser(srv, `d${i}@example.com`).id);
       for (const u of users) ratings.set(u, v1.id, { score: 2 });
-      assertFresh(db, "three ratings 40 days ago");
+      assertFresh(db, "three ratings 100 days ago");
       clock = Date.now();
-      ratings.set(users[0], v1.id, { score: 5 }); // moves from 40 days ago to today
+      ratings.set(users[0], v1.id, { score: 5 }); // moves from 100 days ago to today
       ratings.set(users[1], v2.id, { score: 3 });
       assertFresh(db, "re-rated today");
       const today = metrics.get({ days: 7 }).ratings.daily.at(-1);
@@ -395,9 +421,16 @@ describe("rating_days (migration 15) is rating_activity summed per day, whoever 
       ratings.removeAllForUser(users[2]);
       auth.users.deleteUser(users[2]);
       assertFresh(db, "account deleted");
-      assert.equal(db.prepare("SELECT COUNT(*) FROM rating_days WHERE day < ?").pluck().get(new Date(Date.now() - 30 * DAY).toISOString().slice(0, 10)), 1);
+      const before90 = new Date(Date.now() - 90 * DAY).toISOString().slice(0, 10);
+      assert.equal(db.prepare("SELECT COUNT(*) FROM rating_days WHERE day < ?").pluck().get(before90), 1);
+      // 60 days old: kept by the retention job (90 days since v1.6) and shown by ?days=90.
+      clock = Date.now() - 60 * DAY;
+      ratings.set(users[1], v2.id, { score: 1 });
       assert.equal(purgeExpired(db).ratingActivity, 1);
-      assert.equal(db.prepare("SELECT COUNT(*) FROM rating_days WHERE day < ?").pluck().get(new Date(Date.now() - 30 * DAY).toISOString().slice(0, 10)), 0, "retention");
+      assert.equal(db.prepare("SELECT COUNT(*) FROM rating_days WHERE day < ?").pluck().get(before90), 0, "retention");
+      const quarter = metrics.get({ days: 90 }).ratings.daily;
+      assert.deepEqual(quarter.find((d) => d.day === new Date(clock).toISOString().slice(0, 10)), { day: new Date(clock).toISOString().slice(0, 10), count: 1, average: 1 });
+      ratings.remove(users[1], v2.id);
       assertDays(db, "activity older than 30 days purged");
       trash.trashVideo(v1.id);
       assertDays(db, "trashed: its activity stays until the purge");

@@ -2,9 +2,9 @@
 // Builds a throwaway database (temp file, WAL) at schema 13 (before v1.6) with
 // `videoCount` videos over 1,000 series (5% pending: most with no series, some
 // whose slot is taken; 1 in 97 unavailable; 1% of the videos and 10 series in
-// the trash) and `ratingCount` ratings by 20,000 users spread over the last 30
-// days (every rating_activity row the retention job would keep: the worst case
-// for the daily chart), plus 1,000 cached thumbnails. Then it times the upgrade
+// the trash) and `ratingCount` ratings by 20,000 users spread over the last 90
+// days (all kept by the retention job: the most rating_activity rows the daily
+// chart could face), plus 1,000 cached thumbnails. Then it times the upgrade
 // to the current schema (migration 14 rebuilds series/videos, 15 fills
 // rating_days) and GET /api/admin/metrics over real HTTP (admin session), and
 // the service call alone, printing p50/p95. Nothing touches the configured database.
@@ -51,8 +51,8 @@ old.transaction(() => {
   };
   for (let i = 1; i <= VIDEOS; i++) {
     const pending = i % 20 === 0;
-    const slotTaken = pending && i % 100 === 0; // the slot of the published video i + 1
-    const s = slot(slotTaken ? i + 1 : i);
+    const slotTaken = pending && i % 100 === 0; // the slot of the published video i + 2 (i + 1 goes to the trash)
+    const s = slot(slotTaken ? i + 2 : i);
     const title = `Series ${s.seriesId} Episódio ${s.number}`;
     const created = new Date(start + i * 600_000).toISOString().replace("T", " ").slice(0, 19);
     video.run(
@@ -72,7 +72,7 @@ old.transaction(() => {
   for (let u = 2; u < 2 + USERS && made < RATINGS; u++) {
     user.run(u, `u${u}@bench.test`);
     for (let k = 0; k < PER_USER && made < RATINGS; k++, made++) {
-      const at = new Date(now - ((u * 7 + k) % 30) * DAY - (k % 24) * 3_600_000).toISOString();
+      const at = new Date(now - ((u * 7 + k) % 90) * DAY - (k % 24) * 3_600_000).toISOString();
       rating.run(u, ((u * 7919 + k * 104729) % VIDEOS) + 1, ((u + k) % 5) + 1, at);
     }
   }

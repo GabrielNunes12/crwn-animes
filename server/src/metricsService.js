@@ -17,20 +17,31 @@ const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
 
 /**
- * Why a live video waits in the pending queue, worked out from its columns (one
- * video can have several): the classifier's stored reasons also list what it
- * did find ("found episode number 5") and carry names and numbers, which would
- * not group. Fixed English strings, like the classifier's own reasons.
+ * Why a live video waits in the pending queue, worked out from its current
+ * columns (one video can have several): the stored classifier reasons also list
+ * what it did find ("found episode number 5"), carry names and numbers (they
+ * would not group) and can be stale (a taken slot freed since). `key` is a
+ * stable code the client translates; `reason` is the English text. In order:
+ *   no-section      section unknown (the classifier could not tell anime from manga)
+ *   no-series       no series (none named in the title, or an admin-picked slug that
+ *                   matches no live series)
+ *   series-trashed  no series, and the series an admin picked is in the trash
+ *   no-number       no episode/chapter number in the title
+ *   guessed-number  no number, but the classifier found a bare one (suggestedNumber)
+ *   slot-taken      section, series and number known, a live published video holds the slot
+ *   ready           section, series and number known, the slot is free: ready to publish
+ * Every pending video has at least one of them (the classifier publishes a video
+ * with section, series and number unless its slot is taken), so none is "other".
  */
-export const PENDING_REASONS = {
-  noSection: "could not tell whether this is anime or manga",
-  noSeries: "no series",
-  noNumber: "no episode or chapter number",
-  slotTaken: "its episode/chapter slot already has a published video",
-  ready: "complete and its slot is free: ready to publish",
-};
-
-const COMPLETE = "(v.section IS NOT NULL AND v.series_id IS NOT NULL AND v.number IS NOT NULL)";
+export const PENDING_REASONS = [
+  { key: "no-section", reason: "could not tell whether this is anime or manga" },
+  { key: "no-series", reason: "no series" },
+  { key: "series-trashed", reason: "its series is in the trash" },
+  { key: "no-number", reason: "no episode or chapter number" },
+  { key: "guessed-number", reason: "only a guessed episode/chapter number (a bare number in the title)" },
+  { key: "slot-taken", reason: "its episode/chapter slot already has a published video" },
+  { key: "ready", reason: "complete and its slot is free: ready to publish" },
+];
 
 const round1 = (value) => Math.round(value * 10) / 10;
 
@@ -47,18 +58,36 @@ export function createMetricsService({ db, repo, images = null, now = () => new 
       SELECT (SELECT COUNT(*) FROM series WHERE deleted_at IS NOT NULL) AS series,
         (SELECT COUNT(*) FROM videos WHERE deleted_at IS NOT NULL) AS videos`),
     unavailable: db.prepare("SELECT COUNT(*) FROM videos WHERE availability = 'unavailable' AND deleted_at IS NULL").pluck(),
-    // Live pending videos (videos_status_created), and per reason how many have it. The slot
-    // lookup (videos_published_slot) only runs for videos that have section, series and number.
+    // Live pending videos (videos_status_created) and, per PENDING_REASONS key, how many have
+    // it. JSON is only read for videos missing a series or a number (invalid JSON = no hint),
+    // the slot lookup (videos_published_slot) only for videos that have all three.
+    // MATERIALIZED: each row's states are worked out once (flattened, every SUM would repeat them).
     pending: db.prepare(`
-      SELECT COUNT(*) AS count, MIN(v.created_at) AS oldest,
-        COALESCE(SUM(v.section IS NULL), 0) AS noSection,
-        COALESCE(SUM(v.series_id IS NULL), 0) AS noSeries,
-        COALESCE(SUM(v.number IS NULL), 0) AS noNumber,
-        COALESCE(SUM(${COMPLETE}), 0) AS complete,
-        COALESCE(SUM(CASE WHEN ${COMPLETE} THEN EXISTS (SELECT 1 FROM videos p
-          WHERE p.status = 'published' AND p.deleted_at IS NULL AND p.series_id = v.series_id
-            AND p.section = v.section AND p.season = v.season AND p.number = v.number) ELSE 0 END), 0) AS slotTaken
-      FROM videos v WHERE v.status = 'pending' AND v.deleted_at IS NULL`),
+      WITH pending AS MATERIALIZED (
+        SELECT v.created_at, v.section,
+          CASE WHEN v.series_id IS NOT NULL THEN NULL
+            WHEN EXISTS (SELECT 1 FROM series s WHERE s.deleted_at IS NOT NULL
+              AND s.slug = json_extract(CASE WHEN json_valid(v.overrides) THEN v.overrides END, '$.seriesSlug')) THEN 1
+            ELSE 0 END AS series_state,
+          CASE WHEN v.number IS NOT NULL THEN NULL
+            WHEN json_type(CASE WHEN json_valid(v.classification) THEN v.classification END, '$.suggestedNumber')
+              IN ('integer', 'real') THEN 1
+            ELSE 0 END AS number_state,
+          CASE WHEN v.section IS NULL OR v.series_id IS NULL OR v.number IS NULL THEN NULL
+            ELSE EXISTS (SELECT 1 FROM videos p
+              WHERE p.status = 'published' AND p.deleted_at IS NULL AND p.series_id = v.series_id
+                AND p.section = v.section AND p.season = v.season AND p.number = v.number) END AS slot_state
+        FROM videos v WHERE v.status = 'pending' AND v.deleted_at IS NULL
+      )
+      SELECT COUNT(*) AS count, MIN(created_at) AS oldest,
+        COALESCE(SUM(section IS NULL), 0) AS "no-section",
+        COALESCE(SUM(series_state = 0), 0) AS "no-series",
+        COALESCE(SUM(series_state = 1), 0) AS "series-trashed",
+        COALESCE(SUM(number_state = 0), 0) AS "no-number",
+        COALESCE(SUM(number_state = 1), 0) AS "guessed-number",
+        COALESCE(SUM(slot_state = 1), 0) AS "slot-taken",
+        COALESCE(SUM(slot_state = 0), 0) AS "ready"
+      FROM pending`),
     // The middle one or two pending videos by age, straight off videos_status_created.
     pendingMiddle: db.prepare(`
       SELECT created_at FROM videos WHERE status = 'pending' AND deleted_at IS NULL
@@ -83,7 +112,6 @@ export function createMetricsService({ db, repo, images = null, now = () => new 
 
   function pendingQueue(at) {
     const row = q.pending.get();
-    row.ready = row.complete - row.slotTaken;
     const ageHours = (createdAt) => (at - Date.parse(toIso(createdAt))) / HOUR_MS;
     let medianAgeHours = null;
     if (row.count > 0) {
@@ -91,10 +119,10 @@ export function createMetricsService({ db, repo, images = null, now = () => new 
       const ages = middle.map(ageHours).filter(Number.isFinite);
       if (ages.length) medianAgeHours = round1(Math.max(0, ages.reduce((a, b) => a + b, 0) / ages.length));
     }
-    const byReason = Object.entries(PENDING_REASONS)
-      .map(([key, reason]) => ({ reason, count: row[key] }))
+    // Most frequent first; ties keep the PENDING_REASONS order.
+    const byReason = PENDING_REASONS.map(({ key, reason }) => ({ key, reason, count: row[key] }))
       .filter((r) => r.count > 0)
-      .sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason))
+      .sort((a, b) => b.count - a.count)
       .slice(0, TOP_REASONS);
     return { count: row.count, oldestAt: row.oldest ? toIso(row.oldest) : null, medianAgeHours, byReason };
   }

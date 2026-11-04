@@ -11,7 +11,8 @@ import { SEED_SERIES } from "./seed.js";
 //   stored with status 'pending' and stay hidden until an admin fixes them.
 //   `overrides` keeps what an admin set by hand so re-classifying never loses it.
 // users / sessions / email_tokens / ratings: accounts and the rating feature.
-// rating_activity: anonymous per-day rating counts for "trending".
+// rating_activity: anonymous per-day rating counts for "trending" and the admin
+//   metrics (kept 90 days, src/retention.js).
 //   Only what docs/API.md lists under "Personal data we keep" is stored.
 //   Tokens are stored as SHA-256 hashes, never in clear.
 //
@@ -126,7 +127,7 @@ const MIGRATIONS = [
   CREATE INDEX ratings_video ON ratings (video_id, score);
 
   -- Anonymous: how many ratings each video got per day (no user id). Feeds
-  -- /api/trending; rows older than 30 days are purged by the retention job.
+  -- /api/trending; old rows are purged by the retention job (30 days; 90 since v1.6).
   CREATE TABLE rating_activity (
     video_id   INTEGER NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
     day        TEXT NOT NULL,

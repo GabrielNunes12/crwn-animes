@@ -87,6 +87,8 @@ describe("retention", () => {
       srv.db.prepare("UPDATE users SET created_at = ? WHERE email = 'old@example.com'").run(daysAgo(8));
       srv.db.prepare("UPDATE users SET created_at = ? WHERE email = 'keep@example.com'").run(daysAgo(30));
       srv.db.prepare("INSERT INTO sessions (token_hash, user_id, expires_at) SELECT 'expired', id, ? FROM users WHERE email = 'keep@example.com'").run(daysAgo(1));
+      // Anonymous activity: 91 days old goes, 31 days old stays (kept 90 days since v1.6).
+      srv.db.prepare("INSERT INTO rating_activity (video_id, day, count, score_sum) VALUES (?, ?, 1, 4)").run(video.id, daysAgo(91).slice(0, 10));
       srv.db.prepare("INSERT INTO rating_activity (video_id, day, count, score_sum) VALUES (?, ?, 1, 4)").run(video.id, daysAgo(31).slice(0, 10));
 
       const result = purgeExpired(srv.db);
@@ -98,7 +100,7 @@ describe("retention", () => {
       // Expired e-mail tokens go when the clock passes 24 h.
       const tomorrow = new Date(Date.now() + 25 * 3_600_000);
       assert.equal(purgeExpired(srv.db, tomorrow).emailTokens, 1);
-      assert.equal(srv.db.prepare("SELECT COUNT(*) AS n FROM rating_activity").get().n, 1, "recent activity kept");
+      assert.equal(srv.db.prepare("SELECT COUNT(*) AS n FROM rating_activity").get().n, 2, "today's and 31 days old kept");
     } finally {
       await srv.close();
     }
