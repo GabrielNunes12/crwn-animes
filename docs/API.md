@@ -451,3 +451,36 @@ Series covers set by admins (any https URL) are now also fetched **by the server
     personal is ever cached.
 - Server: `sw.js` and `manifest.webmanifest` served with `Cache-Control: no-cache`; `sw.js` with
   `Service-Worker-Allowed: /`. CSP: `worker-src 'self'`, `manifest-src 'self'`.
+
+---
+
+# v1.6 additions (cycle 6 — stable ids, admin metrics)
+
+## Ids are never reused
+`series.id` and `videos.id` become `INTEGER PRIMARY KEY AUTOINCREMENT` (table rebuild in a migration
+that keeps every row, id, index, trigger, foreign key and aggregate intact). A permanently deleted or
+purged series/video id is never handed out again, so no cached copy of `/api/videos/<id>` (browser,
+service worker, CDN) can ever show a different video under an old id.
+
+## Admin metrics (anonymous aggregates only)
+`GET /api/admin/metrics?days=30` (admin only, `private, no-store`; `days` 7–90, default 30) →
+```ts
+{
+  generatedAt: string,
+  catalog: { series: number, anime: { series, videos }, manga: { series, videos },
+             pending: number, unavailable: number, trashed: { series, videos } },
+  pendingQueue: { count: number, oldestAt: string | null, medianAgeHours: number | null,
+                  byReason: { reason: string, count: number }[] },      // top 10 reasons
+  ratings: { total: number, average: number | null,
+             daily: { day: string, count: number, average: number | null }[] },  // from rating_activity, last `days`
+  topSeries: { id, name, slug, section, ratingCount, average }[],       // top 10 by Bayesian average, n ≥ 3
+  thumbnails: { cachedFiles: number, cachedBytes: number, failuresRemembered: number }
+}
+```
+Built **only** from existing anonymous aggregates and catalog tables — no user ids, emails, IPs,
+per-user counts or anything derived from `users`/`sessions` beyond nothing at all (not even a user
+count). Days with no activity appear with `count: 0`.
+
+Client: an admin "Métricas" tab — KPI tiles, a daily ratings bar chart (inline SVG, accessible: a
+`<table>` fallback/description, no chart library), pending-queue age and top reasons, top series —
+and a "Atualizado às HH:MM" line with a refresh button.
