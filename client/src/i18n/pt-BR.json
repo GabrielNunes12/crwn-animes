@@ -906,11 +906,15 @@
         "reasons": "Motivos mais comuns",
         "noReasons": "Nenhum motivo registrado.",
         "reason": {
-          "noSection": "Não deu para saber se é anime ou mangá",
-          "noSeries": "Sem série",
-          "noNumber": "Sem número de episódio ou capítulo",
-          "slotTaken": "O lugar do episódio/capítulo já tem um vídeo publicado",
-          "ready": "Completo e com o lugar livre: pronto para publicar"
+          "no-section": "Não deu para saber se é anime ou mangá",
+          "no-series": "Sem série",
+          "no-number": "Sem número de episódio ou capítulo",
+          "guessed-number": "Número de episódio ou capítulo deduzido — confira",
+          "slot-taken": "O lugar do episódio/capítulo já tem um vídeo publicado",
+          "series-trashed": "A série está na lixeira",
+          "manual": "Enviado para revisão manual",
+          "ready": "Completo e com o lugar livre: pronto para publicar",
+          "other": "Outro motivo"
         }
       },
       "top": {

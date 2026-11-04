@@ -76,22 +76,22 @@ function Tiles({ data }) {
   );
 }
 
-// The server's fixed pending reasons (server/src/metricsService.js PENDING_REASONS), shown
-// translated; an unknown reason is shown as sent.
-const REASON_KEYS = {
-  "could not tell whether this is anime or manga": "noSection",
-  "no series": "noSeries",
-  "no episode or chapter number": "noNumber",
-  "its episode/chapter slot already has a published video": "slotTaken",
-  "complete and its slot is free: ready to publish": "ready",
-};
+/**
+ * A pending reason's label: its stable `key` (docs/API.md v1.6, e.g. "no-series") translated
+ * from admin.metrics.pending.reason.*; an unknown or missing key shows the server's `reason` text.
+ */
+function reasonLabel(t, r) {
+  const key = typeof r.key === "string" && /^[a-z0-9-]+$/.test(r.key) ? `admin.metrics.pending.reason.${r.key}` : null;
+  const msg = key && t(key);
+  return msg && msg !== key ? msg : r.reason || r.key;
+}
 
 function PendingQueue({ queue }) {
   const { t, formatNumber, formatRelative } = useT();
   const fmt = useMetricFormats();
   const id = useId();
   const count = Number(queue?.count) || 0;
-  const reasons = (Array.isArray(queue?.byReason) ? queue.byReason : []).filter((r) => r && r.reason);
+  const reasons = (Array.isArray(queue?.byReason) ? queue.byReason : []).filter((r) => r && (r.key || r.reason));
   const most = Math.max(1, ...reasons.map((r) => Number(r.count) || 0));
   const median = fmt.age(queue?.medianAgeHours);
   return (
@@ -129,8 +129,8 @@ function PendingQueue({ queue }) {
           ) : (
             <ol className={styles.ranked} aria-labelledby={`${id}-reasons`}>
               {reasons.map((r, i) => (
-                <li key={`${i}-${r.reason}`}>
-                  <span className={styles.rankText}>{REASON_KEYS[r.reason] ? t(`admin.metrics.pending.reason.${REASON_KEYS[r.reason]}`) : r.reason}</span>
+                <li key={`${i}-${r.key ?? r.reason}`}>
+                  <span className={styles.rankText}>{reasonLabel(t, r)}</span>
                   <span className={styles.rankValue}>{t("common.videoCount", { count: Number(r.count) || 0 })}</span>
                   <span className={styles.meter} aria-hidden="true">
                     <span style={{ inlineSize: `${((Number(r.count) || 0) / most) * 100}%` }} />

@@ -906,11 +906,15 @@
         "reasons": "Most common reasons",
         "noReasons": "No reasons recorded.",
         "reason": {
-          "noSection": "Couldn’t tell whether it’s anime or manga",
-          "noSeries": "No series",
-          "noNumber": "No episode or chapter number",
-          "slotTaken": "Its episode/chapter slot already has a published video",
-          "ready": "Complete and its slot is free: ready to publish"
+          "no-section": "Couldn’t tell whether it’s anime or manga",
+          "no-series": "No series",
+          "no-number": "No episode or chapter number",
+          "guessed-number": "Episode or chapter number was guessed — check it",
+          "slot-taken": "Its episode/chapter slot already has a published video",
+          "series-trashed": "Its series is in the trash",
+          "manual": "Sent for manual review",
+          "ready": "Complete and its slot is free: ready to publish",
+          "other": "Other reason"
         }
       },
       "top": {

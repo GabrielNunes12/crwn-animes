@@ -35,8 +35,10 @@ function metrics({ generatedAt = "2026-11-04T14:32:00Z", daily = DAILY } = {}) {
       oldestAt: ago(9),
       medianAgeHours: 50,
       byReason: [
-        { reason: "no series", count: 7 },
-        { reason: "A reason this client doesn't know yet", count: 3 },
+        { key: "no-series", reason: "no series", count: 7 },
+        { key: "series-trashed", reason: "its series is in the trash", count: 4 },
+        { key: "brand-new-code", reason: "a reason this client doesn't know yet", count: 3 },
+        { reason: "sent by an older server (no key)", count: 1 },
       ],
     },
     ratings: { total: 15320, average: 4.236, daily },
@@ -91,7 +93,13 @@ describe("admin Métricas tab", () => {
     expect(tile("Avaliações")).toHaveTextContent("média 4,2 de 5");
     expect(tile("Miniaturas em cache")).toHaveTextContent("640");
     expect(tile("Miniaturas em cache")).toHaveTextContent(/3,2\sMB · 2 falhas lembradas/);
-    expect(screen.getByRole("list", { name: "Motivos mais comuns" }).firstElementChild).toHaveTextContent("Sem série7 vídeos");
+    const reasonsPt = within(screen.getByRole("list", { name: "Motivos mais comuns" })).getAllByRole("listitem");
+    expect(reasonsPt.map((li) => li.firstElementChild.textContent)).toEqual([
+      "Sem série",
+      "A série está na lixeira",
+      "a reason this client doesn't know yet",
+      "sent by an older server (no key)",
+    ]);
     expect(screen.getByText(`Atualizado às ${hhmm("pt-BR", "2026-11-04T14:32:00Z")}`)).toBeInTheDocument();
   });
 
@@ -240,8 +248,13 @@ describe("admin Métricas tab", () => {
     expect(queue).toHaveTextContent("Median age2 days");
     expect(queue).toHaveTextContent("Oldest9 days ago");
     const reasons = within(queue).getByRole("list", { name: "Most common reasons" });
-    // Known server reasons are translated; an unknown one is shown as sent.
-    expect(within(reasons).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["No series7 videos", "A reason this client doesn't know yet3 videos"]);
+    // Reasons are translated by their stable key; an unknown or missing key shows the server's text.
+    expect(within(reasons).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "No series7 videos",
+      "Its series is in the trash4 videos",
+      "a reason this client doesn't know yet3 videos",
+      "sent by an older server (no key)1 video",
+    ]);
 
     const top = screen.getByRole("list", { name: "Top-rated series" });
     expect(within(top).getByRole("link", { name: "Naruto" })).toHaveAttribute("href", "/admin/series/10");
