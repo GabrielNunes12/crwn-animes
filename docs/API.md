@@ -325,3 +325,48 @@ Ordering is stable (ties broken by id) so paging never repeats or skips an item.
   "Continue" button that opens the first unwatched episode (or resumes the in-progress one).
 - Long episode lists render with `content-visibility: auto` (no JS virtualisation library), grouped by
   season with `?season=` tabs on the series page.
+
+---
+
+# v1.4 additions (cycle 4 — admin series board, trash, draft preview)
+
+## 7-day trash instead of hard deletes
+`DELETE /api/admin/series/:id` and `DELETE /api/admin/videos/:id` now **move the item to the trash**
+(`204`). A trashed series takes its videos with it. Trashed items disappear from every public
+endpoint, sitemap, search, aggregates (top-rated, trending, series stats) and from the normal admin
+lists, but are kept — with their ratings — for **7 days**, then purged by the retention job (ratings
+included). Personal data kept in the trash is the same ratings data, for at most 7 more days.
+
+| Method & path | Success |
+|---|---|
+| `GET /api/admin/trash` | `200 { series: TrashedSeries[], videos: TrashedVideo[] }` — newest first; videos trashed together with their series are listed under that series, not separately |
+| `POST /api/admin/trash/series/:id/restore` | `200 { series, published: Video[], pending: Video[] }` — restores the series and the videos trashed with it |
+| `POST /api/admin/trash/videos/:id/restore` | `200 { video }` — if its episode slot was taken meanwhile it comes back as `pending` with a reason; if its series is still in the trash → `409 CONFLICT` |
+| `DELETE /api/admin/trash/series/:id` · `DELETE /api/admin/trash/videos/:id` | `204` — delete forever now (cascades ratings) |
+
+```ts
+type TrashedSeries = Series & { deletedAt: string; purgeAt: string; videoCount: number };
+type TrashedVideo  = Video  & { deletedAt: string; purgeAt: string };
+```
+A series slug in the trash stays reserved (creating the same slug → `409`) until it is purged or
+deleted forever.
+
+## Reorder / renumber episodes
+`PUT /api/admin/series/:id/order` body `{ section, season, videoIds: number[] }` → `200 { videos: Video[] }`
+- `videoIds` must be exactly the published, non-trashed videos of that series/section/season
+  (any missing, extra, duplicate or foreign id → `400 VALIDATION_ERROR`).
+- Numbers become `1..n` in that order, atomically (no unique-slot conflict mid-way). Routes change
+  accordingly; old episode URLs then 404 (or 301 if they match another video's canonical form).
+- Manga: season is always 1.
+
+## Draft preview
+`GET /api/admin/videos/:id/preview` (admin) → `200 { video, series }` for any non-purged video,
+including `pending` and trashed ones (`classification` + `overrides` included). The client renders it
+at `/admin/preview/:id` (noindex, "Draft preview" banner, the same player, no rating panel).
+
+## Admin board (client)
+`/admin/series/:id` — per-series board: section switch (Anime/Manga), season tabs, the ordered
+episode list with drag-and-drop **and** keyboard reordering (Move up / Move down buttons and
+Alt+ArrowUp/ArrowDown, live-region announcements), "Save order", per-row preview / edit / move to
+trash. Admin gets a "Trash" tab listing trashed series and videos with "Restore" and "Delete forever"
+and "purged in N days".
