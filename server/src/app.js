@@ -9,6 +9,7 @@ import { loadConfig, parseTrustProxy, thumbnailUpstream } from "./config.js";
 import { HttpError, notFound } from "./errors.js";
 import { createMailer } from "./mail.js";
 import { createMetricsService } from "./metricsService.js";
+import { COMPRESS_MIN_BYTES, compressPublic, isSiblingPath, servePrecompressed } from "./middleware/compression.js";
 import { noStore, requireJsonBody, requireSameOrigin } from "./middleware/security.js";
 import { loadSession } from "./middleware/session.js";
 import { createRatingService } from "./ratingService.js";
@@ -161,6 +162,9 @@ export function createApp({
   app.set("trust proxy", parseTrustProxy(config.trustProxy)); // throws on "true"/garbage
   app.set("etag", "weak");
 
+  // v1.7: public text responses are compressed on the fly (never private/no-store ones, images or
+  // bodies under 1 KB); built files with .br/.gz siblings are served pre-compressed further down.
+  app.use(compressPublic({ minBytes: config.compressMinBytes ?? COMPRESS_MIN_BYTES })); // the knob is for tests
   app.use(
     helmet({
       contentSecurityPolicy: { useDefaults: false, directives: CSP_DIRECTIVES },
@@ -232,27 +236,30 @@ export function createApp({
       res.set("Cache-Control", "no-cache");
       res.redirect(301, "/");
     });
-    app.use(
-      express.static(config.clientDist, {
-        index: false, // "/" goes through the SEO fallback below, like every other page
-        setHeaders(res, file) {
-          const relative = path.relative(config.clientDist, file).split(path.sep);
-          const root = relative.length === 1 ? relative[0] : null;
-          if (relative[0] === "assets") res.set("Cache-Control", "public, max-age=31536000, immutable");
-          // PWA (v1.5): the browser must always see the current service worker and manifest.
-          else if (root === "sw.js") {
-            res.set({
-              "Cache-Control": "no-cache",
-              "Content-Type": "text/javascript; charset=utf-8",
-              "Service-Worker-Allowed": "/",
-            });
-          } else if (root === "manifest.webmanifest") {
-            res.set("Cache-Control", "no-cache");
-            res.setHeader("Content-Type", "application/manifest+json"); // res.set() would add a charset JSON types do not have
-          } else if (file.endsWith(".html")) res.set("Cache-Control", "no-cache"); // offline.html too
-        },
-      })
-    );
+    const staticHeaders = (res, file) => {
+      const relative = path.relative(config.clientDist, file).split(path.sep);
+      const root = relative.length === 1 ? relative[0] : null;
+      if (relative[0] === "assets") res.set("Cache-Control", "public, max-age=31536000, immutable");
+      // PWA (v1.5): the browser must always see the current service worker and manifest.
+      else if (root === "sw.js") {
+        res.set({
+          "Cache-Control": "no-cache",
+          "Content-Type": "text/javascript; charset=utf-8",
+          "Service-Worker-Allowed": "/",
+        });
+      } else if (root === "manifest.webmanifest") {
+        res.set("Cache-Control", "no-cache");
+        res.setHeader("Content-Type", "application/manifest+json"); // res.set() would add a charset JSON types do not have
+      } else if (file.endsWith(".html")) res.set("Cache-Control", "no-cache"); // offline.html too
+    };
+    // v1.7: <file>.br / <file>.gz written by the build, when the browser accepts one (same headers).
+    app.use(servePrecompressed(config.clientDist, { setHeaders: staticHeaders }));
+    const serveStatic = express.static(config.clientDist, {
+      index: false, // "/" goes through the SEO fallback below, like every other page
+      setHeaders: staticHeaders,
+    });
+    // The siblings themselves are no URLs (index.html.br would bypass the SEO renderer): 404 below.
+    app.use((req, res, next) => (isSiblingPath(req.path) ? next() : serveStatic(req, res, next)));
     // Client-side routes (/anime/one-piece/episode/5, ...) all get index.html.
     // A missing asset or any other path with a file extension is a real 404:
     // answering it with index.html would hide broken deploys and break caches.

@@ -41,9 +41,10 @@ changes; above 50,000 URLs `/sitemap.xml` becomes a sitemap index of
 |---|---|
 | `npm start` | Start the API (`src/index.js`). |
 | `npm run dev` | Same, with `node --watch`. |
-| `npm test` | All tests (`node --test`): classifier, auth, sessions, admin, ratings, catalog, search, pagination/seasons, SEO/sitemap, GDPR, headers, trash, admin board, thumbnails (both sizes, v1.7), PWA files, stable ids (migration 14), admin metrics. In-memory DB, fake YouTube lookups and thumbnails (nothing reaches youtube.com / ytimg.com), a temporary thumbnail cache per server, a temporary fake `client/dist` (`createApp({ config: { clientDist } })`). |
+| `npm test` | All tests (`node --test`): classifier, auth, sessions, admin, ratings, catalog, search, pagination/seasons, SEO/sitemap, GDPR, headers, trash, admin board, thumbnails (both sizes, v1.7), response compression (v1.7), PWA files, stable ids (migration 14), admin metrics. In-memory DB, fake YouTube lookups and thumbnails (nothing reaches youtube.com / ytimg.com), a temporary thumbnail cache per server, a temporary fake `client/dist` (`createApp({ config: { clientDist } })`). |
 | `npm run make-admin -- someone@example.com` | Promote an existing account to admin. |
 | `node src/scripts/bench-admin-lists.js [50000]` | Times the paginated admin lists, `/api/latest` and `/api/search` over HTTP on a throwaway database with that many videos (1% of them and 10 series in the trash; p50/p95). |
+| `node src/scripts/bench-compression.js [120]` | CPU per response of on-the-fly brotli/gzip on real catalog JSON and HTML shells (from `client/dist/index.html` when built), and HTTP p50/p95 with and without `Accept-Encoding: br`. |
 | `node src/scripts/bench-admin-metrics.js [50000] [1000000] [--analyze]` | Builds a schema-13 throwaway database (videos, ratings over the last 90 days, trash, cached thumbnails), times the upgrade (migrations 14–15), then `GET /api/admin/metrics?days=7/30/90` over HTTP and the service call alone (p50/p95). |
 
 ## Environment
@@ -58,6 +59,7 @@ See [`.env.example`](.env.example) — each variable is documented there.
 - `src/index.js` — loads `.env`, opens the DB, starts background jobs, listens.
 - `src/routes/` — `auth`, `me`, `catalog`, `ratings`, `admin`, `dev`, `images` (thumbnails + covers).
 - `src/imageCache.js`, `src/thumbnails.js`, `src/covers.js`, `src/netPolicy.js` — same-origin images (below).
+- `src/middleware/compression.js` — response compression: pre-compressed built files and public-only brotli/gzip (below).
 - `src/*Service.js` — auth, ratings, videos; `src/mail.js` — e-mails (pt-BR + en).
 - `src/classifier.js` — works out section/series/season/number from a YouTube title.
 - `src/search.js` — `series.search_text` (`|name|alias|…|`, each through `searchNormalize()`: no accents or case,
@@ -162,6 +164,43 @@ port, no user name/password (else 400). `og:image` and JSON-LD `image`/`thumbnai
    `thumbKeys()`) and series; the
    hourly retention run then deletes cached files that belong to nothing any more (a swapped YouTube upload,
    a replaced cover URL, a crash between purge and delete). The trash keeps files (restore) but answers 404.
+
+## Response compression (v1.7, `src/middleware/compression.js`)
+
+One negotiation for everything (`chooseEncoding()`): `Accept-Encoding` q-values are honoured, the highest q wins
+and ties go **br > gzip > identity**; `*` covers codings not listed; `identity` not listed ranks with the lowest
+listed q; malformed entries (bad token, q outside 0–1) are ignored, `x-gzip` is gzip. When nothing is acceptable
+(`identity;q=0`, `*;q=0`) the original is sent — never a 406.
+
+1. **Built files** (`servePrecompressed()`, before `express.static`): a file with `<file>.br` / `<file>.gz` next to
+   it (written by the client build) is answered with the sibling the browser accepts — no CPU per request — with
+   `Content-Encoding`, the **original** file's `Content-Type` and cache headers (the same `staticHeaders()` as
+   `express.static`: immutable `/assets/*`, `no-cache` + its own types for `sw.js` / `manifest.webmanifest`),
+   `Vary: Accept-Encoding` (also when the original is sent), `Last-Modified`, and a weak ETag that names the
+   encoding (`W/"<size>-<mtime>-br"`), so identity, br and gzip have different ETags and 304 per encoding. `Range`
+   is ignored for a variant (200, no `Accept-Ranges`); the original still serves ranges. Only siblings that exist
+   compete. Never for `index.html` (the shell always goes through the SEO renderer), dot segments, or the
+   siblings' own URLs (`/x.js.br`, `/index.html.br`: 404). The build directory may itself sit under a dot
+   directory (`lighthouse/.client-dist`).
+2. **On the fly** (`compressPublic()`, mounted first; it hooks `write`/`end` and decides from the final status and
+   headers): brotli (quality 5, text mode) or gzip (level 6) via `node:zlib` streams, for **public** text only —
+   `text/*`, JSON/XML (and `+json`/`+xml`), JavaScript, the web manifest, SVG — with status 200/203/404/410:
+   - outside `/api`: the server-rendered HTML shell (404 shells too), `sitemap*.xml`, `robots.txt`, static files
+     without siblings (`sw.js`, the manifest, `offline.html`, SVG, assets of an older build); streamed files keep
+     backpressure (the zlib stream's `drain` reaches the pipe);
+   - under `/api`: only when `Cache-Control` starts with `public` (the catalog), never `/api/auth/*`, `/api/me*`,
+     `/api/admin/*`, `/api/dev/*` or `/api/videos/:id/rating`, whatever their headers say;
+   - **never** a response whose `Cache-Control` has `private`, `no-store` or `no-transform` (every error, `/api/random`)
+     — compressed lengths of per-user responses are a BREACH-style side channel;
+   - never images (thumbnails, covers, PNG icons: no `Vary` either), `HEAD`, 304s, or bodies under 1 KB
+     (`COMPRESS_MIN_BYTES`; `config.compressMinBytes` exists for tests only). An eligible response gets
+     `Vary: Accept-Encoding` even when it is not compressed (small, identity preferred, 304).
+   A compressed answer drops `Content-Length` (chunked) and `Accept-Ranges`; its ETag stays the weak ETag of the
+   uncompressed body, so `If-None-Match` still gives 304 whatever the encoding. Other headers (CSP, HSTS, CORP,
+   `Cache-Control`, `Content-Type`) are untouched.
+
+Cost (`bench-compression.js`, built `index.html`, 120 episodes): brotli 44–63 µs CPU for a 2–7 KB HTML shell or
+`/api/latest`, 344 µs for a 69 KB series page (→ 2 KB); p50 +0.4–0.9 ms over localhost HTTP.
 
 ## Stable ids and admin metrics (v1.6)
 
