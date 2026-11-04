@@ -121,6 +121,7 @@ test.describe("CSRF", () => {
     }
     const created = (await (await admin.get("/api/admin/series?q=csrf")).json()).items.filter((s) => s.slug.startsWith("sec-csrf-"));
     expect(created).toEqual([]);
+    await page.request.post(`${API_ORIGIN}/api/auth/logout`); // free this admin session (at most 20 per user)
   });
 
   test("crossSite: a body-less form POST to logout / logout-all carries no cookie (SameSite=Lax): the server session survives", async ({ page, context }) => {

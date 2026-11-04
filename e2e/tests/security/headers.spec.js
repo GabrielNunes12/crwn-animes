@@ -2,7 +2,7 @@
 // which serves both /api and the client build): CSP, Referrer-Policy, nosniff,
 // framing, no X-Powered-By, no stack traces, and no-store on private data.
 import { expect, seedSeries } from "../fixtures.js";
-import { apiClient, newAdminClient, newUserClient, rawRequest, test, withAdmin } from "./helpers.js";
+import { apiClient, closeAdmin, newAdminClient, newUserClient, rawRequest, test, withAdmin } from "./helpers.js";
 
 const CSP = {
   "default-src": ["'self'"],
@@ -115,7 +115,7 @@ test.describe("security headers", () => {
       expect(res.headers()["set-cookie"], path).toBeUndefined();
       expect(await res.text(), `${path} must not contain "mine"`).not.toMatch(/"mine"|"email"/);
     }
-    await Promise.all([anon.dispose(), user.dispose(), admin.dispose()]);
+    await Promise.all([anon.dispose(), user.dispose(), closeAdmin(admin)]);
   });
 
   test("errors never expose stack traces, file paths or framework banners", async () => {

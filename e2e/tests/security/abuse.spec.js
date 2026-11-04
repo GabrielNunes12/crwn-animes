@@ -4,9 +4,9 @@
 // (server/test/abuse.test.js covers the same ground in depth with a fake
 // oEmbed; this spec checks the real stack end to end.)
 //
-// test.fail() marks a REAL defect: the test asserts the safe behaviour, fails
-// today, and turns red ("expected to fail") once the defect is fixed. Then
-// drop the .fail.
+// Every test asserts the safe behaviour. Tests that once used test.fail() for
+// real defects now pass and guard against regressions; mark any new defect
+// found here with test.fail() until it is fixed.
 import { expect } from "@playwright/test";
 import { SUBJECT, ensureSeries, ensureVideo, fakeYouTubeId, linkFrom, uniqueEmail, waitForEmail } from "../fixtures.js";
 import { apiClient, newUserClient, rawRequest, test } from "./helpers.js";
@@ -119,8 +119,8 @@ test.describe("races on the real server", () => {
     await Promise.all([ctx, ...tried.map((t) => t.client)].map((c) => c.dispose()));
   });
 
-  test.fail("a login racing the deletion of its account never answers 500", async () => {
-    // DEFECT (server/src/routes/auth.js:57 + authService.js:68): the login verifies the password (~0.4 s) while the
+  test("a login racing the deletion of its account never answers 500", async () => {
+    // REGRESSION, fixed after sweep 2 (server/src/routes/auth.js:57 + authService.js:68): the login verifies the password (~0.4 s) while the
     // account is deleted, then INSERT INTO sessions hits the foreign key → 500 INTERNAL_ERROR + a stack trace in the log.
     const { ctx, user } = await newUserClient();
     const clients = await Promise.all([0, 1, 2].map(() => apiClient()));
@@ -136,8 +136,8 @@ test.describe("races on the real server", () => {
     expect(logins.filter((s) => s >= 500), `login statuses ${logins}`).toEqual([]);
   });
 
-  test.fail("a password reset also ends logins that were in flight with the old password", async () => {
-    // DEFECT (server/src/authService.js:154-166): login checks the password against the row it read before its
+  test("a password reset also ends logins that were in flight with the old password", async () => {
+    // REGRESSION, fixed after sweep 2 (server/src/authService.js:154-166): login checks the password against the row it read before its
     // ~0.4 s scrypt and then creates a session without re-checking; a reset committed meanwhile does not end it.
     const { ctx, user } = await newUserClient();
     const startedAt = Date.now() - 1000;
@@ -161,8 +161,8 @@ test.describe("races on the real server", () => {
 });
 
 test.describe("CPU exhaustion", () => {
-  test.fail("one 20 KB admin bulk paste does not stall other visitors for more than 100 ms", async ({ admin }) => {
-    // DEFECT (server/src/routes/admin.js:65): collectBulkInputs strips trailing punctuation from every token with
+  test("one 20 KB admin bulk paste does not stall other visitors for more than 100 ms", async ({ admin }) => {
+    // REGRESSION, fixed after sweep 2 (server/src/routes/admin.js:65): collectBulkInputs strips trailing punctuation from every token with
     // /[>)"'\].]+$/g, which backtracks O(n²) on one long run of "." or ")": ~0.5 s of blocked event loop per request.
     const bulk = admin.post("/api/admin/videos/bulk", { data: { text: `${".".repeat(20 * 1024 - 40)}a`, dryRun: true } });
     const probes = [40, 120, 220].map(async (ms) => {

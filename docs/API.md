@@ -144,7 +144,7 @@ for local development (the verification link is also printed to the server conso
 | Table | Personal fields | Why | Kept until |
 |---|---|---|---|
 | `users` | email, display name, scrypt password hash, `privacy_accepted_at` | login, show name, prove consent | account deleted; **unverified accounts are deleted after 7 days** |
-| `sessions` | SHA-256 of the session token, user id, expiry | stay logged in | expiry (30 days) — purged automatically |
+| `sessions` | SHA-256 of the session token, user id, expiry, session epoch | stay logged in | expiry (30 days) — purged automatically; at most 20 per user (a new login drops the oldest); password change/reset and "sign out everywhere" end every session, including logins still in flight |
 | `email_tokens` | SHA-256 of the token, user id, expiry | verify email | used or expired (24 h) — purged automatically |
 | `ratings` | user id, video id, score, reaction | the rating feature | account deleted |
 | `rating_activity` | none — per-video daily counts with no user id (not personal data) | trending row | 30 days |
