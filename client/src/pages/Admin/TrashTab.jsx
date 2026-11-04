@@ -7,6 +7,7 @@ import { useT } from "../../i18n/useT.js";
 import { videoLabel } from "../../lib/format.js";
 import { daysUntil } from "../../lib/order.js";
 import { ErrorText } from "./shared.jsx";
+import { LazyImage } from "../../components/LazyImage/LazyImage.jsx";
 import styles from "./Admin.module.css";
 
 /** "Moved to trash 2 days ago · Deleted forever in 5 days" */
@@ -210,7 +211,9 @@ export function TrashTab({ reloadSeries }) {
                 {videos.map((v) => (
                   <li key={v.id} className={styles.row}>
                     <div className={styles.summary} style={{ flex: "1 1 20rem" }}>
-                      <img src={v.thumbnailUrl} alt="" width="160" height="90" loading="lazy" decoding="async" className={styles.thumb} />
+                      <span className={styles.thumb}>
+                        <LazyImage src={v.thumbnailUrl} alt="" width={160} height={90} fallbackLabel={v.seriesName ?? v.title} />
+                      </span>
                       <div className="stack" style={{ "--stack-gap": "0.3rem", minInlineSize: 0, flex: "1 1 14rem" }}>
                         <p className={styles.videoTitle} id={`trash-video-${v.id}`}>
                           {v.title}

@@ -129,16 +129,21 @@ export function validator(body) {
       return out;
     },
 
-    httpUrl(field, { nullable = false } = {}) {
+    /**
+     * A series cover source (v1.5): fetched by the server, so only what src/covers.js will
+     * fetch: https, the default port, no user name or password. Returned normalised.
+     */
+    coverSourceUrl(field, { nullable = false } = {}) {
       const value = body[field];
       if ((value === null || value === "") && nullable) return null;
-      if (typeof value !== "string" || value.length > 2048) return fail(field, "Must be an http(s) URL.");
+      const message = "Must be an https:// address on the standard port, without a user name or password.";
+      if (typeof value !== "string" || value.length > 2048) return fail(field, message);
       try {
         const url = new URL(value.trim());
-        if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error();
+        if (url.protocol !== "https:" || url.port !== "" || url.username || url.password || !url.hostname) throw new Error();
         return url.toString();
       } catch {
-        return fail(field, "Must be an http(s) URL.");
+        return fail(field, message);
       }
     },
 

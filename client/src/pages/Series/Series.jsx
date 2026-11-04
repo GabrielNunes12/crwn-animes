@@ -9,6 +9,7 @@ import { useProgressMap } from "../../hooks/useProgress.js";
 import { useTitle } from "../../hooks/useTitle.js";
 import { useT } from "../../i18n/useT.js";
 import { truncateWords, videoLabel } from "../../lib/format.js";
+import { sameOriginImage } from "../../lib/images.js";
 import { genreHref } from "../../lib/search.js";
 import { formatTime, pruneSeriesProgress, resumePosition, seriesProgress } from "../../lib/progress.js";
 import { pickSeason, seasonsOf } from "../../lib/seasons.js";
@@ -147,10 +148,12 @@ function SeriesView({ section, series, videos, seasons: apiSeasons }) {
   const season = pickSeason(seasons, params.get("season"), sp.target);
   const shown = multi ? videos.filter((v) => (v.season ?? 1) === season) : videos;
   const pct = sp.total ? Math.round((sp.watched / sp.total) * 100) : 0;
+  // Same-origin covers only (/api/covers/…): a CSS background is an image load too.
+  const banner = sameOriginImage(series.coverUrl);
 
   return (
     <div className={styles.page}>
-      <div className={styles.banner} aria-hidden="true" style={series.coverUrl ? { "--cover": `url("${encodeURI(series.coverUrl)}")` } : undefined} />
+      <div className={styles.banner} aria-hidden="true" style={banner ? { "--cover": `url("${encodeURI(banner)}")` } : undefined} />
       <div className="container">
         <div className={styles.top}>
           <div className={styles.cover}>

@@ -147,7 +147,8 @@ test.describe("stored / reflected XSS in the SPA", () => {
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("crwn:progress:v1") ?? "{}"));
     for (const [id, e] of Object.entries(stored)) {
       expect(e.route, `${id} route`).toMatch(/^\/(anime|manga)\/[a-z0-9-]+\/(episode|season|chapter)\//);
-      if (e.thumb != null) expect(e.thumb, `${id} thumb`).toMatch(/^https:\/\/i\.ytimg\.com\/[^"'<> ]+$/);
+      // v1.5: a kept thumb is only ever our own /api/thumbs/<id>.jpg path (legacy i.ytimg.com URLs are converted).
+      if (e.thumb != null) expect(e.thumb, `${id} thumb`).toMatch(/^\/api\/thumbs\/[A-Za-z0-9_-]{11}\.jpg$/);
     }
     await visitAndCheck(page, dialogs, "/");
     await visitAndCheck(page, dialogs, SERIES_PATH);

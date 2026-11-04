@@ -31,7 +31,8 @@ test("forgot password → reset link → new password works, the old session is 
       await expect(pageB.getByRole("heading", { level: 1, name: "Esqueceu a senha?" })).toBeVisible();
       await pageB.getByLabel("E-mail", { exact: true }).fill(user.email);
       await pageB.getByRole("button", { name: "Enviar link" }).click();
-      await expect(pageB.getByRole("status")).toContainText("Se existir uma conta com esse e-mail");
+      // Scoped to <main>: the app-wide update toast (v1.5) keeps an empty role="status" region in the DOM.
+      await expect(pageB.getByRole("main").getByRole("status")).toContainText("Se existir uma conta com esse e-mail");
     });
 
     await test.step("device B opens the e-mailed link and sets a new password", async () => {

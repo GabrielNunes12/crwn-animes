@@ -1,6 +1,9 @@
 // Shared test helpers: an in-memory app on a random port, a fetch client with
 // a cookie jar, and shortcuts to create users and videos.
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { createApp } from "../src/app.js";
 import { openDatabase } from "../src/db.js";
 import { HttpError } from "../src/errors.js";
@@ -8,6 +11,14 @@ import { createMailer } from "../src/mail.js";
 
 /** 11-char fake YouTube ID: vid(7) -> "vid00000007". */
 export const vid = (n) => `vid${String(n).padStart(8, "0")}`;
+
+/** A small fake PNG (signature + the text): what the fake cover hosts serve. */
+export const fakePng = (text = "cover", padding = 0) =>
+  Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from(`cover:${text}`), Buffer.alloc(padding, 0x20)]);
+
+/** A small fake JPEG (SOI + APP0 marker, the ID, EOI): what the fake i.ytimg.com serves. */
+export const fakeJpeg = (id, padding = 0) =>
+  Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from(`thumb:${id}`), Buffer.alloc(padding, 0x20), Buffer.from([0xff, 0xd9])]);
 
 export const PASSWORD = "correct-horse-battery";
 
@@ -66,11 +77,31 @@ export class Client {
  * Starts the app on port 0 with an in-memory DB.
  * fake.titles[id] sets what "YouTube" answers; fake.gone has IDs that answer 404;
  * fake.down makes every lookup fail like a network error; fake.delayMs slows lookups.
+ * Thumbnails never leave the process: `fetchThumbnail` (default: records the ID in
+ * fake.thumbCalls and answers fakeJpeg(id); null = the app's real default, for
+ * THUMB_UPSTREAM tests against a local fake) and a fresh temporary THUMB_CACHE_DIR
+ * (`thumbDir`, removed by close() unless config.thumbCacheDir was given). Covers
+ * likewise: `fetchCover` (default: records the URL in fake.coverCalls, answers
+ * fakePng(url) as image/png; null = the real SSRF-guarded fetch).
  */
-export async function startServer({ config = {}, mailer: customMailer } = {}) {
+export async function startServer({ config = {}, mailer: customMailer, fetchThumbnail, fetchCover } = {}) {
   const db = openDatabase(":memory:");
   const mailer = customMailer ?? createMailer({ smtp: null }, { log: () => {} });
-  const fake = { titles: {}, gone: new Set(), down: false, calls: [], delayMs: 0 };
+  const fake = { titles: {}, gone: new Set(), down: false, calls: [], delayMs: 0, thumbCalls: [], coverCalls: [] };
+  const ownThumbDir = config.thumbCacheDir ? null : fs.mkdtempSync(path.join(os.tmpdir(), "crwn-thumbs-"));
+  const thumbDir = config.thumbCacheDir ?? ownThumbDir;
+  if (fetchThumbnail === undefined) {
+    fetchThumbnail = async (id) => {
+      fake.thumbCalls.push(id);
+      return fakeJpeg(id);
+    };
+  }
+  if (fetchCover === undefined) {
+    fetchCover = async (url) => {
+      fake.coverCalls.push(url);
+      return { body: fakePng(url), type: "image/png" };
+    };
+  }
   const fetchVideoInfo = async (id) => {
     fake.calls.push(id);
     if (fake.delayMs) await new Promise((resolve) => setTimeout(resolve, fake.delayMs));
@@ -82,6 +113,8 @@ export async function startServer({ config = {}, mailer: customMailer } = {}) {
     db,
     mailer,
     fetchVideoInfo,
+    fetchThumbnail: fetchThumbnail ?? undefined,
+    fetchCover: fetchCover ?? undefined,
     config: {
       nodeEnv: "test",
       isProduction: false,
@@ -89,6 +122,7 @@ export async function startServer({ config = {}, mailer: customMailer } = {}) {
       adminEmails: ["admin@example.com"],
       rateLimit: { max: 1000, windowMs: 15 * 60 * 1000 },
       clientDist: "/nonexistent-client-dist",
+      thumbCacheDir: thumbDir,
       ...config,
     },
   });
@@ -102,6 +136,7 @@ export async function startServer({ config = {}, mailer: customMailer } = {}) {
     mailer,
     fake,
     base,
+    thumbDir,
     services: app.locals.services,
     client: () => new Client(base),
     close: () =>
@@ -109,6 +144,7 @@ export async function startServer({ config = {}, mailer: customMailer } = {}) {
         server.closeAllConnections?.();
         server.close(resolve);
         db.close();
+        if (ownThumbDir) fs.rmSync(ownThumbDir, { recursive: true, force: true });
       }),
   };
 }

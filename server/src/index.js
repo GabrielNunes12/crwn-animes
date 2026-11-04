@@ -14,7 +14,7 @@ try {
 const db = openConfiguredDatabase(config);
 const app = createApp({ db, config });
 
-const stopRetention = startRetention(db);
+const stopRetention = startRetention(db, { images: app.locals.services.images });
 const stopHealthChecks = startHealthChecks(app.locals.services.videos);
 
 const server = app.listen(config.port, () => {

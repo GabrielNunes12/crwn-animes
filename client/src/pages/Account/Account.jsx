@@ -11,6 +11,7 @@ import { useTitle } from "../../hooks/useTitle.js";
 import { useT } from "../../i18n/useT.js";
 import { MIN_PASSWORD } from "../../lib/password.js";
 import { clearProgress, EXPORT_FILENAME, exportProgress, importProgress, MAX_IMPORT_BYTES } from "../../lib/progress.js";
+import { clearRuntimeCaches } from "../../pwa/serviceWorker.js";
 import { SingleKeyToggle } from "../../components/ShortcutsDialog/SingleKeyToggle.jsx";
 import styles from "./Account.module.css";
 
@@ -324,6 +325,7 @@ function DeviceCard() {
         confirmLabel={t("account.clearConfirm")}
         onConfirm={() => {
           clearProgress();
+          clearRuntimeCaches(); // the offline copy of pages and images opened (docs/API.md v1.5)
           setOpen(false);
           setStatus({ message: t("account.historyCleared"), error: false });
         }}

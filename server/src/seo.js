@@ -280,13 +280,20 @@ function seriesJsonLd(series, section, description, path, { context = true } = {
   };
 }
 
-/** Turns relative "url" fields of JSON-LD into absolute ones. */
+/** A same-origin path ("/api/thumbs/<id>.jpg") as an absolute APP_URL address; anything else unchanged. */
+const absoluteUrl = (value, appUrl) =>
+  typeof value === "string" && value.startsWith("/") && !value.startsWith("//") ? appUrl + value : value;
+
+// JSON-LD fields holding a link: the page's own route, the video thumbnail (/api/thumbs, v1.5), an image.
+const LINK_KEYS = new Set(["url", "thumbnailUrl", "image"]);
+
+/** Turns relative link fields of JSON-LD into absolute ones. */
 function absolutize(node, appUrl) {
   if (Array.isArray(node)) return node.map((n) => absolutize(n, appUrl));
   if (!node || typeof node !== "object") return node;
   const out = {};
   for (const [key, value] of Object.entries(node)) {
-    out[key] = key === "url" && typeof value === "string" && value.startsWith("/") ? appUrl + value : absolutize(value, appUrl);
+    out[key] = LINK_KEYS.has(key) && typeof value === "string" ? absoluteUrl(value, appUrl) : absolutize(value, appUrl);
   }
   return out;
 }
@@ -310,7 +317,7 @@ export function headTags(pageData, appUrl) {
     `<meta property="og:description" content="${attr(pageData.description)}" />`
   );
   if (canonical && pageData.status === 200) tags.push(`<meta property="og:url" content="${attr(canonical)}" />`);
-  if (pageData.image) tags.push(`<meta property="og:image" content="${attr(pageData.image)}" />`);
+  if (pageData.image) tags.push(`<meta property="og:image" content="${attr(absoluteUrl(pageData.image, appUrl))}" />`);
   tags.push(`<meta name="twitter:card" content="${pageData.image ? "summary_large_image" : "summary"}" />`);
   if (pageData.jsonLd) {
     tags.push(`<script type="application/ld+json">${jsonForScript(absolutize(pageData.jsonLd, appUrl))}</script>`);
@@ -377,7 +384,8 @@ export function createSitemap({ repo, appUrl, maxUrls = SITEMAP_MAX_URLS }) {
 }
 
 export function robotsTxt(appUrl) {
-  return ["User-agent: *", "Disallow: /admin", "Disallow: /account", "Disallow: /api/", "", `Sitemap: ${appUrl}/sitemap.xml`, ""].join(
+  // The same-origin images are what og:image / JSON-LD point at: crawlers may read them (v1.5).
+  return ["User-agent: *", "Disallow: /admin", "Disallow: /account", "Allow: /api/thumbs/", "Allow: /api/covers/", "Disallow: /api/", "", `Sitemap: ${appUrl}/sitemap.xml`, ""].join(
     "\n"
   );
 }

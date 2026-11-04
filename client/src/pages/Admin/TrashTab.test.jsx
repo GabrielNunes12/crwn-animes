@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TrashTab } from "./TrashTab.jsx";
 import { SeriesTab } from "./SeriesTab.jsx";
@@ -45,6 +45,22 @@ const rowOf = (text) => screen.getByText(text, { selector: "p" }).closest("li");
 const seriesRow = () => document.getElementById("trash-series-10").closest("li");
 
 describe("admin Trash tab", () => {
+  it("trashed videos have thumbnailUrl null (v1.5): the gradient placeholder, never a broken <img>", async () => {
+    const { db } = server();
+    db.videos = [trashedVideo(5, "Bleach 5", { thumbnailUrl: null }), trashedVideo(7, "Bleach 7", { thumbnailUrl: "/api/thumbs/yt7xxxxxxxx.jpg" })];
+    const { container } = renderApp(<TrashTab reloadSeries={() => {}} />);
+    await screen.findByText("Bleach 5", { selector: "p" });
+    const missing = rowOf("Bleach 5");
+    expect(missing.querySelector("img")).toBeNull();
+    expect(missing.querySelector('[data-state="error"]')).toHaveTextContent("BL");
+    const present = rowOf("Bleach 7").querySelector("img");
+    expect(present).toHaveAttribute("src", "/api/thumbs/yt7xxxxxxxx.jpg");
+    // A thumbnail that fails to load (502 from the proxy) gets the same placeholder.
+    fireEvent.error(present);
+    expect(rowOf("Bleach 7").querySelector("img")).toBeNull();
+    expect(container.querySelectorAll("img")).toHaveLength(0);
+  });
+
   it("lists trashed series and videos with when they were removed and when they will be deleted (pt-BR)", async () => {
     server();
     renderApp(<TrashTab reloadSeries={() => {}} />, { locale: "pt-BR" });

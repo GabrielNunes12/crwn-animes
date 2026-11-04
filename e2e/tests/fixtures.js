@@ -18,6 +18,20 @@ export const ADMIN_STATE = path.resolve(here, "../.auth/admin.json");
  * only serves the static bundle, so SEO checks must request this origin.
  */
 export const API_ORIGIN = `http://localhost:${Number(process.env.E2E_API_PORT || 4517)}`;
+/**
+ * The fake i.ytimg.com the e2e API fetches thumbnails from (THUMB_UPSTREAM, see
+ * e2e/fake-thumb-upstream.mjs). `GET /__hits?id=<id>` says how often the API asked for an id.
+ */
+export const THUMB_UPSTREAM = `http://127.0.0.1:${Number(process.env.E2E_THUMB_PORT || 4617)}`;
+/** The JPEG the fake upstream serves is 160×90: a loaded thumbnail of that width came through it. */
+export const FAKE_THUMB_WIDTH = 160;
+
+/** How many times the API fetched this YouTube id from the (fake) upstream. */
+export async function upstreamHits(request, id) {
+  const res = await request.get(`${THUMB_UPSTREAM}/__hits?id=${encodeURIComponent(id)}`);
+  expect(res.ok(), "fake thumbnail upstream is running").toBeTruthy();
+  return (await res.json()).hits;
+}
 export const ADMIN = { email: "admin@e2e.test", password: "admin-e2e-password-123", displayName: "E2E Admin" };
 
 const TINY_PNG = Buffer.from(

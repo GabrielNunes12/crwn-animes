@@ -23,37 +23,20 @@ import { after, before, describe, test } from "node:test";
 import tls from "node:tls";
 import { SERVER_DIR } from "../src/config.js";
 import { openDatabase } from "../src/db.js";
+import { TEST_TLS } from "./tls-fixture.js";
 
 const APP_URL = "https://crwn.example";
 const SMTP_PASS = "smtp-secret-Zx81qq";
 
-// TEST-ONLY self-signed certificate for 127.0.0.1 (valid until 2126) and its key,
-// used by the fake SMTP server's STARTTLS. Not a secret: it protects nothing.
-const SMTP_TLS = {
-  key: `-----BEGIN PRIVATE KEY-----
-MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgwpMB6IssEdzmIUb5
-gJwwMe9UwWym0W7CtFg83lKpteWhRANCAAT+NC+iuLKnJMC1eXrKcvK49xC7lMKa
-LmvihqtwHlSRS6Yo3yjXuAmgczbjZJxUsxr5oJ7nNcuk2lN/fbDyydwk
------END PRIVATE KEY-----
-`,
-  cert: `-----BEGIN CERTIFICATE-----
-MIIBtTCCAVugAwIBAgIUQH6UdrWznTr/S2b+hgsbTkS1/rEwCgYIKoZIzj0EAwIw
-GTEXMBUGA1UEAwwOY3J3bi10ZXN0LXNtdHAwIBcNMjYxMTA0MDAzMTU2WhgPMjEy
-NjEwMTEwMDMxNTZaMBkxFzAVBgNVBAMMDmNyd24tdGVzdC1zbXRwMFkwEwYHKoZI
-zj0CAQYIKoZIzj0DAQcDQgAE/jQvoriypyTAtXl6ynLyuPcQu5TCmi5r4oarcB5U
-kUumKN8o17gJoHM242ScVLMa+aCe5zXLpNpTf32w8sncJKN/MH0wHQYDVR0OBBYE
-FDkBSij6lcO357hDrWxBPKc0xsAGMB8GA1UdIwQYMBaAFDkBSij6lcO357hDrWxB
-PKc0xsAGMBoGA1UdEQQTMBGHBH8AAAGCCWxvY2FsaG9zdDAPBgNVHRMBAf8EBTAD
-AQH/MA4GA1UdDwEB/wQEAwIChDAKBggqhkjOPQQDAgNIADBFAiAkGtP8EwWilu2N
-desRvaJ7KwclSGyNhZ+rApGeSyHYDgIhAOowLaF08XKq/iO3OhRJ4ApJYjqnSuYj
-QKtoGEiC/pZi
------END CERTIFICATE-----
-`,
-};
+// The fake SMTP server's STARTTLS uses the test-only certificate of tls-fixture.js.
+const SMTP_TLS = TEST_TLS;
 /** A file with the test certificate, for the spawned server's NODE_EXTRA_CA_CERTS. */
 const SMTP_CA_FILE = path.join(os.tmpdir(), `crwn-test-smtp-ca-${process.pid}.pem`);
 fs.writeFileSync(SMTP_CA_FILE, SMTP_TLS.cert);
 process.on("exit", () => fs.rmSync(SMTP_CA_FILE, { force: true }));
+/** THUMB_CACHE_DIR of every spawned server (created only if a thumbnail is ever cached). */
+const THUMB_DIR = path.join(os.tmpdir(), `crwn-test-thumbs-${process.pid}`);
+process.on("exit", () => fs.rmSync(THUMB_DIR, { recursive: true, force: true }));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const sha256 = (value) => createHash("sha256").update(String(value)).digest("hex");
 
@@ -176,6 +159,11 @@ function prodEnv(overrides = {}) {
     PORT: "0",
     DATABASE_FILE: ":memory:",
     CLIENT_DIST: path.join(os.tmpdir(), "crwn-prod-no-client"),
+    // Never the developer's server/data/thumbs: the retention job prunes files of unknown videos.
+    THUMB_CACHE_DIR: THUMB_DIR,
+    THUMB_CACHE_MB: "200",
+    THUMB_UPSTREAM: "",
+    IMAGE_MISS_RATE_MAX: "300",
     APP_URL,
     CLIENT_ORIGIN: APP_URL,
     ADMIN_EMAILS: "",
@@ -282,6 +270,10 @@ function makeDist() {
   fs.writeFileSync(path.join(dir, "assets", "index-Ef56Gh78.css"), "body{color:red}");
   fs.writeFileSync(path.join(dir, "theme-init.js"), "/* theme */");
   fs.writeFileSync(path.join(dir, "favicon.svg"), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+  // PWA (v1.5): service worker, web manifest, offline page.
+  fs.writeFileSync(path.join(dir, "sw.js"), "self.addEventListener('fetch', () => {});");
+  fs.writeFileSync(path.join(dir, "manifest.webmanifest"), '{"name":"Crwn Animes","start_url":"/"}');
+  fs.writeFileSync(path.join(dir, "offline.html"), "<!doctype html><title>Você está offline</title>");
   // Files a sloppy deploy could leave next to the build: never served.
   fs.writeFileSync(path.join(dir, ".env"), "DIST_SECRET=1");
   fs.writeFileSync(path.join(dir, "assets", ".env"), "DIST_SECRET=2");
@@ -311,12 +303,13 @@ describe("production start-up", () => {
   const run = (env) =>
     spawnSync(process.execPath, ["src/index.js"], { cwd: SERVER_DIR, env: prodEnv(env), encoding: "utf8", timeout: 10_000 });
 
-  test('refuses TRUST_PROXY="true", an unparsable https APP_URL and an http APP_URL, without echoing secrets', () => {
+  test('refuses TRUST_PROXY="true", an unparsable https APP_URL, an http APP_URL and a THUMB_UPSTREAM, without echoing secrets', () => {
     for (const [env, reason] of [
       [{ TRUST_PROXY: "true", SMTP_PASS }, /TRUST_PROXY/],
       [{ APP_URL: "https://", SMTP_PASS }, /APP_URL/],
       [{ APP_URL: "http://crwn.example", SMTP_PASS }, /APP_URL/],
       [{ SMTP_HOST: "", SMTP_PASS }, /SMTP_HOST/],
+      [{ THUMB_UPSTREAM: "http://127.0.0.1:9", SMTP_PASS }, /THUMB_UPSTREAM is for tests only/],
     ]) {
       const result = run(env);
       assert.equal(result.status, 1, JSON.stringify(env));
@@ -378,6 +371,8 @@ describe("production server (NODE_ENV=production, https APP_URL, SMTP with START
     const old = Number(insertUser.run("old-verified@prod.test", "Old Verified", daysAgo(40), daysAgo(40), daysAgo(40)).lastInsertRowid);
     db.prepare("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)").run(sha256("expired-session"), old, daysAgo(1));
     db.prepare("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)").run(sha256("live-session"), old, daysAgo(-10));
+    // A live video whose thumbnail the server will try (and fail) to fetch: outbound traffic goes to a closed port.
+    db.prepare("INSERT INTO videos (youtube_video_id, source_title, section, status) VALUES ('prodThumb01', 'Prod upload', 'anime', 'pending')").run();
     db.close();
     secrets.push("stale-unverified@prod.test", "Stale Pending Name", "old-verified@prod.test", SMTP_PASS);
 
@@ -514,6 +509,34 @@ describe("production server (NODE_ENV=production, https APP_URL, SMTP with START
       }
     }
   );
+
+  test("PWA files revalidate (sw.js may control /, the manifest has its media type); thumbnails fail closed: 404 / 502 JSON, never cached, never printed", async () => {
+    const sw = await srv.req({ path: "/sw.js" });
+    assert.equal(sw.status, 200);
+    assert.equal(sw.headers["cache-control"], "no-cache");
+    assert.equal(sw.headers["service-worker-allowed"], "/");
+    assert.match(sw.headers["content-type"], /^text\/javascript/);
+    assert.match(sw.headers["content-security-policy"], /;worker-src 'self';manifest-src 'self'$/);
+    const manifest = await srv.req({ path: "/manifest.webmanifest" });
+    assert.equal(manifest.status, 200);
+    assert.equal(manifest.headers["cache-control"], "no-cache");
+    assert.equal(manifest.headers["content-type"], "application/manifest+json");
+    const offline = await srv.req({ path: "/offline.html" });
+    assert.equal(offline.status, 200);
+    assert.equal(offline.headers["cache-control"], "no-cache");
+
+    secrets.push("prodThumb01", "nopeNopeNo1", "ytimg"); // the output audit below: never printed
+    const unknown = await srv.req({ path: "/api/thumbs/nopeNopeNo1.jpg" });
+    assert.equal(unknown.status, 404);
+    assert.equal(unknown.json?.error?.code, "NOT_FOUND");
+    const started = Date.now();
+    const live = await srv.req({ path: "/api/thumbs/prodThumb01.jpg" });
+    assert.equal(live.status, 502, "the real upstream fetch cannot get out of this sandbox");
+    assert.equal(live.json?.error?.code, "UPSTREAM_ERROR");
+    assert.equal(live.headers["cache-control"], "private, no-store");
+    assert.ok(Date.now() - started < 6000, "within the 5 s upstream timeout");
+    assert.deepEqual(fs.existsSync(THUMB_DIR) ? fs.readdirSync(THUMB_DIR) : [], [], "nothing cached");
+  });
 
   test("error pages: HTML 404 shell (noindex), JSON API errors; no stack, path, module or SQL text in any of them", async () => {
     const page = await srv.req({ path: "/anime/nao-existe" });

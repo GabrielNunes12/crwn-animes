@@ -751,9 +751,12 @@ test.describe("trash (Lixeira): edge cases", () => {
     await expect(dialog).toBeHidden();
     await expect(seriesRow).toHaveCount(0);
     await expect(videoRow, "the episode trashed on its own went with its series").toHaveCount(0);
+    // Matched by slug / YouTube id, not by numeric id: SQLite hands a purged row's id to the next
+    // insert (no AUTOINCREMENT), so a series created meanwhile by a parallel test can get S.id.
     const after = await (await admin.get("/api/admin/trash")).json();
-    expect(after.series.filter((s) => s.id === S.id)).toEqual([]);
-    expect(after.videos.filter((v) => v.seriesId === S.id)).toEqual([]);
+    const ours = new Set(Object.values(S.v).map((v) => v.youtubeVideoId));
+    expect(after.series.filter((s) => s.slug === S.slug)).toEqual([]);
+    expect(after.videos.filter((v) => ours.has(v.youtubeVideoId))).toEqual([]);
   });
 
   test("re-adding a YouTube video that is in the trash → 409 “restore it instead”, and Adicionar vídeo says “Na lixeira — restaure-o”", async ({ page, admin }) => {

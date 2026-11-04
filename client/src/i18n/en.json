@@ -78,7 +78,7 @@
       "token": "This link is invalid or has expired.",
       "name": "Enter a name for the series.",
       "slug": "Slug may only use lowercase letters, numbers and dashes.",
-      "coverUrl": "Enter a valid image URL (http or https).",
+      "coverUrl": "Enter a valid https:// image address.",
       "url": "Enter a YouTube link or 11-character video ID.",
       "section": "Choose Anime or Manga.",
       "seriesSlug": "Choose an existing series.",
@@ -403,7 +403,7 @@
       "other": "{count} videos in your watch history."
     },
     "clearHistory": "Clear watch history",
-    "clearHistoryText": "This removes all saved positions and ✓ marks from this browser.",
+    "clearHistoryText": "This removes all saved positions and ✓ marks from this browser, plus the offline copy of the catalog pages and images you opened.",
     "clearConfirm": "Clear",
     "historyCleared": "Watch history cleared.",
     "loggedOutTitle": "You're not logged in",
@@ -446,7 +446,8 @@
       "p2": "For an account we keep your email, display name, a scrambled (hashed) password and when you accepted this notice.",
       "p3": "No analytics, no ads, no trackers, no IP addresses. One essential cookie keeps you logged in.",
       "p4": "Your watch progress never leaves your browser.",
-      "p5": "Download your data or delete your account yourself, any time, from “My account”."
+      "p5": "Download your data or delete your account yourself, any time, from “My account”.",
+      "p6": "Thumbnails and covers come from our own server, and what you type in search is never stored on your device: nothing from YouTube or any other site loads until you press Play."
     },
     "keep": {
       "title": "What we keep, why and for how long",
@@ -488,10 +489,11 @@
     "never": "We do not store IP addresses, browser user agents, analytics, advertising IDs or any third-party trackers.",
     "device": {
       "title": "Stored only on your device",
-      "intro": "Some things are saved in your browser's localStorage. They never reach our server:",
+      "intro": "Some things are saved only in your browser (in localStorage and, for offline use, in Cache Storage). They never reach our server:",
       "progress": "Watch progress (key crwn:progress:v1): for up to 200 videos — the position, the length, when you last watched, and the episode's link, title and thumbnail, so we can show “Resume at…”, ✓ marks and “Continue watching”.",
       "prefs": "Preferences: theme (light/dark), language, “Autoplay next” and “Always load YouTube”.",
-      "clear": "You can clear your watch history at any time, even without an account:",
+      "cache": "Offline copy (Cache Storage): the app itself and the public catalog pages you opened — lists, series, episodes, thumbnails and covers — so the site opens without internet. What you type in search is never stored there, nor anything from your account, your ratings or other personal data. Each new version of the site deletes the previous copy.",
+      "clear": "You can clear your watch history at any time, even without an account. “Clear watch history” deletes your progress and the offline copy of catalog pages and images (the app itself stays, so it still opens offline):",
       "clearLink": "My account → On this device"
     },
     "cookies": {
@@ -500,8 +502,8 @@
       "p2": "Because it is essential for a service you asked for, it doesn't need a consent banner. We use no analytics, advertising or social media cookies."
     },
     "youtube": {
-      "title": "YouTube videos and thumbnails",
-      "p1": "Every episode is a YouTube video. Thumbnails are loaded from YouTube's image server (i.ytimg.com), so Google can see your IP address when they load.",
+      "title": "Videos, thumbnails and covers",
+      "p1": "Every episode is a YouTube video. Episode thumbnails and series covers are now served from our own server (it fetches them from their source and keeps a copy), so opening a page doesn't make your browser contact YouTube, Google or any other site: YouTube is only contacted when you press Play.",
       "p2": "The YouTube player is only loaded after you press play (or if you switch on “Always load YouTube”). It uses YouTube's privacy-enhanced domain youtube-nocookie.com, but once it plays, Google's own privacy policy applies to what happens inside the player.",
       "p3": "If you prefer, use “Watch on YouTube” to open a video directly on youtube.com."
     },
@@ -589,9 +591,12 @@
       "slugHint": "Lowercase letters, numbers and dashes. Leave empty to generate it from the name.",
       "synopsis": "Synopsis",
       "aliases": "Aliases (alternative titles)",
-      "cover": "Cover image URL",
+      "cover": "Cover image address",
+      "coverHint": "https:// only. Our server fetches the image and serves it from here: the browser never opens this address.",
       "coverPreview": "Cover preview",
       "coverNone": "Preview appears here",
+      "coverAfterSave": "The preview appears after you save.",
+      "coverSaved": "Saved cover of {name}",
       "create": "Create series",
       "nameRequired": "The name is required.",
       "created": "Created {name}.",
@@ -891,5 +896,11 @@
       }
     },
     "privacy": "What data Crwn Animes keeps, why and for how long, and how to export or delete your account (GDPR / LGPD)."
+  },
+  "pwa": {
+    "updateAvailable": "A new version is available",
+    "update": "Update",
+    "updating": "Updating…",
+    "dismiss": "Dismiss"
   }
 }

@@ -4,6 +4,7 @@ import { useT } from "../../i18n/useT.js";
 import { ALWAYS_LOAD_KEY, getBool, setBool } from "../../lib/prefs.js";
 import { formatTime, getProgress, resumePosition, saveProgress } from "../../lib/progress.js";
 import { loadYouTubeApi, UNPLAYABLE_ERRORS, YT_HOST, youtubeWatchUrl } from "../../lib/youtube.js";
+import { LazyImage } from "../LazyImage/LazyImage.jsx";
 import styles from "./Player.module.css";
 
 const SAVE_EVERY_MS = 10_000;
@@ -162,7 +163,7 @@ export function Player({ video, autoStart = false, onEnded, next, nextLabel, per
 
         {showFacade && (
           <button type="button" className={styles.facade} onClick={play} aria-disabled={activated || undefined} aria-label={t("watch.play", { title: video.title })}>
-            <img src={video.thumbnailUrl} alt="" width="480" height="360" decoding="async" fetchPriority="high" />
+            <LazyImage src={video.thumbnailUrl} alt="" width={480} height={360} fill eager fetchPriority="high" className={styles.poster} fallbackLabel={video.seriesName ?? video.title} />
             <span className={styles.playIcon} aria-hidden="true">
               {activated ? <span className={styles.spinner} /> : <svg viewBox="0 0 24 24" width="36" height="36"><path d="M8 5v14l11-7z" fill="currentColor" /></svg>}
             </span>

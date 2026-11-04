@@ -1,6 +1,6 @@
 // Journey 4: the episode page — YouTube facade, ratings and reactions,
 // the logged-out view, and /admin for a normal user.
-import { test, expect, createUser, ensureSeries, ensureVideo, fakeYouTubeId, uniqueEmail, YOUTUBE_HOST, headerUser } from "./fixtures.js";
+import { test, expect, createUser, ensureSeries, ensureVideo, fakeYouTubeId, uniqueEmail, YOUTUBE_HOST, headerUser, FAKE_THUMB_WIDTH } from "./fixtures.js";
 
 const SERIES = { name: "Watch Saga", slug: "watch-saga", aliases: [], genres: ["Drama"] };
 
@@ -43,9 +43,13 @@ test.describe("episode page", () => {
       await expect(page.getByRole("button", { name: `Reproduzir: ${title}` })).toBeVisible();
       await expect(headerUser(page, user.displayName)).toBeVisible();
       await expect(stars(4)).toBeAttached(); // visually hidden radio inside a star label
-      // Thumbnails (i.ytimg.com) are the only YouTube traffic allowed before play.
-      const beforePlay = ytRequests.filter((u) => !/ytimg\.com/.test(new URL(u).hostname));
-      expect(beforePlay, "no youtube.com / youtube-nocookie.com request before pressing play").toEqual([]);
+      // v1.5: the poster is our own copy (/api/thumbs, fetched by the server), so before play there
+      // is no YouTube traffic at all — not even i.ytimg.com.
+      const poster = page.getByRole("button", { name: `Reproduzir: ${title}` }).locator(`img[src="/api/thumbs/${video.youtubeVideoId}.jpg"]`);
+      await expect(poster).toBeVisible();
+      await expect.poll(() => poster.evaluate((img) => (img.complete ? img.naturalWidth : 0)), { message: "the same-origin poster loads" }).toBe(FAKE_THUMB_WIDTH);
+      expect(ytRequests, "no youtube.com / youtube-nocookie.com / ytimg.com request before pressing play").toEqual([]);
+      expect(externalRequests, "no third-party request at all before pressing play").toEqual([]);
       await expect(page.locator('iframe[src*="youtube"]')).toHaveCount(0);
     });
 

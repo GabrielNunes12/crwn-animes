@@ -6,7 +6,7 @@
 // so progress is seeded directly into localStorage with the real ids/routes of
 // the videos seeded through the API.
 import fs from "node:fs/promises";
-import { test, expect, asAdmin, fakeYouTubeId, seedSeries, expectNoSeriousViolations, YOUTUBE_HOST } from "./fixtures.js";
+import { test, expect, asAdmin, fakeYouTubeId, seedSeries, expectNoSeriousViolations, FAKE_THUMB_WIDTH } from "./fixtures.js";
 
 const KEY = "crwn:progress:v1";
 
@@ -400,10 +400,49 @@ test.describe("/account: export / import watch history", () => {
       await expect(page.locator('img[src*="evil.example"]')).toHaveCount(0);
       expect(dialogs, "no alert() ran").toEqual([]);
       expect(errors, "no uncaught page errors").toEqual([]);
-      const thirdParty = externalRequests.filter((u) => !YOUTUBE_HOST.test(new URL(u).hostname));
-      expect(thirdParty, "no request to any non-local, non-YouTube host").toEqual([]);
-      expect(externalRequests.filter((u) => /evil\.example/.test(u))).toEqual([]);
+      // v1.5: thumbnails are same-origin, so not even YouTube's image host is contacted.
+      expect(externalRequests, "no request to any non-local host").toEqual([]);
     });
+  });
+
+  test("v1.5: legacy i.ytimg.com thumbs (old local history or an imported file) are shown through /api/thumbs; nothing leaves localhost", async ({ page, externalRequests }) => {
+    const { v } = S;
+    const legacy = (video) => `https://i.ytimg.com/vi/${video.youtubeVideoId}/hqdefault.jpg`;
+    const own = (video) => `/api/thumbs/${video.youtubeVideoId}.jpg`;
+    // History written before v1.5 holds the YouTube URL.
+    await seedProgress(page, { [v.s1e2.youtubeVideoId]: { ...started(v.s1e2, Date.now() - 120_000), thumb: legacy(v.s1e2) } });
+
+    await test.step("Home's “Continuar assistindo” loads the same-origin copy", async () => {
+      await page.goto("/");
+      const row = page.getByRole("region", { name: "Continuar assistindo" });
+      const img = row.locator(`img[src="${own(v.s1e2)}"]`);
+      await expect(img).toBeVisible();
+      await expect.poll(() => img.evaluate((el) => (el.complete ? el.naturalWidth : 0))).toBe(FAKE_THUMB_WIDTH);
+      await expect(row.locator('img[src*="ytimg"]')).toHaveCount(0);
+    });
+
+    await test.step("an imported legacy thumb is stored as /api/thumbs/<id>.jpg; a look-alike host is dropped", async () => {
+      await page.goto("/account");
+      await page.getByLabel("Importar histórico").setInputFiles({
+        name: "old.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(
+          JSON.stringify({
+            version: 1,
+            entries: {
+              [v.ch1.youtubeVideoId]: { ...started(v.ch1, Date.now() - 60_000), thumb: legacy(v.ch1) },
+              [v.ch2.youtubeVideoId]: { ...started(v.ch2, Date.now() - 60_000), thumb: `https://i.ytimg.com.evil.example/vi/${v.ch2.youtubeVideoId}/hqdefault.jpg` },
+            },
+          })
+        ),
+      });
+      await expect(page.getByRole("status").filter({ hasText: /Importados:/ })).toHaveText("Importados: 2. Ignorados: 0.");
+      const stored = await readProgress(page);
+      expect(stored[v.ch1.youtubeVideoId].thumb).toBe(own(v.ch1));
+      expect(stored[v.ch2.youtubeVideoId].thumb).toBeNull();
+    });
+
+    expect(externalRequests, "no request to i.ytimg.com or any other host").toEqual([]);
   });
 
   test("axe: /account with history (logged out)", async ({ page }) => {

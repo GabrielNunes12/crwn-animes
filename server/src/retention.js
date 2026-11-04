@@ -1,7 +1,7 @@
 // Deletes personal data we no longer need (see docs/API.md, "Personal data we keep"):
 // expired sessions and e-mail tokens, accounts never verified within 7 days,
 // anonymous rating activity older than 30 days, and series/videos that have
-// been in the trash for 7 days (with their ratings).
+// been in the trash for 7 days (with their ratings, cached thumbnails and covers).
 
 const DAY = 24 * 60 * 60 * 1000;
 const UNVERIFIED_TTL_MS = 7 * DAY;
@@ -42,23 +42,45 @@ export function purgeExpired(db, now = new Date()) {
  * cascades; the aggregates already left them out while they were in the
  * trash). A series takes every video it still has. Checkpoints the WAL when
  * anything went, like an account deletion (ratings are personal data).
+ * `onPurged({ youtubeIds, seriesIds })` gets the YouTube IDs of every video and the
+ * ids of every series that went (their cached images are deleted) once the
+ * transaction has committed.
  */
-export function purgeTrash(db, now = new Date()) {
+export function purgeTrash(db, now = new Date(), { onPurged = null } = {}) {
   const before = new Date(now.getTime() - TRASH_TTL_MS).toISOString();
-  const result = db.transaction(() => ({
-    series: db.prepare("DELETE FROM series WHERE deleted_at IS NOT NULL AND deleted_at <= ?").run(before).changes,
-    videos: db.prepare("DELETE FROM videos WHERE deleted_at IS NOT NULL AND deleted_at <= ?").run(before).changes,
-  }))();
+  let youtubeIds = [];
+  let seriesIds = [];
+  const result = db.transaction(() => {
+    seriesIds = db.prepare("SELECT id FROM series WHERE deleted_at IS NOT NULL AND deleted_at <= ?").pluck().all(before);
+    youtubeIds = db
+      .prepare(`
+        SELECT youtube_video_id FROM videos
+        WHERE (deleted_at IS NOT NULL AND deleted_at <= @before)
+          OR series_id IN (SELECT id FROM series WHERE deleted_at IS NOT NULL AND deleted_at <= @before)`)
+      .pluck()
+      .all({ before });
+    return {
+      series: db.prepare("DELETE FROM series WHERE deleted_at IS NOT NULL AND deleted_at <= ?").run(before).changes,
+      videos: db.prepare("DELETE FROM videos WHERE deleted_at IS NOT NULL AND deleted_at <= ?").run(before).changes,
+    };
+  })();
   if (result.series || result.videos) checkpoint(db);
+  if (youtubeIds.length > 0 || seriesIds.length > 0) onPurged?.({ youtubeIds, seriesIds });
   return result;
 }
 
-/** Runs now and then every hour. The timer is unref'd so it never keeps the process alive. */
-export function startRetention(db, { intervalMs = HOUR } = {}) {
+/**
+ * Runs now and then every hour. The timer is unref'd so it never keeps the process alive.
+ * `images` (the app's image service, app.locals.services.images): purged videos' and
+ * series' cached files are deleted, then any cached file that belongs to nothing any more
+ * (an admin swapped an upload or replaced a cover, a crash mid-purge).
+ */
+export function startRetention(db, { intervalMs = HOUR, images = null } = {}) {
   const run = () => {
     try {
       purgeExpired(db);
-      purgeTrash(db);
+      purgeTrash(db, new Date(), { onPurged: (gone) => images?.purge(gone) });
+      images?.prune();
     } catch (error) {
       console.error(`[retention] ${error.message}`);
     }

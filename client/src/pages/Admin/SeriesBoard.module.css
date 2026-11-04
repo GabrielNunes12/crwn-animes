@@ -132,13 +132,14 @@
     font-variant-numeric: tabular-nums;
     text-align: center;
   }
+  /* Wraps a <LazyImage> (gradient placeholder for a null or broken thumbnail). */
   .thumb {
+    display: block;
+    flex: none;
+    container-type: inline-size;
     inline-size: 6rem;
-    block-size: auto;
-    aspect-ratio: 16 / 9;
-    object-fit: cover;
     border-radius: var(--radius-sm);
-    background: var(--skeleton);
+    overflow: hidden;
   }
   .text {
     display: grid;

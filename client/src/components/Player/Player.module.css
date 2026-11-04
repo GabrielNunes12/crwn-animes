@@ -38,18 +38,14 @@
     outline: 3px solid var(--secondary);
     outline-offset: 2px;
   }
-  .facade img {
-    position: absolute;
-    inset: 0;
-    inline-size: 100%;
-    block-size: 100%;
-    object-fit: cover;
+  /* The poster is a <LazyImage fill>: a missing or broken thumbnail shows the gradient placeholder. */
+  .poster {
     opacity: 0.85;
     transition:
       opacity var(--dur),
       scale var(--dur-slow) var(--ease-out);
   }
-  .facade:hover img {
+  .facade:hover .poster {
     opacity: 1;
     scale: 1.02;
   }

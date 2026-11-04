@@ -67,13 +67,14 @@
     gap: var(--space-3);
     align-items: start;
   }
+  /* Wraps a <LazyImage>: a null or broken thumbnail (e.g. trashed video) shows the gradient placeholder. */
   .thumb {
+    display: block;
+    flex: none;
+    container-type: inline-size;
     inline-size: 10rem;
-    block-size: auto;
-    aspect-ratio: 16 / 9;
-    object-fit: cover;
     border-radius: var(--radius-sm);
-    background: var(--skeleton);
+    overflow: hidden;
   }
   .videoTitle {
     font-weight: 650;
@@ -149,14 +150,10 @@
     text-align: center;
     padding: var(--space-1);
   }
-  .coverPreview:has(img) {
+  /* A saved cover is shown through /api/covers/… (a typed address is never loaded by the browser). */
+  .coverPreview[data-kind="saved"] {
     padding: 0;
     border-style: solid;
-  }
-  .coverPreview img {
-    inline-size: 100%;
-    block-size: 100%;
-    object-fit: cover;
   }
   .resultCard {
     border-inline-start: 4px solid var(--warning);

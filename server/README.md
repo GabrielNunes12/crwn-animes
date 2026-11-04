@@ -26,6 +26,10 @@ HTML-escaped; JSON-LD escapes `<` as `\u003c`). Unknown series/episodes answer
 `/season/1/episode/2`) **301** to the canonical route, and account/admin/search
 pages carry `noindex`; `/index.html` redirects to `/`. The template is cached
 and re-read when its mtime changes (checked at most every 5 s in production).
+PWA files of the build (v1.5): `/sw.js` and `/manifest.webmanifest` are sent with `Cache-Control: no-cache`
+(`sw.js` also with `Service-Worker-Allowed: /` and `text/javascript`, the manifest as `application/manifest+json`),
+`/offline.html` like any other static page (`no-cache`); the CSP adds `worker-src 'self'; manifest-src 'self'`
+and its `img-src` is `'self' data:` (every image is same-origin, see below).
 `GET /sitemap.xml` and `GET /robots.txt` (absolute URLs from `APP_URL`) are
 served even without a built client. The sitemap is cached until the catalog
 changes; above 50,000 URLs `/sitemap.xml` becomes a sitemap index of
@@ -37,21 +41,22 @@ changes; above 50,000 URLs `/sitemap.xml` becomes a sitemap index of
 |---|---|
 | `npm start` | Start the API (`src/index.js`). |
 | `npm run dev` | Same, with `node --watch`. |
-| `npm test` | All tests (`node --test`): classifier, auth, sessions, admin, ratings, catalog, search, pagination/seasons, SEO/sitemap, GDPR, headers, trash, admin board. In-memory DB, fake YouTube lookups, a temporary fake `client/dist` (`createApp({ config: { clientDist } })`). |
+| `npm test` | All tests (`node --test`): classifier, auth, sessions, admin, ratings, catalog, search, pagination/seasons, SEO/sitemap, GDPR, headers, trash, admin board, thumbnails, PWA files. In-memory DB, fake YouTube lookups and thumbnails (nothing reaches youtube.com / ytimg.com), a temporary thumbnail cache per server, a temporary fake `client/dist` (`createApp({ config: { clientDist } })`). |
 | `npm run make-admin -- someone@example.com` | Promote an existing account to admin. |
 | `node src/scripts/bench-admin-lists.js [50000]` | Times the paginated admin lists, `/api/latest` and `/api/search` over HTTP on a throwaway database with that many videos (1% of them and 10 series in the trash; p50/p95). |
 
 ## Environment
 
 See [`.env.example`](.env.example) — each variable is documented there.
-`DATABASE_FILE` is resolved relative to `server/` and `.env` is read from
+`DATABASE_FILE`, `CLIENT_DIST` and `THUMB_CACHE_DIR` are resolved relative to `server/` and `.env` is read from
 `server/.env`, whatever directory you start the process from.
 
 ## Layout
 
-- `src/app.js` — `createApp({ db, config, mailer, fetchVideoInfo })`, no `listen` (tests use it).
+- `src/app.js` — `createApp({ db, config, mailer, fetchVideoInfo, fetchThumbnail, fetchCover })`, no `listen` (tests use it).
 - `src/index.js` — loads `.env`, opens the DB, starts background jobs, listens.
-- `src/routes/` — `auth`, `me`, `catalog`, `ratings`, `admin`, `dev`.
+- `src/routes/` — `auth`, `me`, `catalog`, `ratings`, `admin`, `dev`, `images` (thumbnails + covers).
+- `src/imageCache.js`, `src/thumbnails.js`, `src/covers.js`, `src/netPolicy.js` — same-origin images (below).
 - `src/*Service.js` — auth, ratings, videos; `src/mail.js` — e-mails (pt-BR + en).
 - `src/classifier.js` — works out section/series/season/number from a YouTube title.
 - `src/search.js` — `series.search_text` (`|name|alias|…|`, each through `searchNormalize()`: no accents or case,
@@ -99,6 +104,52 @@ See [`.env.example`](.env.example) — each variable is documented there.
   `videoIds` must be exactly that season's set (400); then it renumbers 1..n (changing videos go through `-n`
   first so the unique slot index never collides) and pins each number as `overrides.number`; `GET /api/admin/videos/:id/preview` returns any non-purged video (pending/trashed too).
 
+## Same-origin images: thumbnails and series covers (v1.5)
+
+`src/imageCache.js` (shared cache and fetch machinery), `src/thumbnails.js`, `src/covers.js`, `src/netPolicy.js`,
+`src/routes/images.js`. A visitor's browser never contacts Google or a cover host: the CSP `img-src` is
+`'self' data:`. `Video.thumbnailUrl` is `/api/thumbs/<youtubeVideoId>.jpg` (`null` for a trashed video);
+`Series.coverUrl` is `/api/covers/<seriesId>.img?v=<first 8 hex of SHA-256(source URL)>` (`null` without a cover
+or for a trashed series). Admin responses add `coverSourceUrl` (the URL the admin typed; `publicSeries()` strips
+it from public ones); admin create/patch still take `coverUrl` as that source, and it must be `https:`, default
+port, no user name/password (else 400). `og:image` and JSON-LD `image`/`thumbnailUrl` are `APP_URL` + the path.
+`robots.txt` has `Allow: /api/thumbs/` and `Allow: /api/covers/` before `Disallow: /api/`.
+
+1. **The database decides first** (404, nothing goes upstream): `GET /api/thumbs/:id.jpg` needs exactly
+   `<11 × [A-Za-z0-9_-]>.jpg` and a live video (published or pending, not trashed) with `availability: "ok"`;
+   `GET /api/covers/:seriesId.img` needs a live series with a cover (`?v=` only busts browser caches).
+2. **Cache** (`THUMB_CACHE_DIR`, `THUMB_CACHE_MB` for both kinds): files `<id>.jpg` and
+   `cover-<seriesId>-<hash>.<jpg|png|webp|avif>`, named from validated keys only, written to a `.tmp` file and
+   renamed; just before the rename the owner must still exist (a purge mid-download leaves nothing). LRU by size
+   (in-memory index); a hit refreshes the file's mtime (at most once a minute) and the first-use scan orders
+   files by mtime, so the LRU order survives restarts. Leftover `.tmp` files are deleted, other files never touched.
+3. **Upstream** (on a miss): single-flight per key; at most 4 fetches at once per kind, up to 256 waiting
+   (beyond: 502 at once). A failed key answers **502 without any upstream request for 10 minutes** (bounded
+   memory, 10,000 keys; a new cover URL is a new key). Misses (requests that start or join a fetch) are
+   limited per IP, thumbnails and covers together: `IMAGE_MISS_RATE_MAX` per 5 minutes (default 300), then
+   **429** with `Retry-After`; cache hits and remembered failures do not count.
+4. **Thumbnails** (`fetchYoutubeThumbnail`, injectable `fetchThumbnail(id)`): `GET
+   https://i.ytimg.com/vi/<id>/hqdefault.jpg`, 5 s (body included), redirects refused, `200` + `image/jpeg` + JPEG
+   bytes + ≤ 512 KB (a larger `Content-Length` refused at once, a stream cancelled past 512 KB). Tests only:
+   `THUMB_UPSTREAM` (a base URL) replaces `https://i.ytimg.com` outside production; with `NODE_ENV=production`
+   the server refuses to start while it is set, and `createApp` ignores it there anyway (`thumbnailUpstream()`).
+5. **Covers: SSRF rules** (`fetchCover`, injectable `fetchCover(url)`; its `lookup`/`request` are injectable for
+   tests): `https:` only, port 443 only, no credentials. The host name is resolved once (`dns.promises.lookup`,
+   `all: true`) and **every** answer must pass `isPublicAddress()` — no loopback, private, CGNAT, link-local,
+   multicast, reserved, documentation, IPv4-mapped/compatible, NAT64, 6to4, unique-local or link-local IPv6
+   (IPv6 must be global unicast `2000::/3`); IP-literal hosts are checked the same way. The request is pinned to
+   that address: `https.request` gets a `lookup` that only ever returns it (DNS rebinding cannot swap it), while
+   TLS still verifies the certificate against the host name; `agent: false`. No redirects (any non-200 is
+   refused), `image/jpeg|png|webp|avif` whose magic bytes match, ≤ 2 MB, 5 s for everything (lookup included).
+   Covers are fetched directly, not through `HTTP(S)_PROXY`.
+6. **Responses**: thumbnails `Cache-Control: public, max-age=604800, immutable`, `image/jpeg`; covers
+   `public, max-age=604800` and the validated type; both `X-Content-Type-Options: nosniff`,
+   `Cross-Origin-Resource-Policy: same-origin`. The routes sit before the session loader (no cookie lookup,
+   never a `Set-Cookie`). Errors are `private, no-store` JSON; upstream problems are one generic 502, never logged.
+7. **Removal**: delete-forever and the 7-day trash purge delete the files of those videos and series; the
+   hourly retention run then deletes cached files that belong to nothing any more (a swapped YouTube upload,
+   a replaced cover URL, a crash between purge and delete). The trash keeps files (restore) but answers 404.
+
 ## Data we store and why
 
 | Table | Personal data | Why | Kept until |
@@ -110,7 +161,8 @@ See [`.env.example`](.env.example) — each variable is documented there.
 | `rating_activity` | **not personal data**: per-video, per-day counts, no user id | "trending" | 30 days |
 
 Never stored: IP addresses (the rate limiter keeps them, IPv6 by /64, in a
-capped in-memory map for 15 minutes), user agents, analytics, the e-mail language choice. Nothing logs
+capped in-memory map for 15 minutes), user agents, analytics, the e-mail language choice. The thumbnail cache
+holds public images keyed by the public YouTube ID only; thumbnail requests are not logged. Nothing logs
 e-mail addresses or passwords. The only cookie is the essential `sid`
 (httpOnly, SameSite=Lax, Secure in production). Users can export their data
 (`GET /api/me/export`) and delete their account (`DELETE /api/me`).
@@ -133,7 +185,8 @@ E-mail addresses with control characters (`\p{Cc}`: NUL, ESC, DEL, C1) are refus
 ## Background jobs (in-process, unref'd timers)
 
 - Retention: at startup and hourly — purge expired sessions/tokens, unverified
-  accounts older than 7 days, rating activity older than 30 days, series/videos trashed 7 days ago (with ratings).
+  accounts older than 7 days, rating activity older than 30 days, series/videos trashed 7 days ago (with ratings
+  and cached images), then cached images that belong to nothing any more.
 - YouTube health check: hourly ticks re-check videos not checked in 24 h via
   oEmbed; 401/403/404 marks a video `unavailable` (hidden from latest/top-rated/
   trending/random). Admins can also run it with `POST /api/admin/videos/health-check`. Runs are single-flight:

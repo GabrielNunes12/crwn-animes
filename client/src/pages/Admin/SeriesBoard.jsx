@@ -11,6 +11,7 @@ import { moveTo, reconcileOrder, sameOrder } from "../../lib/order.js";
 import { pickSeason, seasonsOf } from "../../lib/seasons.js";
 import { ErrorText } from "./shared.jsx";
 import { VideoEditForm } from "./VideoEditForm.jsx";
+import { LazyImage } from "../../components/LazyImage/LazyImage.jsx";
 import styles from "./SeriesBoard.module.css";
 
 const SECTIONS = ["anime", "manga"];
@@ -478,7 +479,9 @@ function Board({ board, error, loading, reload, updateVideos }) {
                 <span className={styles.pos} aria-hidden="true">
                   {i + 1}
                 </span>
-                <img src={v.thumbnailUrl} alt="" width="96" height="54" loading="lazy" decoding="async" className={styles.thumb} />
+                <span className={styles.thumb}>
+                  <LazyImage src={v.thumbnailUrl} alt="" width={96} height={54} fallbackLabel={v.title} />
+                </span>
                 <div className={styles.text}>
                   <p id={labelId} className={styles.label}>
                     {label}

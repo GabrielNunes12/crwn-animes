@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { after, before, describe, test } from "node:test";
+import { coverHash } from "../src/covers.js";
 import { createTemplate, truncate } from "../src/seo.js";
 import { addVideo, startServer, vid } from "./helpers.js";
 
@@ -27,9 +28,9 @@ const TEMPLATE = `<!doctype html>
 
 const EXPECTED_CSP =
   "default-src 'self';script-src 'self' https://www.youtube.com https://s.ytimg.com;" +
-  "frame-src https://www.youtube-nocookie.com https://www.youtube.com;img-src 'self' data: https:;" +
+  "frame-src https://www.youtube-nocookie.com https://www.youtube.com;img-src 'self' data:;" +
   "style-src 'self' 'unsafe-inline';font-src 'self';connect-src 'self';object-src 'none';base-uri 'self';" +
-  "frame-ancestors 'none';form-action 'self'";
+  "frame-ancestors 'none';form-action 'self';worker-src 'self';manifest-src 'self'";
 
 /** Decodes the few entities escapeHtml() produces. */
 const unescapeHtml = (s) =>
@@ -75,7 +76,7 @@ describe("server-rendered SEO meta", () => {
       synopsis: `${EVIL} <img src=x onerror=alert(2)>`,
       aliases: [],
       genres: [EVIL_GENRE],
-      coverUrl: EVIL_COVER,
+      coverSourceUrl: EVIL_COVER,
     });
     v = {
       op1: await addVideo(srv, 1, "One Piece Episode 1"),
@@ -155,7 +156,8 @@ describe("server-rendered SEO meta", () => {
     assert.equal(h.og.type, "video.tv_show");
     assert.equal(h.canonical, "http://app.test/anime/one-piece");
     assert.equal(h.og.url, "http://app.test/anime/one-piece");
-    assert.match(h.og.image, /^https:\/\/beta\.crunchyroll\.com\//);
+    // The seeded crunchyroll cover, through the same-origin proxy (v1.5), absolute.
+    assert.match(h.og.image, /^http:\/\/app\.test\/api\/covers\/\d+\.img\?v=[0-9a-f]{8}$/);
     assert.equal(h.twitterCard, "summary_large_image");
     assert.ok(h.description.length <= 160);
     assert.match(h.description, /^Monkey D\. Luffy/);
@@ -185,7 +187,7 @@ describe("server-rendered SEO meta", () => {
     assert.equal(h.canonical, "http://app.test/anime/one-piece/episode/2");
     assert.match(h.description, /^Assista ao episódio 2 de One Piece/);
     assert.ok(h.description.length <= 160);
-    assert.match(h.og.image, /crunchyroll/, "series cover first");
+    assert.match(h.og.image, /^http:\/\/app\.test\/api\/covers\//, "series cover first");
     assert.equal(h.robots, null);
     assert.equal(h.jsonLd.length, 1);
     const ld = h.jsonLd[0];
@@ -193,7 +195,8 @@ describe("server-rendered SEO meta", () => {
     assert.equal(ld["@type"], "VideoObject");
     assert.equal(ld.name, "One Piece — Episódio 2");
     assert.equal(ld.description, h.description);
-    assert.equal(ld.thumbnailUrl, v.op2.thumbnailUrl);
+    assert.equal(v.op2.thumbnailUrl, `/api/thumbs/${v.op2.youtubeVideoId}.jpg`);
+    assert.equal(ld.thumbnailUrl, `http://app.test/api/thumbs/${v.op2.youtubeVideoId}.jpg`, "absolute (APP_URL), same-origin");
     assert.equal(ld.uploadDate, v.op2.publishedAt);
     assert.equal(ld.embedUrl, `https://www.youtube-nocookie.com/embed/${v.op2.youtubeVideoId}`);
     assert.deepEqual(ld.isPartOf, { "@type": "TVSeries", name: "One Piece", image: h.og.image, url: "http://app.test/anime/one-piece" });
@@ -210,7 +213,8 @@ describe("server-rendered SEO meta", () => {
     srv.db.prepare("UPDATE series SET cover_url = NULL WHERE slug = 'one-piece'").run();
     try {
       const noCover = head((await get("/anime/one-piece/episode/2")).text);
-      assert.equal(noCover.og.image, v.op2.thumbnailUrl);
+      assert.equal(noCover.og.image, `http://app.test/api/thumbs/${v.op2.youtubeVideoId}.jpg`, "absolute (APP_URL)");
+      assert.equal(noCover.jsonLd[0].thumbnailUrl, noCover.og.image);
       assert.equal(noCover.twitterCard, "summary_large_image");
       const series = head((await get("/anime/one-piece")).text);
       assert.equal(series.og.image, null);
@@ -242,7 +246,9 @@ describe("server-rendered SEO meta", () => {
 
     const series = head((await get("/anime/evil")).text);
     assert.equal(series.title, `${EVIL} — Anime · Crwn Animes`, "round-trips once unescaped");
-    assert.equal(series.og.image, EVIL_COVER);
+    const evil = srv.services.repo.getSeries("evil");
+    assert.equal(series.og.image, `http://app.test/api/covers/${evil.id}.img?v=${coverHash(EVIL_COVER)}`, "the proxy, never the raw URL");
+    assert.equal(series.jsonLd[0].image, series.og.image);
     assert.equal(series.jsonLd[0].name, EVIL, "JSON-LD parses back to the original");
     assert.deepEqual(series.jsonLd[0].genre, [EVIL_GENRE]);
 
@@ -509,6 +515,12 @@ describe("sitemap.xml and robots.txt", () => {
     const lines = res.text.split("\n");
     assert.ok(lines.includes("User-agent: *"));
     for (const p of ["/admin", "/account", "/api/"]) assert.ok(lines.includes(`Disallow: ${p}`), p);
+    // v1.5: og:image / JSON-LD images live under /api: crawlers may read them, listed BEFORE the /api/ Disallow.
+    const disallowApi = lines.indexOf("Disallow: /api/");
+    for (const p of ["/api/thumbs/", "/api/covers/"]) {
+      assert.ok(lines.includes(`Allow: ${p}`), p);
+      assert.ok(lines.indexOf(`Allow: ${p}`) < disallowApi, `${p} before Disallow: /api/`);
+    }
     assert.ok(lines.includes("Sitemap: https://crwn.example/a&b/sitemap.xml"));
   });
 });

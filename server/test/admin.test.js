@@ -281,7 +281,7 @@ describe("admin bulk add, health check and URL swap", () => {
     const swapped = await admin.patch(`/api/admin/videos/${video.id}`, { url: `https://www.youtube.com/watch?v=${vid(43)}` });
     assert.equal(swapped.status, 200);
     assert.equal(swapped.body.video.youtubeVideoId, vid(43));
-    assert.equal(swapped.body.video.thumbnailUrl, `https://i.ytimg.com/vi/${vid(43)}/hqdefault.jpg`);
+    assert.equal(swapped.body.video.thumbnailUrl, `/api/thumbs/${vid(43)}.jpg`);
     assert.equal(swapped.body.video.route, video.route);
     assert.equal(swapped.body.video.availability, "ok");
     assert.deepEqual(swapped.body.video.rating, { average: 5, count: 1 });

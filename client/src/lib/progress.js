@@ -96,7 +96,8 @@ export function continueWatching(limit = 12) {
     .filter(([, e]) => e.route && resumePosition(e) > 0)
     .sort(([, a], [, b]) => b.at - a.at)
     .slice(0, limit)
-    .map(([youtubeVideoId, e]) => ({ youtubeVideoId, ...e }));
+    // History saved before v1.5 holds i.ytimg.com URLs: shown through our own server instead.
+    .map(([youtubeVideoId, e]) => ({ youtubeVideoId, ...e, thumb: normalizeThumb(e.thumb) }));
 }
 
 // ------------------------------------------------- export / import (portability)
@@ -108,14 +109,30 @@ export const MAX_IMPORT_BYTES = 1024 * 1024;
 const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 // Only our own front-end routes (see docs/API.md) — never an arbitrary URL.
 const ROUTE = /^\/(anime|manga)\/([a-z0-9-]+)\/(?:episode\/\d+|season\/(\d+)\/episode\/\d+|chapter\/\d+)$/;
-// Thumbnails must stay first-party YouTube images: an imported file must not make
-// the browser fetch from arbitrary hosts.
-const THUMB = /^https:\/\/i\.ytimg\.com\/[^\s"'<>]{1,300}$/;
+// Thumbnails are served by our own server (v1.5): /api/thumbs/<id>.jpg. Legacy entries saved
+// with a YouTube image URL (i.ytimg.com/vi/<id>/…) are converted to that path, so neither an
+// imported file nor old local history ever makes the browser contact another host.
+const THUMB = /^\/api\/thumbs\/[A-Za-z0-9_-]{11}\.jpg$/;
+const LEGACY_THUMB = /^https:\/\/i\.ytimg\.com\/vi(?:_webp)?\/([A-Za-z0-9_-]{11})\/[\w.-]{1,64}(?:\?[^\s"'<>#]{0,200})?$/;
 const MAX_TITLE = 300;
 /** Longest believable position/duration (≈ 11.5 days of video). */
 export const MAX_SECONDS = 1e6;
 /** Imported `at` may be at most this far in the future (clock skew between devices). */
 export const MAX_FUTURE_MS = 24 * 60 * 60 * 1000;
+
+/** Same-origin thumbnail of a YouTube video (docs/API.md v1.5). */
+export const thumbPath = (youtubeVideoId) => `/api/thumbs/${youtubeVideoId}.jpg`;
+
+/**
+ * A stored or imported `thumb`, made safe to load: our own /api/thumbs/<id>.jpg is kept, a
+ * legacy i.ytimg.com URL becomes that path, anything else is null (the card shows its placeholder).
+ */
+export function normalizeThumb(thumb) {
+  if (typeof thumb !== "string") return null;
+  if (THUMB.test(thumb)) return thumb;
+  const legacy = LEGACY_THUMB.exec(thumb);
+  return legacy ? thumbPath(legacy[1]) : null;
+}
 
 /** `{ version: 1, exportedAt, entries }` — what "Export watch history" downloads. */
 export function exportProgress(now = new Date()) {
@@ -145,7 +162,7 @@ export function sanitizeEntry(raw, now = Date.now()) {
     at: Math.round(at),
     route,
     title: title === null ? null : title.slice(0, MAX_TITLE),
-    thumb: thumb !== null && THUMB.test(thumb) ? thumb : null,
+    thumb: normalizeThumb(thumb),
   };
 }
 

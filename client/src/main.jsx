@@ -8,6 +8,8 @@ import { AuthProvider } from "./auth/AuthProvider.jsx";
 import { I18nProvider } from "./i18n/I18nProvider.jsx";
 import { createRouter } from "./router.jsx";
 import { getTheme } from "./lib/prefs.js";
+import { registerServiceWorker } from "./pwa/serviceWorker.js";
+import { UpdateToast } from "./pwa/UpdateToast.jsx";
 
 // Fallback in case /theme-init.js did not run (blocked or failed).
 const savedTheme = getTheme();
@@ -20,7 +22,11 @@ createRoot(document.getElementById("root")).render(
     <I18nProvider>
       <AuthProvider>
         <RouterProvider router={router} />
+        <UpdateToast />
       </AuthProvider>
     </I18nProvider>
   </StrictMode>,
 );
+
+// Offline shell + catalog cache (docs/API.md v1.5): production builds only, after load.
+registerServiceWorker();

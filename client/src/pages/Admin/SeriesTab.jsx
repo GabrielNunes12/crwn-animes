@@ -8,17 +8,21 @@ import { useT } from "../../i18n/useT.js";
 import { ErrorText } from "./shared.jsx";
 import { ListEmpty, ListHeading, ListSearch, Pager } from "./ListControls.jsx";
 import { useAdminList } from "./useAdminList.js";
+import { LazyImage } from "../../components/LazyImage/LazyImage.jsx";
 import styles from "./Admin.module.css";
 
+// `coverUrl` here is the SOURCE address the admin types (admin responses: `coverSourceUrl`); it is
+// sent back as `coverUrl` on create/patch. The browser never loads it: covers are only shown
+// through our own server (`series.coverUrl` = /api/covers/<id>.img?v=…), so the preview of a
+// new or changed address appears after saving (docs/API.md v1.5).
 const EMPTY = { name: "", slug: "", synopsis: "", genres: [], aliases: [], coverUrl: "" };
 
-function isHttpUrl(v) {
-  try {
-    const u = new URL(v);
-    return u.protocol === "https:" || u.protocol === "http:";
-  } catch {
-    return false;
-  }
+/** What the cover box shows: the saved, proxied cover, a "after saving" hint, or nothing. */
+function coverPreviewOf(form, editing) {
+  const typed = form.coverUrl.trim();
+  if (!typed) return { kind: "none" };
+  if (editing && editing.coverUrl && typed === (editing.coverSourceUrl ?? "").trim()) return { kind: "saved", src: editing.coverUrl };
+  return { kind: "afterSave" };
 }
 
 export function SeriesTab({ genres, reloadSeries, reloadKey }) {
@@ -27,16 +31,17 @@ export function SeriesTab({ genres, reloadSeries, reloadKey }) {
   const list = useAdminList(adminApi.series, { reloadKey, focusRef: headingRef });
   const [editing, setEditing] = useState(null); // series being edited, or null for "new"
   const [form, setForm] = useState(EMPTY);
-  const [state, setState] = useState({ busy: false, error: null, message: "" });
+  const [state, setState] = useState({ busy: false, error: null, message: "", saved: null });
   const [toDelete, setToDelete] = useState(null);
   const [deleteState, setDeleteState] = useState({ busy: false, error: null });
 
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
+  const cover = coverPreviewOf(form, editing);
 
   function startEdit(s) {
     setEditing(s);
-    setForm({ name: s.name, slug: s.slug, synopsis: s.synopsis ?? "", genres: s.genres ?? [], aliases: s.aliases ?? [], coverUrl: s.coverUrl ?? "" });
-    setState({ busy: false, error: null, message: "" });
+    setForm({ name: s.name, slug: s.slug, synopsis: s.synopsis ?? "", genres: s.genres ?? [], aliases: s.aliases ?? [], coverUrl: s.coverSourceUrl ?? "" });
+    setState({ busy: false, error: null, message: "", saved: null });
     document.getElementById("series-form")?.scrollIntoView({ block: "start" });
   }
 
@@ -48,7 +53,7 @@ export function SeriesTab({ genres, reloadSeries, reloadKey }) {
   async function onSubmit(e) {
     e.preventDefault();
     if (!form.name.trim()) {
-      setState({ busy: false, error: { message: t("admin.series.nameRequired") }, message: "" });
+      setState({ busy: false, error: { message: t("admin.series.nameRequired") }, message: "", saved: null });
       return;
     }
     const body = {
@@ -59,18 +64,19 @@ export function SeriesTab({ genres, reloadSeries, reloadKey }) {
       coverUrl: form.coverUrl.trim() || null,
     };
     if (form.slug.trim()) body.slug = form.slug.trim();
-    setState({ busy: true, error: null, message: "" });
+    setState({ busy: true, error: null, message: "", saved: null });
     try {
       const res = editing ? await adminApi.updateSeries(editing.id, body) : await adminApi.createSeries(body);
       const published = res.published ?? [];
       const message =
         (editing ? t("admin.series.updated", { name: res.series.name }) : t("admin.series.created", { name: res.series.name })) +
         (published.length ? ` ${t("admin.series.published", { count: published.length })}` : "");
-      setState({ busy: false, error: null, message });
+      // The proxied cover can only be previewed now that the server knows the new address.
+      setState({ busy: false, error: null, message, saved: res.series.coverUrl ? { name: res.series.name, coverUrl: res.series.coverUrl } : null });
       reset();
       reloadSeries();
     } catch (err) {
-      setState({ busy: false, error: err, message: "" });
+      setState({ busy: false, error: err, message: "", saved: null });
     }
   }
 
@@ -82,7 +88,7 @@ export function SeriesTab({ genres, reloadSeries, reloadKey }) {
       list.removeItem(toDelete.id);
       setToDelete(null);
       setDeleteState({ busy: false, error: null });
-      setState({ busy: false, error: null, message: t("admin.series.deleted", { name: toDelete.name }) });
+      setState({ busy: false, error: null, message: t("admin.series.deleted", { name: toDelete.name }), saved: null });
       reloadSeries();
     } catch (err) {
       setDeleteState({ busy: false, error: err });
@@ -101,14 +107,23 @@ export function SeriesTab({ genres, reloadSeries, reloadKey }) {
         </div>
         <ChipsInput label={t("common.genres")} value={form.genres} onChange={set("genres")} suggestions={genres} />
         <ChipsInput label={t("admin.series.aliases")} value={form.aliases} onChange={set("aliases")} />
-        <TextField label={t("admin.series.cover")} type="url" value={form.coverUrl} onChange={set("coverUrl")} placeholder="https://…" />
-        <div className={styles.coverPreview} aria-live="polite">
-          {isHttpUrl(form.coverUrl) ? <img src={form.coverUrl} alt={t("admin.series.coverPreview")} width="120" height="180" /> : <span className="hint">{t("admin.series.coverNone")}</span>}
+        <TextField label={t("admin.series.cover")} type="url" value={form.coverUrl} onChange={set("coverUrl")} placeholder="https://…" hint={t("admin.series.coverHint")} />
+        <div className={styles.coverPreview} data-kind={cover.kind} aria-live="polite">
+          {cover.kind === "saved" ? (
+            <LazyImage src={cover.src} alt={t("admin.series.coverPreview")} ratio="2 / 3" width={120} height={180} fallbackLabel={editing.name} />
+          ) : (
+            <span className="hint">{t(cover.kind === "afterSave" ? "admin.series.coverAfterSave" : "admin.series.coverNone")}</span>
+          )}
         </div>
         <ErrorText error={state.error} />
         <p role="status" aria-live="polite" className={state.message ? "alert alert-success" : "visually-hidden"}>
           {state.message}
         </p>
+        {state.saved && (
+          <div className={styles.coverPreview} data-kind="saved">
+            <LazyImage src={state.saved.coverUrl} alt={t("admin.series.coverSaved", { name: state.saved.name })} ratio="2 / 3" width={120} height={180} fallbackLabel={state.saved.name} />
+          </div>
+        )}
         <div className="cluster">
           <button type="submit" className="btn btn-primary" disabled={state.busy}>
             {state.busy ? t("common.saving") : editing ? t("common.save") : t("admin.series.create")}

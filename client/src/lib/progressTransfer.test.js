@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   buildSeriesIndex,
+  continueWatching,
   EXPORT_FILENAME,
   exportProgress,
   getAllProgress,
   importProgress,
   MAX_ENTRIES,
   MAX_IMPORT_BYTES,
+  normalizeThumb,
   parseRoute,
   PROGRESS_KEY,
   pruneSeriesProgress,
@@ -16,7 +18,7 @@ import {
 } from "./progress.js";
 
 const id = (n) => `vid${String(n).padStart(8, "0")}`; // 11 chars, like a YouTube ID
-const entry = (over = {}) => ({ t: 30, d: 100, at: 1000, route: "/anime/naruto/episode/1", title: "Naruto — Ep 1", thumb: "https://i.ytimg.com/vi/x/hqdefault.jpg", ...over });
+const entry = (over = {}) => ({ t: 30, d: 100, at: 1000, route: "/anime/naruto/episode/1", title: "Naruto — Ep 1", thumb: "/api/thumbs/dQw4w9WgXcQ.jpg", ...over });
 const file = (entries, extra = {}) => JSON.stringify({ version: 1, exportedAt: "2026-11-01T00:00:00.000Z", entries, ...extra });
 
 describe("progress export", () => {
@@ -92,6 +94,41 @@ describe("progress import", () => {
     expect(all[id(1)]).toEqual(entry());
     // A third-party thumbnail would make the browser call that host: dropped, entry kept.
     expect(all[id(6)].thumb).toBeNull();
+  });
+
+  it("keeps same-origin thumbnails and converts legacy i.ytimg.com ones to /api/thumbs/<id>.jpg (v1.5)", () => {
+    const res = importProgress(
+      file({
+        [id(1)]: entry({ thumb: "/api/thumbs/abc_DEF-123.jpg" }),
+        [id(2)]: entry({ thumb: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg" }),
+        [id(3)]: entry({ thumb: "https://i.ytimg.com/vi_webp/dQw4w9WgXcQ/maxresdefault.webp?v=2" }),
+        [id(4)]: entry({ thumb: "/api/thumbs/../me/export" }),
+        [id(5)]: entry({ thumb: "//evil.example/api/thumbs/dQw4w9WgXcQ.jpg" }),
+        [id(6)]: entry({ thumb: "https://i.ytimg.com.evil.example/vi/dQw4w9WgXcQ/hqdefault.jpg" }),
+        [id(7)]: entry({ thumb: "https://i.ytimg.com/vi/short/hqdefault.jpg" }),
+        [id(8)]: entry({ thumb: "/api/thumbs/dQw4w9WgXcQ.jpg?x=1" }),
+      }),
+    );
+    expect(res).toEqual({ ok: true, imported: 8, skipped: 0 });
+    const thumbs = Object.fromEntries(Object.entries(getAllProgress()).map(([k, e]) => [k, e.thumb]));
+    expect(thumbs).toEqual({
+      [id(1)]: "/api/thumbs/abc_DEF-123.jpg",
+      [id(2)]: "/api/thumbs/dQw4w9WgXcQ.jpg",
+      [id(3)]: "/api/thumbs/dQw4w9WgXcQ.jpg",
+      [id(4)]: null,
+      [id(5)]: null,
+      [id(6)]: null,
+      [id(7)]: null,
+      [id(8)]: null,
+    });
+  });
+
+  it("history saved before v1.5 never loads from i.ytimg.com: “Continue watching” shows our own thumbnail", () => {
+    saveProgress(id(1), { position: 30, duration: 100, route: "/anime/a/episode/1", thumb: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg", now: 2 });
+    saveProgress(id(2), { position: 30, duration: 100, route: "/anime/a/episode/2", thumb: "https://tracker.example/x.gif", now: 1 });
+    expect(continueWatching().map((e) => e.thumb)).toEqual(["/api/thumbs/dQw4w9WgXcQ.jpg", null]);
+    expect(normalizeThumb(undefined)).toBeNull();
+    expect(normalizeThumb(42)).toBeNull();
   });
 
   it("rejects files that aren't a watch history, without throwing or touching storage", () => {

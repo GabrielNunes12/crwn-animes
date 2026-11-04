@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Component as Account } from "./Account.jsx";
 import { renderApp } from "../../test/utils.jsx";
@@ -72,5 +72,32 @@ describe("Account — your progress on this device (logged out)", () => {
     expect(data).toMatchObject({ version: 1, entries: { [id(1)]: { t: 10, d: 100, at: 5000 } } });
     expect(new Date(data.exportedAt).toISOString()).toBe(data.exportedAt);
     expect(screen.getByRole("status")).toHaveTextContent("Exported 1 video.");
+  });
+});
+
+describe("Account — “Clear watch history” (v1.5)", () => {
+  it("also deletes the offline copy of catalog pages and images, keeping the app shell", async () => {
+    const left = new Set(["crwn-shell-b1", "crwn-api-b1", "crwn-thumbs-b1"]);
+    vi.stubGlobal("caches", { keys: async () => [...left], delete: async (name) => left.delete(name) });
+    saveProgress(id(1), { position: 10, duration: 100, now: 5000 });
+    renderApp(<Account />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Clear watch history" }));
+    const dialog = screen.getByRole("dialog", { name: "Clear watch history" });
+    expect(dialog).toHaveTextContent("plus the offline copy of the catalog pages and images you opened");
+    await user.click(within(dialog).getByRole("button", { name: "Clear", exact: true }));
+    await waitFor(() => expect([...left]).toEqual(["crwn-shell-b1"]));
+    expect(getAllProgress()).toEqual({});
+  });
+
+  it("still clears the history where Cache Storage does not exist", async () => {
+    vi.stubGlobal("caches", undefined);
+    saveProgress(id(1), { position: 10, duration: 100, now: 5000 });
+    renderApp(<Account />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Clear watch history" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Clear watch history" })).getByRole("button", { name: "Clear", exact: true }));
+    expect(getAllProgress()).toEqual({});
+    expect(screen.getByRole("status")).toHaveTextContent("Watch history cleared.");
   });
 });

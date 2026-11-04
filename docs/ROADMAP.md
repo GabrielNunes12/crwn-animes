@@ -20,8 +20,9 @@ Ground rules that never change:
 - [x] Unified accent-insensitive search across anime + manga (reuse `normalize()`), ⌘K command palette, genre pages with sort (top/new/A–Z)
 - [x] Pagination for `/latest` and admin lists; virtualised long episode lists; `?season=` filter
 - [x] Admin series board: drag to reorder/renumber episodes, season tabs, draft preview, 7-day trash with restore instead of hard deletes
-- [ ] PWA: manifest, service worker caching the app shell and catalog, offline page; proxy thumbnails same-origin
+- [x] PWA: manifest, service worker caching the app shell and catalog, offline page; proxy thumbnails same-origin
 - [x] Watch progress portability: export/import localStorage history as a file, "watched N/M" per series, binge mode
+- [ ] Never reuse ids of permanently deleted series/videos (SQLite AUTOINCREMENT via table rebuild), so cached `/api/videos/<id>` copies can't briefly show a deleted video under a new one
 - [ ] Playlist / channel import (YouTube Data API key kept server-side) feeding the bulk-paste preview
 - [ ] Passkeys (WebAuthn) as an optional login — stores only a public key
 - [ ] Performance budget: Lighthouse CI ≥ 90 on home/series/episode, image `srcset`, route prefetch on hover

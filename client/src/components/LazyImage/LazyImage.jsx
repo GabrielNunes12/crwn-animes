@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { sameOriginImage } from "../../lib/images.js";
 import styles from "./LazyImage.module.css";
 
 function initials(label = "") {
@@ -9,9 +10,13 @@ function initials(label = "") {
 
 /**
  * Lazy, async-decoded image that fades in from a blurred shimmer placeholder.
- * Always reserves space via aspect-ratio (+ width/height attributes).
+ * Always reserves space via aspect-ratio (+ width/height attributes), or fills its positioned
+ * parent with `fill`. A missing (null) source, one on another origin, or a load error shows the
+ * gradient placeholder with the initials of `fallbackLabel`: the one fallback for every
+ * thumbnail and cover in the app.
  */
-export function LazyImage({ src, alt = "", ratio = "16 / 9", width = 480, height = 270, className = "", fallbackLabel = "", eager = false, ...rest }) {
+export function LazyImage({ src: rawSrc, alt = "", ratio = "16 / 9", width = 480, height = 270, className = "", fallbackLabel = "", eager = false, fill = false, ...rest }) {
+  const src = sameOriginImage(rawSrc);
   const [state, setState] = useState("loading");
   const [prevSrc, setPrevSrc] = useState(src);
   if (src !== prevSrc) {
@@ -21,7 +26,12 @@ export function LazyImage({ src, alt = "", ratio = "16 / 9", width = 480, height
   const failed = !src || state === "error";
 
   return (
-    <span className={`${styles.frame} ${className}`.trim()} style={{ aspectRatio: ratio }} data-state={failed ? "error" : state}>
+    <span
+      className={`${styles.frame} ${className}`.trim()}
+      style={fill ? undefined : { aspectRatio: ratio }}
+      data-state={failed ? "error" : state}
+      data-fill={fill || undefined}
+    >
       {failed ? (
         <span className={styles.fallback} aria-hidden="true">
           {initials(fallbackLabel)}

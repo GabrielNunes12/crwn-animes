@@ -170,7 +170,7 @@ describe("1. ReDoS / CPU exhaustion", () => {
       "validator.email": (s) => validator({ v: s }).email("v"),
       "validator.displayName": (s) => validator({ v: s }).displayName("v"),
       "validator.slug": (s) => validator({ v: s }).slug("v"),
-      "validator.httpUrl": (s) => validator({ v: `https://example.com/${s}` }).httpUrl("v"),
+      "validator.coverSourceUrl": (s) => validator({ v: `https://example.com/${s}` }).coverSourceUrl("v"),
       "validator.stringList": (s) => validator({ v: [s, s] }).stringList("v"),
     };
     const slow = [];
