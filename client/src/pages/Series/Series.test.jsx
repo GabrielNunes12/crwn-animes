@@ -192,3 +192,28 @@ describe("Series page — seasons, watched N of M and Continue", () => {
     expect(getAllProgress().ghost000099).toBeDefined();
   });
 });
+
+describe("Series page — images (docs/API.md v1.7)", () => {
+  it("episode thumbnails use the API's srcset with the row's sizes; the cover is the one high-priority image", async () => {
+    const thumbs = VIDEOS.map((x) => ({
+      ...x,
+      thumbnailUrl: `/api/thumbs/${x.youtubeVideoId}.jpg`,
+      thumbnailSrcSet: `/api/thumbs/${x.youtubeVideoId}-m.jpg 320w, /api/thumbs/${x.youtubeVideoId}.jpg 480w`,
+    }));
+    mockFetch((url) =>
+      url.startsWith("/api/anime/series/op") ? [200, { series: { ...SERIES, coverUrl: "/api/covers/1.img?v=1" }, videos: thumbs, seasons: [1, 2] }] : [404, {}],
+    );
+    renderApp(null, { routes, path: "/anime/op" });
+    const cover = await screen.findByRole("img", { name: /OP/ });
+    expect(cover).toHaveAttribute("fetchpriority", "high");
+    expect(cover).toHaveAttribute("loading", "eager");
+    const rows = [...document.querySelectorAll("ol img")];
+    expect(rows.map((img) => img.getAttribute("srcset"))).toEqual(thumbs.filter((x) => x.season === 1).map((x) => x.thumbnailSrcSet));
+    for (const img of rows) {
+      expect(img).toHaveAttribute("sizes", "7.5rem");
+      expect(img).toHaveAttribute("loading", "lazy");
+      expect(img).not.toHaveAttribute("fetchpriority");
+    }
+    expect(document.querySelectorAll('img[fetchpriority="high"]')).toHaveLength(1);
+  });
+});

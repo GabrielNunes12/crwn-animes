@@ -38,6 +38,14 @@
     filter: none;
     scale: 1;
   }
+  /* The page's hero/poster image (eager, high priority) is its largest paint: shown as soon as
+     it has decoded, without the blur-in (an opacity-0 start delays LCP, docs/API.md v1.7). */
+  .frame[data-eager] img {
+    opacity: 1;
+    filter: none;
+    scale: 1;
+    transition: none;
+  }
   .fallback {
     position: absolute;
     inset: 0;

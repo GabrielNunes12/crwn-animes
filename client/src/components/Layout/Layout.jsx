@@ -42,6 +42,11 @@ export function Layout() {
   });
 
   const notice = location.state?.notice;
+  // The entrance plays on in-app navigations only: the page the visitor landed on is shown at
+  // once (fading it in from opacity 0 would hold back its first paint / LCP, docs/API.md v1.7).
+  const [landingPath] = useState(location.pathname);
+  const [navigated, setNavigated] = useState(false);
+  if (!navigated && location.pathname !== landingPath) setNavigated(true);
 
   return (
     <div className={styles.shell}>
@@ -61,7 +66,7 @@ export function Layout() {
         {/* Keyed by path so each page plays a short CSS entrance. We deliberately do not use
             React <ViewTransition>: an active view transition swallows clicks and a commit
             prepared before the user typed overwrites inputs filled right after page load. */}
-        <div key={location.pathname} className="route-enter">
+        <div key={location.pathname} className={navigated ? "route-enter" : undefined}>
           <Outlet />
         </div>
       </main>

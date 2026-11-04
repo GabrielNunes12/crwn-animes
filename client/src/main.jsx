@@ -18,21 +18,26 @@ import { UpdateToast } from "./pwa/UpdateToast.jsx";
 const savedTheme = getTheme();
 if (savedTheme) document.documentElement.dataset.theme = savedTheme;
 
-// Creating the router starts the first page's module download and its data requests; the
-// visitor's dictionary (its own chunk) downloads at the same time, and the app renders once
-// it has arrived. If it cannot be fetched (offline, not cached yet), pt-BR is tried instead.
-const router = createRouter();
+// Start-up order (docs/API.md v1.7): the visitor's dictionary (its own chunk) is requested
+// first, then creating the router starts the first page's module download and its data
+// requests. Vite issues a dynamic import() one microtask after the call, so the router is
+// created one microtask later — on HTTP/1.1 the dictionary is not queued behind the page's
+// ~10 requests. The app renders once the dictionary has arrived; if it cannot be fetched
+// (offline, not cached yet), pt-BR is tried instead.
 const locale = initialLocale();
-loadMessages(locale)
+const ready = loadMessages(locale)
   .then(
     () => locale,
     () => loadMessages(DEFAULT_LOCALE).then(() => DEFAULT_LOCALE),
   )
-  .catch(() => locale)
-  .then((ready) => {
+  .catch(() => locale);
+
+queueMicrotask(() => {
+  const router = createRouter();
+  ready.then((startLocale) => {
     createRoot(document.getElementById("root")).render(
       <StrictMode>
-        <I18nProvider locale={ready}>
+        <I18nProvider locale={startLocale}>
           <AuthProvider>
             <RouterProvider router={router} />
             <RoutePrefetch routes={routes} />
@@ -42,6 +47,7 @@ loadMessages(locale)
       </StrictMode>,
     );
   });
+});
 
 // Offline shell + catalog cache (docs/API.md v1.5): production builds only, after load.
 registerServiceWorker();

@@ -36,6 +36,7 @@ export function LazyImage({ src: rawSrc, srcSet: rawSrcSet, sizes, alt = "", rat
       style={fill ? undefined : { aspectRatio: ratio }}
       data-state={failed ? "error" : state}
       data-fill={fill || undefined}
+      data-eager={eager || undefined}
     >
       {failed ? (
         <span className={styles.fallback} aria-hidden="true">
