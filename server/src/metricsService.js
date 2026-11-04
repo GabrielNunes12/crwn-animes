@@ -13,6 +13,8 @@ export const METRICS_DAYS = { min: 7, max: 90, fallback: 30 };
 const TOP_SERIES = 10;
 const TOP_SERIES_MIN_RATINGS = 3; // as /api/search?sort=top and /api/top-rated
 const TOP_REASONS = 10;
+/** A day's average is shown from this many ratings on (fewer could reveal one person's score). */
+export const DAILY_AVERAGE_MIN_RATINGS = 3;
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
 
@@ -127,7 +129,10 @@ export function createMetricsService({ db, repo, images = null, now = () => new 
     return { count: row.count, oldestAt: row.oldest ? toIso(row.oldest) : null, medianAgeHours, byReason };
   }
 
-  /** Site-wide totals (ratings of live videos) and the last `days` UTC days, oldest first, 0 when quiet. */
+  /**
+   * Site-wide totals (ratings of live videos) and the last `days` UTC days, oldest first, 0 when quiet;
+   * a day's average is null below DAILY_AVERAGE_MIN_RATINGS ratings (its count stays).
+   */
   function ratings(at, days) {
     const totals = q.totals.get() ?? { n: 0, total: 0 };
     const today = utcDay(at);
@@ -138,7 +143,8 @@ export function createMetricsService({ db, repo, images = null, now = () => new 
       const day = utcDay(at - i * DAY_MS);
       const row = byDay.get(day);
       const count = row && row.count > 0 ? row.count : 0;
-      daily.push({ day, count, average: ratingAverage(count ? row.score_sum / count : null, count).average });
+      const average = count >= DAILY_AVERAGE_MIN_RATINGS ? ratingAverage(row.score_sum / count, count).average : null;
+      daily.push({ day, count, average });
     }
     return {
       total: totals.n,

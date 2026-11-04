@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { openDatabase } from "../src/db.js";
-import { METRICS_DAYS, PENDING_REASONS, createMetricsService } from "../src/metricsService.js";
+import { DAILY_AVERAGE_MIN_RATINGS, METRICS_DAYS, PENDING_REASONS, createMetricsService } from "../src/metricsService.js";
 import { createRatingService } from "../src/ratingService.js";
 import { createRepository } from "../src/repository.js";
 import { purgeExpired, purgeTrash } from "../src/retention.js";
@@ -235,9 +235,41 @@ describe("GET /api/admin/metrics", () => {
         assert.deepEqual(Object.keys(daily[0]), ["day", "count", "average"]);
         const row = want.perDay.get(day);
         assert.equal(count, row?.n ?? 0, day);
-        assert.equal(average, row ? round1(row.sum / row.n) : null, day);
+        assert.equal(average, row && row.n >= 3 ? round1(row.sum / row.n) : null, day);
       }
       assert.equal(daily.filter((d) => d.count > 0).length, Math.min(6, days), "six raters, one day each");
+    }
+  });
+
+  test("a day's average is null below 3 ratings (one person's score never shows); its count stays", async () => {
+    assert.equal(DAILY_AVERAGE_MIN_RATINGS, 3);
+    const small = await startServer();
+    try {
+      const { repo } = small.services;
+      const { client } = quickUser(small, "admin@example.com", "admin");
+      let clock = Date.now();
+      const ratings = createRatingService({ db: small.db, now: () => new Date(clock) });
+      repo.createSeries({ slug: "few", name: "Few" });
+      const video = await addVideo(small, 1, "x", { section: "anime", seriesSlug: "few", number: 1 });
+      const users = Array.from({ length: 6 }, (_, i) => quickUser(small, `few${i}@example.com`).id);
+      // 3 days ago: one rating (5); 2 days ago: two (4, 2); 1 day ago: three (5, 4, 4).
+      const plan = [[3, [5]], [2, [4, 2]], [1, [5, 4, 4]]];
+      let u = 0;
+      for (const [daysAgo, scores] of plan) {
+        clock = Date.now() - daysAgo * DAY;
+        for (const score of scores) ratings.set(users[u++], video.id, { score, reaction: null });
+      }
+      const { body } = await client.get(metricsUrl(7));
+      const byDay = Object.fromEntries(body.ratings.daily.map((d) => [d.day, d]));
+      const dayOf = (daysAgo) => byDay[new Date(Date.now() - daysAgo * DAY).toISOString().slice(0, 10)];
+      assert.deepEqual(dayOf(3), { day: dayOf(3).day, count: 1, average: null });
+      assert.deepEqual(dayOf(2), { day: dayOf(2).day, count: 2, average: null });
+      assert.deepEqual(dayOf(1), { day: dayOf(1).day, count: 3, average: 4.3 });
+      assert.deepEqual(dayOf(0), { day: dayOf(0).day, count: 0, average: null });
+      assert.equal(body.ratings.total, 6, "the totals are unchanged");
+      assert.equal(body.ratings.average, 4);
+    } finally {
+      await small.close();
     }
   });
 
@@ -415,7 +447,7 @@ describe("rating_days (migration 15) is rating_activity summed per day, whoever 
       ratings.set(users[1], v2.id, { score: 3 });
       assertFresh(db, "re-rated today");
       const today = metrics.get({ days: 7 }).ratings.daily.at(-1);
-      assert.deepEqual(today, { day: new Date().toISOString().slice(0, 10), count: 2, average: 4 });
+      assert.deepEqual(today, { day: new Date().toISOString().slice(0, 10), count: 2, average: null }, "two ratings: no average");
       ratings.remove(users[1], v2.id);
       assertFresh(db, "removed");
       ratings.removeAllForUser(users[2]);
@@ -429,7 +461,7 @@ describe("rating_days (migration 15) is rating_activity summed per day, whoever 
       assert.equal(purgeExpired(db).ratingActivity, 1);
       assert.equal(db.prepare("SELECT COUNT(*) FROM rating_days WHERE day < ?").pluck().get(before90), 0, "retention");
       const quarter = metrics.get({ days: 90 }).ratings.daily;
-      assert.deepEqual(quarter.find((d) => d.day === new Date(clock).toISOString().slice(0, 10)), { day: new Date(clock).toISOString().slice(0, 10), count: 1, average: 1 });
+      assert.deepEqual(quarter.find((d) => d.day === new Date(clock).toISOString().slice(0, 10)), { day: new Date(clock).toISOString().slice(0, 10), count: 1, average: null });
       ratings.remove(users[1], v2.id);
       assertDays(db, "activity older than 30 days purged");
       trash.trashVideo(v1.id);

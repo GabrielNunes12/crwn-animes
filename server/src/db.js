@@ -710,9 +710,10 @@ function addLiveRating(ref, sign) {
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
 
+/** Runs the migrations up to `target`; true when at least one ran. */
 function migrate(db, target = MIGRATIONS.length) {
   const current = db.pragma("user_version", { simple: true });
-  if (current >= target) return;
+  if (current >= target) return false;
   // Table rebuilds need foreign keys off; they are checked again right after.
   db.pragma("foreign_keys = OFF");
   try {
@@ -729,6 +730,7 @@ function migrate(db, target = MIGRATIONS.length) {
   } finally {
     db.pragma("foreign_keys = ON");
   }
+  return true;
 }
 
 function seed(db) {
@@ -763,9 +765,19 @@ export function openDatabase(file = ":memory:", { seedCatalog = true, migrateTo 
   // RGPD erasure: overwrite deleted content instead of leaving it readable in free pages.
   db.pragma("secure_delete = ON");
   db.pragma("busy_timeout = 5000");
-  migrate(db, migrateTo);
+  const migrated = migrate(db, migrateTo);
   db.pragma("foreign_keys = ON");
   // The seed matches the latest schema, so a partly migrated database is never seeded.
   if (seedCatalog && migrateTo >= MIGRATIONS.length) seed(db);
+  // A migration can write the whole database into the WAL (14 rebuilds series and videos:
+  // ~124 MB of WAL for a 148 MB file). Move it into the main file and truncate the WAL
+  // now rather than at the next truncating checkpoint.
+  if (migrated) {
+    try {
+      db.pragma("wal_checkpoint(TRUNCATE)");
+    } catch {
+      // in-memory: no WAL
+    }
+  }
   return db;
 }

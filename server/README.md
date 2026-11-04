@@ -171,7 +171,9 @@ does the documented 12-step rebuild inside its transaction, with foreign keys of
    *before* the upgrade above that max cannot be known and may be handed out once more; never again after it.
    If `sqlite_stat1` had statistics for the tables, they are rebuilt (`ANALYZE`).
 Aggregates (`series_stats`, `rating_totals`, `video_rating_stats`, `rating_activity`, `catalog_version`) are not
-touched: the rows they describe are the same. `migrate()` runs `PRAGMA foreign_key_check` afterwards.
+touched: the rows they describe are the same. `migrate()` runs `PRAGMA foreign_key_check` afterwards, and
+`openDatabase()` runs `wal_checkpoint(TRUNCATE)` once whenever a migration ran (the rebuild otherwise leaves a WAL
+nearly the size of the database until the next truncating checkpoint).
 `test/stable-ids.test.js` builds a v13 database through the real services (series, published/pending/unavailable/
 trashed videos, a trashed series, users, sessions, e-mail tokens, ratings on four days, `ANALYZE`), upgrades it and
 checks every row of every table byte for byte, columns/foreign keys/indexes (`PRAGMA table_xinfo`, `foreign_key_list`,
@@ -197,7 +199,8 @@ service runs and checks its text and, via `EXPLAIN`, every table SQLite opens: `
   `suggestedNumber`), `slot-taken` (a live published video holds its slot), `ready` (complete, slot free). Every
   pending video has at least one, so `other` is never sent (clients fall back to `reason` for unknown keys).
 - `ratings`: `total`/`average` of live videos (`rating_totals`); `daily` = the last `days` UTC days, oldest first,
-  `{ day, count, average }` (`0`/`null` on quiet days) from `rating_days`, which triggers on `rating_activity` keep
+  `{ day, count, average }` (`0`/`null` on quiet days; `average` is `null` below 3 ratings that day, so no single
+  person's score shows — `count` stays) from `rating_days`, which triggers on `rating_activity` keep
   equal to its per-day sums (retention and FK cascades included; a trashed video's ratings count until its purge,
   like `rating_activity`). `rating_activity` is kept 90 days (was 30) so `?days=90` is complete; `/api/trending`
   still reads only the last 7.

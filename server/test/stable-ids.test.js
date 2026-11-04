@@ -101,6 +101,8 @@ describe("migration 14: series and videos become AUTOINCREMENT", () => {
       const db = openDatabase(file);
       try {
         assert.equal(db.pragma("user_version", { simple: true }), SCHEMA_VERSION);
+        // The rebuild went through the WAL; openDatabase checkpointed it into the file and truncated it.
+        assert.equal(fs.statSync(`${file}-wal`).size, 0, "WAL truncated after the migrations");
         for (const t of ["series", "videos"]) {
           assert.match(db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").pluck().get(t), /id\s+INTEGER PRIMARY KEY AUTOINCREMENT/, t);
         }
@@ -231,6 +233,20 @@ describe("migration 14: series and videos become AUTOINCREMENT", () => {
       }
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
+    }
+    // A new file database: migrated and seeded, then the WAL is truncated; reopening (nothing to migrate) works.
+    const newDir = fs.mkdtempSync(path.join(os.tmpdir(), "crwn-m14-new-"));
+    try {
+      const newFile = path.join(newDir, "new.db");
+      const created = openDatabase(newFile);
+      assert.equal(fs.statSync(`${newFile}-wal`).size, 0, "WAL truncated after migrating and seeding");
+      assert.equal(created.prepare("SELECT COUNT(*) FROM series").pluck().get(), 7);
+      created.close();
+      const reopened = openDatabase(newFile);
+      assert.equal(reopened.pragma("user_version", { simple: true }), SCHEMA_VERSION);
+      reopened.close();
+    } finally {
+      fs.rmSync(newDir, { recursive: true, force: true });
     }
     const fresh = openDatabase(":memory:");
     try {
