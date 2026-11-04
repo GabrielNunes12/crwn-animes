@@ -231,15 +231,31 @@ describe("stale-while-revalidate catalog", () => {
     expect(caches.peek("crwn-api-b1").urls()).toEqual([]);
   });
 
+  it("covers share the image cache (and its cap) with thumbnails", async () => {
+    const img = () => new Response("png", { headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=604800" } });
+    const { sw, caches } = setup({ routes: { "/api/covers/12.img?v=1a2b3c4d": img, "/api/thumbs/dQw4w9WgXcQ.jpg": img } });
+    await respond(sw, get("/api/covers/12.img?v=1a2b3c4d"));
+    await respond(sw, get("/api/thumbs/dQw4w9WgXcQ.jpg"));
+    expect(caches.peek("crwn-thumbs-b1").urls()).toEqual(["/api/covers/12.img?v=1a2b3c4d", "/api/thumbs/dQw4w9WgXcQ.jpg"]);
+  });
+
+  it("a search with a typed q goes straight to the network and is never stored; a browse search is", async () => {
+    const { sw, caches, fetch } = setup({ routes: { "/api/search?q=naruto": json({ items: [1] }), "/api/search?genre=Shonen": json({ items: [2] }) } });
+    expect(sw.respond(fetchEvent(get("/api/search?q=naruto")))).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+    await respond(sw, get("/api/search?genre=Shonen"));
+    expect(caches.peek("crwn-api-b1").urls()).toEqual(["/api/search?genre=Shonen"]);
+  });
+
   it("never stores private / no-store answers", async () => {
     const { sw, caches } = setup({
       routes: {
         "/api/videos/1": json({ video: 1 }, { "Cache-Control": "private, no-store" }),
-        "/api/search?q=x": json({ items: [] }, { "Cache-Control": "no-store" }),
+        "/api/search?genre=x": json({ items: [] }, { "Cache-Control": "no-store" }),
       },
     });
     expect((await respond(sw, get("/api/videos/1"))).status).toBe(200);
-    await respond(sw, get("/api/search?q=x"));
+    expect((await respond(sw, get("/api/search?genre=x"))).status).toBe(200);
     expect(caches.peek("crwn-api-b1").urls()).toEqual([]);
   });
 

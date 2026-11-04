@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { useT } from "../../i18n/useT.js";
 import { videoLabel } from "../../lib/format.js";
+import { LazyImage } from "../../components/LazyImage/LazyImage.jsx";
 import styles from "./Admin.module.css";
 
 export function StatusBadge({ status, availability, trashed = false }) {
@@ -42,7 +43,9 @@ export function VideoSummary({ video }) {
   const { t } = useT();
   return (
     <div className={styles.summary}>
-      <img src={video.thumbnailUrl} alt="" width="160" height="90" loading="lazy" decoding="async" className={styles.thumb} />
+      <span className={styles.thumb}>
+        <LazyImage src={video.thumbnailUrl} alt="" width={160} height={90} fallbackLabel={video.seriesName ?? video.title} />
+      </span>
       <div className="stack" style={{ "--stack-gap": "0.3rem", minInlineSize: 0 }}>
         <StatusBadge status={video.status} availability={video.availability} trashed={Boolean(video.deletedAt)} />
         <p className={styles.videoTitle}>{video.title}</p>

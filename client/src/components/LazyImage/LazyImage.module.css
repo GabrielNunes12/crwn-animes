@@ -7,6 +7,12 @@
     background: var(--skeleton);
     border-radius: inherit;
   }
+  /* `fill`: covers its positioned parent (the player's poster). */
+  .frame[data-fill] {
+    position: absolute;
+    inset: 0;
+    block-size: 100%;
+  }
   .frame[data-state="loading"]::after {
     content: "";
     position: absolute;

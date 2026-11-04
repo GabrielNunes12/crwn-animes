@@ -13,8 +13,13 @@ export const OFFLINE_URL = "/offline.html";
 export const OFFLINE_SCRIPT_URL = "/offline.js";
 /** Unhashed public files the shell and the offline page need, precached with every build. */
 export const STATIC_URLS = [OFFLINE_URL, OFFLINE_SCRIPT_URL, "/theme-init.js", "/favicon.svg"];
-/** Runtime (stale-while-revalidate) caches are capped; the least recently used entries go first. */
+/**
+ * Runtime (stale-while-revalidate) caches are capped; the least recently used entries go first.
+ * "thumbs" is the image cache: video thumbnails and series covers share it (and its cap).
+ */
 export const CACHE_LIMITS = { api: 150, thumbs: 300 };
+/** The runtime caches, i.e. what "Clear watch history" deletes (the shell is the app itself). */
+export const RUNTIME_KINDS = ["api", "thumbs"];
 
 export const SECTIONS = ["anime", "manga"];
 
@@ -44,6 +49,7 @@ const CATALOG = [
   /^\/api\/videos\/[^/]+$/, // `/rating` below it is in NEVER_CACHE
 ];
 const THUMB = /^\/api\/thumbs\/[A-Za-z0-9_-]{11}\.jpg$/;
+const COVER = /^\/api\/covers\/\d{1,15}\.img$/; // ?v=<hash of the source URL> changes with the cover
 
 /** Cache names for one build: every name carries the build id, so a new build never reads an old cache. */
 export function cacheNamesFor(buildId) {
@@ -58,6 +64,11 @@ export function cacheNamesFor(buildId) {
 export function staleCaches(cacheKeys, buildId) {
   const current = new Set(Object.values(cacheNamesFor(buildId)));
   return cacheKeys.filter((name) => name.startsWith(CACHE_PREFIX) && !current.has(name));
+}
+
+/** Names of runtime caches (any build): catalog data and images, never the app shell. */
+export function runtimeCaches(cacheKeys) {
+  return cacheKeys.filter((name) => RUNTIME_KINDS.some((kind) => name.startsWith(`${CACHE_PREFIX}${kind}-`)));
 }
 
 /** True for paths that must never be cached (see NEVER_CACHE). Malformed paths count as never-cache. */
@@ -75,19 +86,24 @@ function normalisedPath(pathname) {
   }
 }
 
-/** "thumbs" for /api/thumbs/<id>.jpg, "api" for the other catalog GETs, else null. */
+/** "thumbs" for /api/thumbs/<id>.jpg and /api/covers/<id>.img, "api" for the other catalog GETs, else null. */
 export function catalogKind(pathname) {
-  if (THUMB.test(pathname)) return "thumbs";
+  if (THUMB.test(pathname) || COVER.test(pathname)) return "thumbs";
   return CATALOG.some((re) => re.test(pathname)) ? "api" : null;
 }
 
 const header = (request, name) => request.headers?.get?.(name) ?? null;
 
+/** A non-blank `q` is something the visitor typed: search terms are never stored on the device. */
+export function hasSearchTerm(url) {
+  return url.searchParams.getAll("q").some((q) => q.trim() !== "");
+}
+
 /**
  * How the service worker answers `request` (a Request, or anything with url/method/mode/headers/cache):
  *   "cache-first"   hashed /assets/* and the precached static files;
  *   "network-first" page navigations (3 s timeout → cached shell → /offline.html);
- *   "swr"           public catalog GETs and same-origin thumbnails;
+ *   "swr"           public catalog GETs (searches only without a typed `q`), thumbnails and covers;
  *   "bypass"        everything else: the browser handles it and nothing is cached.
  * The never-cache list wins over every other rule, navigations included (e.g. /api/me/export).
  */
@@ -107,7 +123,10 @@ export function swStrategy(request, origin) {
   if (isNeverCached(pathname)) return "bypass";
   // Express also answers /API/… or /api/%6De: only the exact catalog spellings are ever cached.
   const path = normalisedPath(pathname);
-  if (path === "/api" || path.startsWith("/api/")) return catalogKind(pathname) ? "swr" : "bypass";
+  if (path === "/api" || path.startsWith("/api/")) {
+    const kind = catalogKind(pathname);
+    return kind && !(kind === "api" && hasSearchTerm(url)) ? "swr" : "bypass";
+  }
   if (request.mode === "navigate") return "network-first";
   if (pathname.startsWith("/assets/") || pathname.startsWith("/icons/") || STATIC_URLS.includes(pathname)) return "cache-first";
   return "bypass"; // /sw.js, /manifest.webmanifest, /robots.txt, sitemaps…

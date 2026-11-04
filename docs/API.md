@@ -442,7 +442,8 @@ Series covers set by admins (any https URL) are now also fetched **by the server
     `/api/trending`, `/api/:section/series*`, `/api/videos/:id` without `/rating`, `/api/search`
     **without a `q`**, `/api/thumbs/*`, `/api/covers/*`): stale-while-revalidate, capped (e.g. 150 entries;
     images 300) with LRU. Searches with a `q` are never cached (search terms stay off the device).
-    "Clear watch history" also deletes the `crwn-api-*` cache.
+    "Clear watch history" also deletes the `crwn-api-*` and `crwn-thumbs-*` caches (cached images show which
+    videos were opened). Catalog requests with a non-blank `q` (search, section lists) are never cached.
   - **never cached**: `/api/auth/*`, `/api/me*`, `/api/admin/*`, any `/rating` route, `/api/dev/*`,
     `/api/random`, non-GET requests, responses with `Cache-Control: private` or `no-store`.
   - an update flow: when a new SW is waiting, the app shows "Nova versão disponível — Atualizar"

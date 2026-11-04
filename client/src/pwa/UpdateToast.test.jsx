@@ -3,7 +3,7 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { I18nProvider } from "../i18n/I18nProvider.jsx";
 import { UpdateToast } from "./UpdateToast.jsx";
-import { applyUpdate, dismissUpdate, getWaitingRegistration, registerServiceWorker, SW_URL, watchRegistration } from "./serviceWorker.js";
+import { applyUpdate, clearRuntimeCaches, dismissUpdate, getWaitingRegistration, registerServiceWorker, SW_URL, watchRegistration } from "./serviceWorker.js";
 
 /** navigator.serviceWorker stand-in: an EventTarget with a `controller`. */
 function fakeContainer({ controller = {}, register } = {}) {
@@ -140,5 +140,24 @@ describe("<UpdateToast>", () => {
     registration.waiting = null;
     act(() => container.dispatchEvent(new Event("controllerchange")));
     expect(screen.getByRole("status")).toBeEmptyDOMElement();
+  });
+});
+
+describe("clearRuntimeCaches (part of “Clear watch history”)", () => {
+  const storage = (names) => {
+    const left = new Set(names);
+    return { keys: vi.fn(async () => [...left]), delete: vi.fn(async (n) => left.delete(n)), left };
+  };
+
+  it("deletes every build's catalog and image caches and keeps the app shell and foreign caches", async () => {
+    const s = storage(["crwn-shell-b1", "crwn-api-b1", "crwn-thumbs-b1", "crwn-api-b0", "someone-else"]);
+    expect(await clearRuntimeCaches(s)).toBe(3);
+    expect([...s.left]).toEqual(["crwn-shell-b1", "someone-else"]);
+  });
+
+  it("does nothing without Cache Storage (plain http, old browsers) and never throws", async () => {
+    expect(await clearRuntimeCaches(undefined)).toBe(0);
+    expect(await clearRuntimeCaches({})).toBe(0);
+    expect(await clearRuntimeCaches({ keys: async () => Promise.reject(new Error("SecurityError")) })).toBe(0);
   });
 });

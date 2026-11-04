@@ -5,8 +5,10 @@ import {
   catalogKind,
   isCacheableResponse,
   isNeverCached,
+  hasSearchTerm,
   keysToEvict,
   NAVIGATION_TIMEOUT_MS,
+  runtimeCaches,
   staleCaches,
   swStrategy,
   trimCache,
@@ -57,23 +59,56 @@ describe("swStrategy — route classes", () => {
       "/api/top-rated?section=manga&limit=12",
       "/api/trending",
       "/api/anime/series",
-      "/api/manga/series?genre=A%C3%A7%C3%A3o&q=one",
+      "/api/manga/series?genre=A%C3%A7%C3%A3o",
       "/api/anime/series/naruto",
       "/api/anime/series/naruto?season=2",
       "/api/videos/42",
-      "/api/search?q=naruto&sort=rating",
+      "/api/search?genre=A%C3%A7%C3%A3o&sort=rating", // browsing (genre page): no search term
+      "/api/search?q=&section=anime",
+      "/api/search?q=%20%20",
       "/api/thumbs/dQw4w9WgXcQ.jpg",
+      "/api/covers/12.img?v=1a2b3c4d",
     ]) {
       expect(strategy(path), path).toBe("swr");
     }
   });
 
-  it("thumbnails and the rest of the catalog use separate caches", () => {
+  it("images (thumbnails and covers) and the rest of the catalog use separate caches", () => {
     expect(catalogKind("/api/thumbs/dQw4w9WgXcQ.jpg")).toBe("thumbs");
+    expect(catalogKind("/api/covers/12.img")).toBe("thumbs");
     expect(catalogKind("/api/latest")).toBe("api");
     expect(catalogKind("/api/thumbs/short.jpg")).toBeNull();
     expect(catalogKind("/api/thumbs/dQw4w9WgXcQ.png")).toBeNull();
+    expect(catalogKind("/api/covers/abc.img")).toBeNull();
+    expect(catalogKind("/api/covers/12.jpg")).toBeNull();
+    expect(catalogKind("/api/covers/12.img/x")).toBeNull();
     expect(CACHE_LIMITS).toEqual({ api: 150, thumbs: 300 });
+  });
+});
+
+describe("swStrategy — search terms stay off the device", () => {
+  it("a search or series list carrying a typed q is never cached", () => {
+    for (const path of [
+      "/api/search?q=naruto",
+      "/api/search?q=naruto&sort=rating&limit=20",
+      "/api/search?genre=Shonen&q=one",
+      "/api/search?q=&q=naruto",
+      "/api/search?q=%20x",
+      "/api/search?q=a+b",
+      "/api/anime/series?q=one",
+      "/api/manga/series?genre=Shonen&q=x",
+    ]) {
+      expect(strategy(path), path).toBe("bypass");
+    }
+  });
+
+  it("hasSearchTerm only counts non-blank q values", () => {
+    const has = (search) => hasSearchTerm(new URL(`/api/search${search}`, ORIGIN));
+    expect(has("?q=x")).toBe(true);
+    expect(has("?q=")).toBe(false);
+    expect(has("?q=+")).toBe(false);
+    expect(has("?genre=x")).toBe(false);
+    expect(has("?Q=x")).toBe(false); // the server only reads `q`
   });
 });
 
@@ -185,6 +220,17 @@ describe("cache names", () => {
     const keys = ["crwn-shell-old", "crwn-api-old", "crwn-thumbs-old", "crwn-shell-new", "crwn-api-new", "crwn-thumbs-new", "someone-else"];
     expect(staleCaches(keys, "new")).toEqual(["crwn-shell-old", "crwn-api-old", "crwn-thumbs-old"]);
     expect(staleCaches(["crwn-shell-new"], "new")).toEqual([]);
+  });
+});
+
+describe("runtimeCaches (what “Clear watch history” deletes)", () => {
+  it("is every build's catalog and image cache, never the shell or foreign caches", () => {
+    expect(runtimeCaches(["crwn-shell-b1", "crwn-api-b1", "crwn-thumbs-b1", "crwn-api-b0", "crwn-thumbs-b0", "other-api-b1", "crwn-apix"])).toEqual([
+      "crwn-api-b1",
+      "crwn-thumbs-b1",
+      "crwn-api-b0",
+      "crwn-thumbs-b0",
+    ]);
   });
 });
 

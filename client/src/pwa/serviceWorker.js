@@ -4,6 +4,8 @@
 // <UpdateToast> offers "Update": it posts SKIP_WAITING and reloads once the new worker
 // takes control.
 
+import { runtimeCaches } from "../sw/strategy.js";
+
 export const SW_URL = "/sw.js";
 /** How often an open tab asks the server for a newer sw.js. */
 export const UPDATE_CHECK_MS = 60 * 60 * 1000;
@@ -97,4 +99,20 @@ export function registerServiceWorker({ prod = import.meta.env.PROD, nav = navig
     if (win.document.readyState === "complete") start();
     else win.addEventListener("load", start, { once: true });
   });
+}
+
+/**
+ * Deletes the offline copy of catalog data and images (every build's `crwn-api-*` and
+ * `crwn-thumbs-*` caches), keeping the app shell. Part of "Clear watch history". Never throws;
+ * resolves with how many caches were deleted (0 without Cache Storage, e.g. over plain http).
+ */
+export async function clearRuntimeCaches(storage = globalThis.caches) {
+  if (!storage?.keys) return 0;
+  try {
+    const names = runtimeCaches(await storage.keys());
+    await Promise.all(names.map((name) => storage.delete(name)));
+    return names.length;
+  } catch {
+    return 0;
+  }
 }

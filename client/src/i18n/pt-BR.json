@@ -78,7 +78,7 @@
       "token": "Este link é inválido ou expirou.",
       "name": "Digite um nome para a série.",
       "slug": "O slug só pode ter letras minúsculas, números e hífens.",
-      "coverUrl": "Digite uma URL de imagem válida (http ou https).",
+      "coverUrl": "Digite um endereço de imagem https:// válido.",
       "url": "Digite um link do YouTube ou o ID de 11 caracteres.",
       "section": "Escolha Anime ou Mangá.",
       "seriesSlug": "Escolha uma série existente.",
@@ -403,7 +403,7 @@
       "other": "{count} vídeos no seu histórico."
     },
     "clearHistory": "Limpar histórico",
-    "clearHistoryText": "Isso apaga todas as posições salvas e marcas ✓ deste navegador.",
+    "clearHistoryText": "Isso apaga todas as posições salvas e marcas ✓ deste navegador, além da cópia offline das páginas e imagens do catálogo que você abriu.",
     "clearConfirm": "Limpar",
     "historyCleared": "Histórico apagado.",
     "loggedOutTitle": "Você não entrou na sua conta",
@@ -447,7 +447,7 @@
       "p3": "Sem analytics, sem anúncios, sem rastreadores, sem endereços IP. Um único cookie essencial mantém você conectado.",
       "p4": "Seu progresso nunca sai do seu navegador.",
       "p5": "Baixe seus dados ou exclua sua conta você mesmo, a qualquer momento, em “Minha conta”.",
-      "p6": "As miniaturas vêm do nosso próprio servidor: nada do YouTube é carregado até você apertar Play."
+      "p6": "Miniaturas e capas vêm do nosso próprio servidor e o que você digita na busca nunca fica guardado no aparelho: nada do YouTube ou de outro site é carregado até você apertar Play."
     },
     "keep": {
       "title": "O que guardamos, por que e por quanto tempo",
@@ -492,8 +492,8 @@
       "intro": "Algumas coisas ficam só no seu navegador (no localStorage e, para o modo offline, no Cache Storage). Elas nunca chegam ao nosso servidor:",
       "progress": "Progresso (chave crwn:progress:v1): para até 200 vídeos — a posição, a duração, quando você assistiu pela última vez e o link, título e miniatura do episódio, para mostrar “Continuar em…”, marcas ✓ e “Continuar assistindo”.",
       "prefs": "Preferências: tema (claro/escuro), idioma, “Reprodução automática” e “Sempre carregar o YouTube”.",
-      "cache": "Cópia offline (Cache Storage): o próprio app e as páginas públicas do catálogo que você abriu — listas, séries, episódios e miniaturas —, para o site abrir sem internet. Nada da sua conta, das suas avaliações ou qualquer dado pessoal é guardado ali, e cada nova versão do site apaga a cópia anterior. Você pode apagá-la nas configurações de dados de sites do navegador.",
-      "clear": "Você pode limpar seu histórico a qualquer momento, mesmo sem conta:",
+      "cache": "Cópia offline (Cache Storage): o próprio app e as páginas públicas do catálogo que você abriu — listas, séries, episódios, miniaturas e capas —, para o site abrir sem internet. O que você digita na busca nunca é guardado ali, nem nada da sua conta, das suas avaliações ou outro dado pessoal. Cada nova versão do site apaga a cópia anterior.",
+      "clear": "Você pode limpar seu histórico a qualquer momento, mesmo sem conta. “Limpar histórico” apaga o progresso e a cópia offline das páginas e imagens do catálogo (o app em si continua guardado para abrir offline):",
       "clearLink": "Minha conta → Neste dispositivo"
     },
     "cookies": {
@@ -502,8 +502,8 @@
       "p2": "Por ser essencial a um serviço que você pediu, ele não precisa de banner de consentimento. Não usamos cookies de analytics, publicidade ou redes sociais."
     },
     "youtube": {
-      "title": "Vídeos e miniaturas do YouTube",
-      "p1": "Cada episódio é um vídeo do YouTube. As miniaturas agora são servidas pelo nosso próprio servidor (ele as busca no YouTube e guarda uma cópia), então abrir uma página não faz seu navegador contatar o YouTube nem o Google: eles só são contatados quando você aperta Play.",
+      "title": "Vídeos, miniaturas e capas",
+      "p1": "Cada episódio é um vídeo do YouTube. As miniaturas dos episódios e as capas das séries agora são servidas pelo nosso próprio servidor (ele as busca na origem e guarda uma cópia), então abrir uma página não faz seu navegador contatar o YouTube, o Google nem qualquer outro site: o YouTube só é contatado quando você aperta Play.",
       "p2": "O player do YouTube só é carregado depois que você aperta play (ou se ativar “Sempre carregar o YouTube”). Ele usa o domínio de privacidade aprimorada youtube-nocookie.com, mas quando o vídeo toca vale a política de privacidade do Google para o que acontece dentro do player.",
       "p3": "Se preferir, use “Assistir no YouTube” para abrir o vídeo direto no youtube.com."
     },
@@ -591,9 +591,12 @@
       "slugHint": "Letras minúsculas, números e hífens. Deixe vazio para gerar a partir do nome.",
       "synopsis": "Sinopse",
       "aliases": "Apelidos (títulos alternativos)",
-      "cover": "URL da capa",
+      "cover": "Endereço da imagem de capa",
+      "coverHint": "Só https://. Nosso servidor busca a imagem e a serve daqui: o navegador nunca acessa esse endereço.",
       "coverPreview": "Prévia da capa",
       "coverNone": "A prévia aparece aqui",
+      "coverAfterSave": "A pré-visualização aparece depois de salvar.",
+      "coverSaved": "Capa salva de {name}",
       "create": "Criar série",
       "nameRequired": "O nome é obrigatório.",
       "created": "{name} criada.",
