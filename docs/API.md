@@ -385,3 +385,41 @@ episode list with drag-and-drop **and** keyboard reordering (Move up / Move down
 Alt+ArrowUp/ArrowDown, live-region announcements), "Save order", per-row preview / edit / move to
 trash. Admin gets a "Trash" tab listing trashed series and videos with "Restore" and "Delete forever"
 and "purged in N days".
+
+---
+
+# v1.5 additions (cycle 5 — PWA, offline shell, same-origin thumbnails)
+
+## Same-origin thumbnails (privacy)
+`GET /api/thumbs/:youtubeVideoId.jpg` → the video's YouTube thumbnail, fetched **by the server** from
+`https://i.ytimg.com/vi/<id>/hqdefault.jpg` and cached, so a visitor's browser never contacts Google
+before pressing Play.
+- Only for IDs of videos that exist and are not trashed (anything else → `404`): never an open proxy.
+- Upstream must answer `200 image/jpeg` ≤ 512 KB within 5 s; otherwise `502` (the client shows its
+  gradient placeholder). Concurrent requests for the same ID share one upstream fetch.
+- Cached on disk under `THUMB_CACHE_DIR` (default `server/data/thumbs`), max `THUMB_CACHE_MB` (default
+  200) with LRU eviction; files of purged videos are removed. Served with
+  `Cache-Control: public, max-age=604800, immutable`, `Content-Type: image/jpeg`,
+  `X-Content-Type-Options: nosniff`, `Cross-Origin-Resource-Policy: same-origin`.
+- Every `Video.thumbnailUrl` becomes `/api/thumbs/<id>.jpg`. The CSP `img-src` keeps `https:` only for
+  admin-chosen series covers.
+- No personal data involved (requests are not logged; the cache key is the public video ID).
+
+## PWA
+- `GET /manifest.webmanifest` (from the client build): name "Crwn Animes", short_name "Crwn",
+  `start_url: "/"`, `display: "standalone"`, theme/background colours from the Midnight Sakura tokens,
+  maskable 192/512 PNG icons + SVG icon, `lang: "pt-BR"`, shortcuts to /anime and /manga.
+- Service worker `/sw.js` (hand-written, no Workbox), registered only in production builds:
+  - hashed `/assets/*`: cache-first (immutable); old build caches deleted on activate.
+  - navigations: network-first with a 3 s timeout, falling back to the cached shell, then to an
+    offline page (`/offline.html`, pt-BR/en, "Você está offline", retry button).
+  - public catalog GETs (`/api/sections`, `/api/genres`, `/api/latest`, `/api/top-rated`,
+    `/api/trending`, `/api/:section/series*`, `/api/videos/:id` without `/rating`, `/api/search`,
+    `/api/thumbs/*`): stale-while-revalidate, capped (e.g. 150 entries; thumbs 300) with LRU.
+  - **never cached**: `/api/auth/*`, `/api/me*`, `/api/admin/*`, any `/rating` route, `/api/dev/*`,
+    `/api/random`, non-GET requests, responses with `Cache-Control: private` or `no-store`.
+  - an update flow: when a new SW is waiting, the app shows "Nova versão disponível — Atualizar"
+    (aria-live, button posts SKIP_WAITING then reloads). Logout clears nothing personal because nothing
+    personal is ever cached.
+- Server: `sw.js` and `manifest.webmanifest` served with `Cache-Control: no-cache`; `sw.js` with
+  `Service-Worker-Allowed: /`. CSP: `worker-src 'self'`, `manifest-src 'self'`.
