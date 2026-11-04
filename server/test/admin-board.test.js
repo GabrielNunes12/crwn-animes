@@ -142,7 +142,7 @@ describe("PUT /api/admin/series/:id/order", () => {
       [{ section: "anime", season: 1, videoIds: [A.id, B.id, C.id, U.id + 0.5] }, ["videoIds"]],
       [{ section: "anime", season: 1, videoIds: [A.id, B.id, C.id, null] }, ["videoIds"]],
       [{ section: "anime", season: 1, videoIds: [A.id, B.id, C.id, U.id, 2 ** 53] }, ["videoIds"]],
-      [{ section: "anime", season: 1, videoIds: Array.from({ length: 5001 }, (_, i) => i + 1) }, ["videoIds"]],
+      [{ section: "anime", season: 1, videoIds: Array.from({ length: 2501 }, (_, i) => i + 1) }, ["videoIds"]],
       [{ section: "anime", season: 1, videoIds: [A.id, A.id, B.id, C.id, U.id] }, ["videoIds"], /listed twice/],
       [{ section: "anime", season: 1, videoIds: [A.id, B.id, C.id] }, ["videoIds"], /missing: \d+/],
       [{ section: "anime", season: 1, videoIds: [...all, D.id] }, ["videoIds"], /not published in this season/],

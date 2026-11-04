@@ -12,8 +12,8 @@ const AVAILABILITY = ["ok", "unavailable"];
 const LIST_Q_MAX = 80;
 const LIST_LIMIT_MAX = 100;
 const LIST_OFFSET_MAX = 10_000_000;
-// One season's videos in one reorder (the 20 kB body limit allows ~3,000 ids).
-const ORDER_MAX = 5000;
+// Videos in one reorder (one season). The 20 kB JSON body limit fits ~2,800 six-digit ids.
+const ORDER_MAX = 2500;
 
 /** ?q=&limit=&offset= of the admin lists (plus whatever `extra` reads), one 400 for every bad field. */
 function readListQuery(query, extra = () => ({})) {
