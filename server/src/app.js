@@ -5,7 +5,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { createAuthService } from "./authService.js";
-import { loadConfig, parseTrustProxy } from "./config.js";
+import { loadConfig, parseTrustProxy, thumbnailUpstream } from "./config.js";
 import { HttpError, notFound } from "./errors.js";
 import { createMailer } from "./mail.js";
 import { noStore, requireJsonBody, requireSameOrigin } from "./middleware/security.js";
@@ -78,17 +78,14 @@ export function toHttpError(err) {
  * @param mailer          { send(message), outbox } (default: createMailer(config))
  * @param fetchVideoInfo  async (youtubeVideoId) => { title, channel } (default: YouTube oEmbed)
  * @param fetchThumbnail  async (youtubeVideoId) => Buffer of a JPEG ≤ 512 KB, throws on failure
- *                        (default: hqdefault.jpg from i.ytimg.com, src/thumbnails.js)
+ *                        (default: hqdefault.jpg from i.ytimg.com, or from THUMB_UPSTREAM outside
+ *                        production; src/thumbnails.js)
  */
-export function createApp({
-  db,
-  config: overrides = {},
-  mailer,
-  fetchVideoInfo = youtubeFetchVideoInfo,
-  fetchThumbnail = (id) => fetchYoutubeThumbnail(id),
-} = {}) {
+export function createApp({ db, config: overrides = {}, mailer, fetchVideoInfo = youtubeFetchVideoInfo, fetchThumbnail } = {}) {
   const config = { ...loadConfig({}), ...overrides };
   mailer ??= createMailer(config);
+  const thumbBaseUrl = thumbnailUpstream(config); // i.ytimg.com in production, whatever THUMB_UPSTREAM says
+  fetchThumbnail ??= (id) => fetchYoutubeThumbnail(id, { baseUrl: thumbBaseUrl });
 
   const repo = createRepository(db);
   const videos = createVideoService({ repo, fetchVideoInfo });

@@ -182,6 +182,7 @@ function prodEnv(overrides = {}) {
     // Never the developer's server/data/thumbs: the retention job prunes files of unknown videos.
     THUMB_CACHE_DIR: THUMB_DIR,
     THUMB_CACHE_MB: "200",
+    THUMB_UPSTREAM: "",
     APP_URL,
     CLIENT_ORIGIN: APP_URL,
     ADMIN_EMAILS: "",
@@ -321,12 +322,13 @@ describe("production start-up", () => {
   const run = (env) =>
     spawnSync(process.execPath, ["src/index.js"], { cwd: SERVER_DIR, env: prodEnv(env), encoding: "utf8", timeout: 10_000 });
 
-  test('refuses TRUST_PROXY="true", an unparsable https APP_URL and an http APP_URL, without echoing secrets', () => {
+  test('refuses TRUST_PROXY="true", an unparsable https APP_URL, an http APP_URL and a THUMB_UPSTREAM, without echoing secrets', () => {
     for (const [env, reason] of [
       [{ TRUST_PROXY: "true", SMTP_PASS }, /TRUST_PROXY/],
       [{ APP_URL: "https://", SMTP_PASS }, /APP_URL/],
       [{ APP_URL: "http://crwn.example", SMTP_PASS }, /APP_URL/],
       [{ SMTP_HOST: "", SMTP_PASS }, /SMTP_HOST/],
+      [{ THUMB_UPSTREAM: "http://127.0.0.1:9", SMTP_PASS }, /THUMB_UPSTREAM is for tests only/],
     ]) {
       const result = run(env);
       assert.equal(result.status, 1, JSON.stringify(env));

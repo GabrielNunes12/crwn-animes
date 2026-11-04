@@ -15,6 +15,7 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
+import { THUMB_UPSTREAM_DEFAULT } from "./config.js";
 import { HttpError } from "./errors.js";
 
 /** A YouTube video ID. Nothing else ever becomes an upstream URL or a file name. */
@@ -44,11 +45,18 @@ function abortion(signal) {
 
 /**
  * The default `fetchThumbnail(id)`: hqdefault.jpg from i.ytimg.com as a Buffer,
- * or an HttpError 502. `fetchImpl`, `timeoutMs` and `maxBytes` are for tests.
+ * or an HttpError 502. `baseUrl` is the THUMB_UPSTREAM test override (outside
+ * production only, see config.js thumbnailUpstream()); `fetchImpl`, `timeoutMs`
+ * and `maxBytes` are for unit tests. The checks are the same whatever the base.
  */
 export async function fetchYoutubeThumbnail(
   id,
-  { fetchImpl = globalThis.fetch, timeoutMs = THUMB_TIMEOUT_MS, maxBytes = THUMB_MAX_BYTES } = {}
+  {
+    baseUrl = THUMB_UPSTREAM_DEFAULT,
+    fetchImpl = globalThis.fetch,
+    timeoutMs = THUMB_TIMEOUT_MS,
+    maxBytes = THUMB_MAX_BYTES,
+  } = {}
 ) {
   if (typeof id !== "string" || !THUMB_ID.test(id)) throw upstreamError();
   const signal = AbortSignal.timeout(timeoutMs);
@@ -58,7 +66,7 @@ export async function fetchYoutubeThumbnail(
   signal.addEventListener("abort", cancel, { once: true });
   try {
     const response = await Promise.race([
-      fetchImpl(`https://i.ytimg.com/vi/${id}/hqdefault.jpg`, { signal, redirect: "error" }),
+      fetchImpl(`${baseUrl}/vi/${id}/hqdefault.jpg`, { signal, redirect: "error" }),
       abortion(signal),
     ]);
     const type = (response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();

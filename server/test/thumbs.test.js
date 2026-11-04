@@ -3,9 +3,13 @@
 // against a fake i.ytimg.com (its fetchImpl): youtube.com / ytimg.com are never contacted.
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { after, before, describe, test } from "node:test";
+import { createApp } from "../src/app.js";
+import { assertSafeConfig, loadConfig } from "../src/config.js";
+import { openDatabase } from "../src/db.js";
 import { purgeTrash, startRetention } from "../src/retention.js";
 import { THUMB_MAX_BYTES, THUMB_TIMEOUT_MS, createThumbnailCache, fetchYoutubeThumbnail } from "../src/thumbnails.js";
 import { addVideo, fakeJpeg, quickUser, startServer, vid } from "./helpers.js";
@@ -639,6 +643,128 @@ describe("Video.thumbnailUrl is same-origin everywhere (v1.5)", () => {
       assert.ok(seen >= 10, `checked ${seen} videos`);
     } finally {
       await srv.close();
+    }
+  });
+});
+
+// =================================================================== THUMB_UPSTREAM (tests only)
+/**
+ * A local fake i.ytimg.com over real HTTP: `routes[id](res)` answers
+ * /vi/<id>/hqdefault.jpg (default: a JPEG); every requested path is recorded.
+ */
+async function startFakeYtimg(routes = {}) {
+  const paths = [];
+  const server = http.createServer((req, res) => {
+    paths.push(req.url);
+    const id = /^\/vi\/([^/]+)\/hqdefault\.jpg$/.exec(req.url)?.[1];
+    if (!id) return res.writeHead(404).end();
+    if (routes[id]) return routes[id](res);
+    const body = fakeJpeg(id);
+    res.writeHead(200, { "content-type": "image/jpeg", "content-length": body.length }).end(body);
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return {
+    paths,
+    base: `http://127.0.0.1:${server.address().port}`,
+    close: () =>
+      new Promise((resolve) => {
+        server.closeAllConnections();
+        server.close(resolve);
+      }),
+  };
+}
+
+describe("THUMB_UPSTREAM: a fake i.ytimg.com for end-to-end tests, never in production", () => {
+  test("config: read and trimmed; production refuses to start with it; a malformed value is refused everywhere", () => {
+    assert.equal(loadConfig({}).thumbUpstream, null);
+    assert.equal(loadConfig({ THUMB_UPSTREAM: " http://127.0.0.1:9/ " }).thumbUpstream, "http://127.0.0.1:9/");
+    assert.doesNotThrow(() => assertSafeConfig(loadConfig({ THUMB_UPSTREAM: "http://127.0.0.1:9" })));
+    const prod = { NODE_ENV: "production", SMTP_HOST: "smtp.test", APP_URL: "https://crwn.example" };
+    assert.doesNotThrow(() => assertSafeConfig(loadConfig(prod)));
+    assert.throws(() => assertSafeConfig(loadConfig({ ...prod, THUMB_UPSTREAM: "http://127.0.0.1:9" })), /THUMB_UPSTREAM is for tests only/);
+    for (const bad of ["not a url", "ftp://127.0.0.1/", "http://user:pw@127.0.0.1/", "http://127.0.0.1/?x=1", "http://127.0.0.1/#x"]) {
+      assert.throws(() => assertSafeConfig(loadConfig({ THUMB_UPSTREAM: bad })), /THUMB_UPSTREAM must be/, bad);
+      assert.throws(() => createApp({ db: openDatabase(":memory:"), config: { thumbUpstream: bad } }), /THUMB_UPSTREAM must be/, bad);
+    }
+  });
+
+  test("outside production the real fetch goes to <THUMB_UPSTREAM>/vi/<id>/hqdefault.jpg, with every check of i.ytimg.com", async () => {
+    const big = (res, withLength) => {
+      const body = fakeJpeg("x", THUMB_MAX_BYTES);
+      res.writeHead(200, { "content-type": "image/jpeg", ...(withLength ? { "content-length": body.length } : {}) });
+      res.end(body); // without a length: chunked
+    };
+    const fake = await startFakeYtimg({
+      [vid(2)]: (res) => res.writeHead(302, { location: `/vi/${vid(1)}/hqdefault.jpg` }).end(),
+      [vid(3)]: (res) => res.writeHead(200, { "content-type": "image/png" }).end(fakeJpeg(vid(3))),
+      [vid(4)]: (res) => big(res, false),
+      [vid(5)]: (res) => big(res, true),
+      [vid(6)]: (res) => res.writeHead(200, { "content-type": "image/jpeg" }).end("<html>not a jpeg</html>"),
+      [vid(7)]: () => {}, // never answers: the 5 s timeout
+      [vid(8)]: (res) => res.writeHead(404, { "content-type": "image/jpeg" }).end(fakeJpeg(vid(8))),
+    });
+    const srv = await startServer({ fetchThumbnail: null, config: { thumbUpstream: `${fake.base}/` } });
+    try {
+      for (let n = 1; n <= 8; n++) await addVideo(srv, n, `One Piece Episode ${n}`);
+      const started = Date.now();
+      const stalled = get(srv, thumb(vid(7)));
+
+      const ok = await get(srv, thumb(vid(1)));
+      assert.equal(ok.status, 200);
+      assert.deepEqual(ok.body, fakeJpeg(vid(1)));
+      assert.equal(ok.headers.get("cache-control"), "public, max-age=604800, immutable");
+      assert.equal(ok.headers.get("content-type"), "image/jpeg");
+      assert.equal(ok.headers.get("cross-origin-resource-policy"), "same-origin");
+      assert.equal((await get(srv, thumb(vid(1)))).status, 200, "then from the cache");
+      assert.equal(fake.paths.filter((p) => p === `/vi/${vid(1)}/hqdefault.jpg`).length, 1);
+
+      for (const n of [2, 3, 4, 5, 6, 8]) {
+        const res = await get(srv, thumb(vid(n)));
+        assert.equal(res.status, 502, `vid(${n})`);
+        assert.equal(res.json?.error?.code, "UPSTREAM_ERROR", `vid(${n})`);
+      }
+      const late = await stalled;
+      assert.equal(late.status, 502, "timeout");
+      const elapsed = Date.now() - started;
+      assert.ok(elapsed >= THUMB_TIMEOUT_MS - 100 && elapsed < THUMB_TIMEOUT_MS + 2000, `timed out after ${elapsed} ms`);
+
+      assert.deepEqual(cacheFiles(srv.thumbDir), [`${vid(1)}.jpg`], "only the good answer was cached");
+      assert.equal(fake.paths.includes(`/vi/${vid(1)}/hqdefault.jpg`), true);
+      assert.equal(fake.paths.filter((p) => p === `/vi/${vid(1)}/hqdefault.jpg`).length, 1, "the redirect was not followed");
+      assert.equal((await get(srv, thumb(vid(99)))).status, 404);
+      assert.equal(fake.paths.some((p) => p.includes(vid(99))), false, "unknown IDs never reach the fake either");
+    } finally {
+      await srv.close();
+      await fake.close();
+    }
+  });
+
+  test("in production THUMB_UPSTREAM is ignored even if the start-up check was bypassed: thumbnails come from i.ytimg.com", async () => {
+    const fake = await startFakeYtimg();
+    const realFetch = globalThis.fetch;
+    const ytimg = [];
+    globalThis.fetch = (url, init) => {
+      if (String(url).startsWith("https://i.ytimg.com/")) {
+        ytimg.push(String(url));
+        return Promise.resolve(jpegResponse(idOf(String(url))));
+      }
+      return realFetch(url, init);
+    };
+    let srv;
+    try {
+      srv = await startServer({
+        fetchThumbnail: null,
+        config: { nodeEnv: "production", isProduction: true, appUrl: "https://crwn.example", thumbUpstream: fake.base },
+      });
+      await addVideo(srv, 1, "One Piece Episode 1");
+      const res = await get(srv, thumb(vid(1)));
+      assert.equal(res.status, 200);
+      assert.deepEqual(ytimg, [upstreamUrl(vid(1))]);
+      assert.deepEqual(fake.paths, [], "the override was not used");
+    } finally {
+      globalThis.fetch = realFetch;
+      await srv?.close();
+      await fake.close();
     }
   });
 });
