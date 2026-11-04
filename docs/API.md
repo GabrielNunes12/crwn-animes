@@ -147,7 +147,7 @@ for local development (the verification link is also printed to the server conso
 | `sessions` | SHA-256 of the session token, user id, expiry, session epoch | stay logged in | expiry (30 days) — purged automatically; at most 20 per user (a new login drops the oldest); password change/reset and "sign out everywhere" end every session, including logins still in flight |
 | `email_tokens` | SHA-256 of the token, user id, expiry | verify email | used or expired (24 h) — purged automatically |
 | `ratings` | user id, video id, score, reaction | the rating feature | account deleted |
-| `rating_activity` | none — per-video daily counts with no user id (not personal data) | trending row | 30 days |
+| `rating_activity` | none — per-video daily counts with no user id (not personal data) | trending row, admin metrics | 90 days |
 
 Deleted rows are overwritten in the database file (`PRAGMA secure_delete`), and the write-ahead log is
 truncated after an account is deleted or purged, so erased accounts leave no readable copy behind.
@@ -202,7 +202,7 @@ The reset email links to `${APP_URL}/reset-password?token=<token>`.
 | `GET /api/random?section=` | `200 { video }` — a random published, available video; 404 if none. Sent with `Cache-Control: no-store` (a cached "random" would always be the same). |
 
 `rating_activity(video_id, day, count, score_sum)` is **anonymous** (no user id), aggregated per video per
-day and purged after 30 days. Add it to the personal-data table as "not personal data".
+day and purged after 90 days (was 30; extended in v1.6 for the admin metrics' 90-day view). Add it to the personal-data table as "not personal data".
 
 ## Admin productivity & resilience
 | Method & path | Body | Success |
@@ -470,7 +470,7 @@ service worker, CDN) can ever show a different video under an old id.
   catalog: { series: number, anime: { series, videos }, manga: { series, videos },
              pending: number, unavailable: number, trashed: { series, videos } },
   pendingQueue: { count: number, oldestAt: string | null, medianAgeHours: number | null,
-                  byReason: { reason: string, count: number }[] },      // top 10 reasons
+                  byReason: { key: string, reason: string, count: number }[] },  // top 10; `key` is a stable code the client translates
   ratings: { total: number, average: number | null,
              daily: { day: string, count: number, average: number | null }[] },  // from rating_activity, last `days`
   topSeries: { id, name, slug, section, ratingCount, average }[],       // top 10 by Bayesian average, n ≥ 3
