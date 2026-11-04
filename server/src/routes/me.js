@@ -31,6 +31,7 @@ export function meRoutes({ auth, ratings, config }) {
         createdAt: u.created_at,
       },
       sessions: auth.users.listSessions(u.id),
+      pendingEmailLinks: auth.users.listEmailTokens(u.id), // purpose + expiry only, never the token
       ratings: ratings.listByUser(u.id).map((r) => ({
         videoId: r.video_id,
         youtubeVideoId: r.youtube_video_id,

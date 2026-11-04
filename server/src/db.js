@@ -438,6 +438,8 @@ export function openDatabase(file = ":memory:", { seedCatalog = true, migrateTo 
   if (file !== ":memory:") fs.mkdirSync(path.dirname(file), { recursive: true });
   const db = new Database(file);
   db.pragma("journal_mode = WAL");
+  // RGPD erasure: overwrite deleted content instead of leaving it readable in free pages.
+  db.pragma("secure_delete = ON");
   db.pragma("busy_timeout = 5000");
   migrate(db, migrateTo);
   db.pragma("foreign_keys = ON");

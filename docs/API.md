@@ -91,7 +91,7 @@ again with a still-unverified e-mail replaces the pending password and invalidat
 
 | Method & path | Body | Success |
 |---|---|---|
-| `GET /api/me/export` | – | `200` JSON download (`Content-Disposition: attachment`) with the account and every rating |
+| `GET /api/me/export` | – | `200` JSON download (`Content-Disposition: attachment`) with the account, live sessions (expiry only), pending e-mail links (purpose + expiry only, never the token) and every rating |
 | `PATCH /api/me` | `{ displayName }` | `200 { user }` |
 | `DELETE /api/me` | `{ password }` | `204` — deletes the account, its sessions and its ratings; clears the cookie |
 
@@ -148,6 +148,10 @@ for local development (the verification link is also printed to the server conso
 | `email_tokens` | SHA-256 of the token, user id, expiry | verify email | used or expired (24 h) — purged automatically |
 | `ratings` | user id, video id, score, reaction | the rating feature | account deleted |
 | `rating_activity` | none — per-video daily counts with no user id (not personal data) | trending row | 30 days |
+
+Deleted rows are overwritten in the database file (`PRAGMA secure_delete`), and the write-ahead log is
+truncated after an account is deleted or purged, so erased accounts leave no readable copy behind.
+E-mail is only sent over TLS (implicit or mandatory STARTTLS).
 
 No IP addresses, user agents, analytics or third-party trackers are stored. The only cookie is
 the essential `sid` session cookie. Watch progress lives only in the browser's `localStorage`.

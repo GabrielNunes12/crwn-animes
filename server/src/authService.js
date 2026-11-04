@@ -1,6 +1,7 @@
 import { burnPasswordCheck, hashPassword, hashToken, needsRehash, newToken, verifyPassword } from "./crypto.js";
 import { HttpError } from "./errors.js";
 import { renderEmail } from "./mail.js";
+import { checkpoint } from "./retention.js";
 import { createUserRepository, toUser } from "./userRepository.js";
 
 const HOUR = 60 * 60 * 1000;
@@ -263,6 +264,7 @@ export function createAuthService({ db, config, mailer, now = () => new Date(), 
         beforeDeleteUser(userId);
         users.deleteUser(userId);
       })();
+      checkpoint(db); // RGPD erasure: no copy of the account left in the WAL
     },
 
     updateDisplayName(userId, displayName) {
