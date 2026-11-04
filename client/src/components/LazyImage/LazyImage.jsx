@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { sameOriginImage, sameOriginSrcSet } from "../../lib/images.js";
 import styles from "./LazyImage.module.css";
 
@@ -17,9 +17,10 @@ function initials(label = "") {
  * `srcSet` + `sizes` (docs/API.md v1.7: Video.thumbnailSrcSet) let the browser pick the
  * 320w or 480w file; the srcset is dropped unless every candidate is same-origin.
  * Lazy by default; `eager` (with fetchPriority="high") is for the one hero/poster image a
- * page shows first.
+ * page shows first. `onSettled` is called once the image has loaded or given way to the
+ * placeholder (the episode page waits for its poster before loading anything else, v1.7).
  */
-export function LazyImage({ src: rawSrc, srcSet: rawSrcSet, sizes, alt = "", ratio = "16 / 9", width = 480, height = 270, className = "", fallbackLabel = "", eager = false, fill = false, ...rest }) {
+export function LazyImage({ src: rawSrc, srcSet: rawSrcSet, sizes, alt = "", ratio = "16 / 9", width = 480, height = 270, className = "", fallbackLabel = "", eager = false, fill = false, onSettled, ...rest }) {
   const src = sameOriginImage(rawSrc);
   const srcSet = src ? sameOriginSrcSet(rawSrcSet) : null;
   const [state, setState] = useState("loading");
@@ -29,6 +30,10 @@ export function LazyImage({ src: rawSrc, srcSet: rawSrcSet, sizes, alt = "", rat
     setState("loading");
   }
   const failed = !src || state === "error";
+  const settled = failed || state === "loaded";
+  useEffect(() => {
+    if (settled) onSettled?.();
+  }, [settled, onSettled]);
 
   return (
     <span

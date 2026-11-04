@@ -14,9 +14,10 @@ const SAVE_EVERY_MS = 10_000;
  * YouTube player behind a thumbnail facade. The IFrame API script is only
  * requested after the user presses play (or opted into "Always load").
  * Mount with key={video.youtubeVideoId}. `persist={false}` (admin draft preview) never
- * writes watch progress.
+ * writes watch progress. `onPosterSettled` is called once the poster has loaded or failed, or
+ * right away when no poster is shown.
  */
-export function Player({ video, autoStart = false, onEnded, next, nextLabel, persist = true }) {
+export function Player({ video, autoStart = false, onEnded, next, nextLabel, persist = true, onPosterSettled }) {
   const { t } = useT();
   const id = video.youtubeVideoId;
   const [alwaysLoad, setAlwaysLoad] = useState(() => getBool(ALWAYS_LOAD_KEY));
@@ -156,6 +157,9 @@ export function Player({ video, autoStart = false, onEnded, next, nextLabel, per
   }
 
   const showFacade = phase !== "unplayable" && (!activated || phase === "loading" || phase === "idle");
+  useEffect(() => {
+    if (!showFacade) onPosterSettled?.();
+  }, [showFacade, onPosterSettled]);
 
   return (
     <div className={styles.wrap}>
@@ -164,7 +168,7 @@ export function Player({ video, autoStart = false, onEnded, next, nextLabel, per
 
         {showFacade && (
           <button type="button" className={styles.facade} onClick={play} aria-disabled={activated || undefined} aria-label={t("watch.play", { title: video.title })}>
-            <LazyImage src={video.thumbnailUrl} srcSet={video.thumbnailSrcSet} sizes={THUMB_SIZES.player} alt="" width={480} height={360} fill eager fetchPriority="high" className={styles.poster} fallbackLabel={video.seriesName ?? video.title} />
+            <LazyImage src={video.thumbnailUrl} srcSet={video.thumbnailSrcSet} sizes={THUMB_SIZES.player} alt="" width={480} height={360} fill eager fetchPriority="high" onSettled={onPosterSettled} className={styles.poster} fallbackLabel={video.seriesName ?? video.title} />
             <span className={styles.playIcon} aria-hidden="true">
               {activated ? <span className={styles.spinner} /> : <svg viewBox="0 0 24 24" width="36" height="36"><path d="M8 5v14l11-7z" fill="currentColor" /></svg>}
             </span>

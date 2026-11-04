@@ -1,4 +1,4 @@
-import { useDeferredValue, useState } from "react";
+import { startTransition, useEffect, useState } from "react";
 import { Link, useLoaderData, useNavigate } from "react-router";
 import { catalogApi } from "../../api/client.js";
 import { useAuth } from "../../auth/useAuth.js";
@@ -12,6 +12,7 @@ import { SITE_NAME, useMeta } from "../../hooks/useTitle.js";
 import { useT } from "../../i18n/useT.js";
 import { continueWatching, removeProgress } from "../../lib/progress.js";
 import { genreHref } from "../../lib/search.js";
+import { afterNextPaint } from "../../lib/schedule.js";
 import styles from "./Home.module.css";
 
 export { loader } from "./loader.js";
@@ -93,7 +94,7 @@ function SurpriseButton() {
 }
 
 /** The card rows and genres (each fails soft and shows its own placeholder while loading). */
-function HomeRows({ data, progress }) {
+function HomeRows({ rows: data, progress }) {
   const { t } = useT();
   return (
     <>
@@ -163,11 +164,12 @@ export function Component() {
   const { t } = useT();
   const progress = useProgressMap();
   useMeta({ title: `${SITE_NAME} · ${t("meta.homeTitle")}` });
-  // The hero (the page's largest paint) commits first; the card rows below it render in a
-  // second, interruptible pass — even when their data is already there — so one big render
-  // never delays the hero or blocks input (docs/API.md v1.7). Until then they show the same
-  // placeholders as while their data loads.
-  const rowsReady = useDeferredValue(true, false);
+  // The hero (the page's largest paint) commits and paints first; then the rows' data is
+  // requested and they render in an interruptible transition, so neither their requests nor
+  // one big render hold the hero back or block input (docs/API.md v1.7). Until then they show
+  // the same placeholders as while their data loads.
+  const [rows, setRows] = useState(null);
+  useEffect(() => afterNextPaint(() => startTransition(() => setRows(data.rows()))), [data]);
 
   return (
     <>
@@ -236,8 +238,8 @@ export function Component() {
 
       <ContinueRow />
 
-      {rowsReady ? (
-        <HomeRows data={data} progress={progress} />
+      {rows ? (
+        <HomeRows rows={rows} progress={progress} />
       ) : (
         <>
           <RowSkeleton />

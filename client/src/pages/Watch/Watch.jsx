@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useState } from "react";
+import { startTransition, useCallback, useEffect, useState } from "react";
 import { Link, Navigate, useLoaderData, useLocation, useNavigate } from "react-router";
 import { AsyncView } from "../../components/Await/AsyncView.jsx";
 import { Skeleton } from "../../components/Skeleton/Skeleton.jsx";
@@ -12,6 +12,7 @@ import { useTitle } from "../../hooks/useTitle.js";
 import { useT } from "../../i18n/useT.js";
 import { videoLabel } from "../../lib/format.js";
 import { THUMB_SIZES } from "../../lib/images.js";
+import { afterNextPaint } from "../../lib/schedule.js";
 import { watchMeta } from "../../lib/meta.js";
 import { AUTOPLAY_KEY, getBool, setBool } from "../../lib/prefs.js";
 import { entryCompleted, pruneSeriesProgress } from "../../lib/progress.js";
@@ -37,9 +38,18 @@ function WatchView({ section, video, series, prev, next, videos }) {
   const [theatre, setTheatre] = useState(false);
   const [autoplay, setAutoplay] = useState(() => getBool(AUTOPLAY_KEY, true));
   const [showAutoNext, setShowAutoNext] = useState(false);
-  // The player (its poster is the page's largest paint) and the titles commit first; the rating
-  // panel and the episode list follow in a second, interruptible pass (docs/API.md v1.7).
-  const restReady = useDeferredValue(true, false);
+  // The poster is the page's largest paint: the rating panel and the episode list (twelve
+  // thumbnails, a rating request) wait until it has loaded or failed and been painted, then
+  // render in an interruptible transition, so nothing competes with it (docs/API.md v1.7).
+  // Whatever happens to the poster, they show within 2 s.
+  const [posterSettled, setPosterSettled] = useState(false);
+  const [restReady, setRestReady] = useState(false);
+  const settlePoster = useCallback(() => setPosterSettled(true), []);
+  useEffect(() => {
+    const fallback = setTimeout(settlePoster, 2000);
+    return () => clearTimeout(fallback);
+  }, [settlePoster]);
+  useEffect(() => (posterSettled ? afterNextPaint(() => startTransition(() => setRestReady(true))) : undefined), [posterSettled]);
   const isManga = section === "manga";
   const label = videoLabel(t, video);
   useTitle(...watchMeta(t, video, series));
@@ -70,6 +80,7 @@ function WatchView({ section, video, series, prev, next, videos }) {
             key={video.youtubeVideoId}
             video={video}
             autoStart={Boolean(location.state?.autoplay)}
+            onPosterSettled={settlePoster}
             next={next}
             nextLabel={nextLabel}
             onEnded={() => {

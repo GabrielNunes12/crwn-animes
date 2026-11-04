@@ -1,14 +1,14 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { serviceWorkerPlugin } from "./scripts/vite-plugin-sw.js";
-import { fontPreloadPlugin } from "./scripts/vite-plugin-font-preload.js";
+import { preloadHintsPlugin } from "./scripts/vite-plugin-preload-hints.js";
 import { precompressPlugin } from "./scripts/vite-plugin-precompress.js";
 
 export default defineConfig({
   // serviceWorkerPlugin: dist/sw.js (docs/API.md v1.5), production builds only.
-  // fontPreloadPlugin: preloads the Latin font subset (docs/API.md v1.7), production builds only.
+  // preloadHintsPlugin: Latin font subset, catalog chunk and visitor's dictionary preloads (v1.7).
   // precompressPlugin: .br/.gz next to every compressible file the server sends (v1.7), last.
-  plugins: [react(), serviceWorkerPlugin(), fontPreloadPlugin(), precompressPlugin()],
+  plugins: [react(), serviceWorkerPlugin(), preloadHintsPlugin(), precompressPlugin()],
   server: {
     port: 5173,
     strictPort: true,
