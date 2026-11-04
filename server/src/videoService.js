@@ -18,6 +18,14 @@ export async function mapLimit(items, limit, worker) {
   return results;
 }
 
+/** 409 for a YouTube video stored already (a trashed one too: restore it instead). */
+const alreadyAdded = (video) =>
+  new HttpError(
+    409,
+    video.deletedAt ? "This video is in the trash; restore it instead." : "This video was already added.",
+    { video }
+  );
+
 /** oEmbed answers that mean "this video will never play on our site". */
 const isGone = (error) => error instanceof HttpError && (error.status === 404 || error.status === 422);
 
@@ -63,7 +71,7 @@ export function createVideoService({ repo, fetchVideoInfo }) {
     if (!youtubeVideoId) throw validationError({ url: "That is not a YouTube link or video ID." }, "That is not a YouTube link or video ID.");
 
     const existing = repo.getVideoByYoutubeId(youtubeVideoId);
-    if (existing) throw new HttpError(409, "This video was already added.", { video: existing });
+    if (existing) throw alreadyAdded(existing);
 
     // A title sent by hand skips the YouTube lookup (useful offline and in tests).
     const info = title ? { title, channel } : await fetchVideoInfo(youtubeVideoId);
@@ -71,12 +79,12 @@ export function createVideoService({ repo, fetchVideoInfo }) {
     // Check again after the lookup: the same link may have been added meanwhile.
     // From here to the insert everything is synchronous, so nothing else interleaves.
     const added = repo.getVideoByYoutubeId(youtubeVideoId);
-    if (added) throw new HttpError(409, "This video was already added.", { video: added });
+    if (added) throw alreadyAdded(added);
     try {
       return repo.insertVideo({ youtubeVideoId, ...info, ...place(info.title, overrides) });
     } catch (error) {
       const owner = error.code === "SQLITE_CONSTRAINT_UNIQUE" && repo.getVideoByYoutubeId(youtubeVideoId);
-      if (owner) throw new HttpError(409, "This video was already added.", { video: owner });
+      if (owner) throw alreadyAdded(owner);
       throw error;
     }
   }
@@ -188,8 +196,51 @@ export function createVideoService({ repo, fetchVideoInfo }) {
       });
     },
 
+    /** Hard delete (ratings cascade). The admin API moves videos to the trash instead (src/trashService.js). */
     remove(id) {
       if (!repo.deleteVideo(id)) throw new HttpError(404, "Video not found.");
+    },
+
+    /**
+     * PUT /api/admin/series/:id/order. Optimistic concurrency: `expected` is the
+     * order the client loaded; if the season's current order (ids by number)
+     * differs, 409 with details.current. Then `videoIds` must be exactly the
+     * live published videos of that series/section/season (else 400). They get
+     * the numbers 1..n in that order. Check and renumber share one transaction
+     * (and run synchronously), so of two saves made from the same `expected`
+     * only the first wins. Returns the season's videos in their new order.
+     */
+    reorder(seriesId, { section, season, videoIds, expected }) {
+      return repo.transaction(() => {
+        const current = repo.listPublishedInSeries(seriesId, section, season);
+        const currentIds = current.map((video) => video.id);
+        if (expected.length !== currentIds.length || expected.some((id, i) => id !== currentIds[i])) {
+          throw new HttpError(409, "This season's order changed since you loaded it. Reload and try again.", {
+            current: currentIds,
+          });
+        }
+        const byId = new Map(current.map((video) => [video.id, video]));
+        const seen = new Set();
+        const duplicate = [];
+        const foreign = [];
+        for (const id of videoIds) {
+          if (seen.has(id)) duplicate.push(id);
+          else if (!byId.has(id)) foreign.push(id);
+          seen.add(id);
+        }
+        const missing = current.filter((video) => !seen.has(video.id)).map((video) => video.id);
+        const list = (values) => (values.length > 20 ? `${values.slice(0, 20).join(", ")}, …` : values.join(", "));
+        const problems = [];
+        if (duplicate.length) problems.push(`listed twice: ${list([...new Set(duplicate)])}`);
+        if (foreign.length) problems.push(`not published in this season: ${list(foreign)}`);
+        if (missing.length) problems.push(`missing: ${list(missing)}`);
+        if (problems.length) {
+          const message = `List every published video of this season exactly once (${problems.join("; ")}).`;
+          throw validationError({ videoIds: message }, message);
+        }
+        if (repo.renumber(videoIds.map((id) => byId.get(id))) === 0) return current;
+        return repo.listPublishedInSeries(seriesId, section, season);
+      });
     },
 
     /**

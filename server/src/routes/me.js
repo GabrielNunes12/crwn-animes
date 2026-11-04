@@ -36,8 +36,9 @@ export function meRoutes({ auth, ratings, config }) {
         videoId: r.video_id,
         youtubeVideoId: r.youtube_video_id,
         videoTitle: r.source_title,
+        // A video in the trash (kept, with its ratings, for 7 days) has no page.
         route:
-          r.status === "published"
+          r.status === "published" && !r.deleted_at
             ? videoRoute({ section: r.section, seriesSlug: r.series_slug, season: r.season, number: r.number })
             : null,
         score: r.score,

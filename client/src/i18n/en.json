@@ -476,7 +476,7 @@
         "name": "Ratings",
         "what": "Your user id, the video, your score (1–5) and optional reaction",
         "why": "The rating and reactions feature",
-        "until": "You remove the rating or delete your account"
+        "until": "You remove the rating or delete your account. If the video is moved to the trash, its ratings are kept for up to 7 more days and can’t be changed while it is there; then they are deleted with it."
       },
       "activity": {
         "name": "Rating activity (not personal data)",
@@ -558,7 +558,8 @@
       "bulk": "Bulk add",
       "pending": "Pending",
       "published": "Published",
-      "broken": "Broken"
+      "broken": "Broken",
+      "trash": "Trash"
     },
     "status": {
       "published": "Published",
@@ -567,6 +568,8 @@
     "auto": "Automatic",
     "open": "Open",
     "refresh": "Refresh",
+    "moveToTrash": "Move to trash",
+    "previewLink": "Preview",
     "unclassified": "Not classified yet",
     "chipsHint": "Press Enter or comma to add. Backspace removes the last one.",
     "scores": "Scores — anime {anime}, manga {manga}",
@@ -597,14 +600,14 @@
         "one": "{count} pending video was published.",
         "other": "{count} pending videos were published."
       },
-      "deleted": "Deleted {name}.",
+      "deleted": "Moved {name} to the trash.",
       "all": {
         "one": "{count} series",
         "other": "{count} series"
       },
       "none": "No series yet.",
-      "deleteTitle": "Delete {name}?",
-      "deleteText": "This deletes the series, all its videos and their ratings. It can't be undone.",
+      "deleteTitle": "Move {name} to the trash?",
+      "deleteText": "The series, all its videos and their ratings leave the site now and stay in the trash for 7 days — you can restore them from the Trash tab. After that they are deleted forever.",
       "episodes": {
         "one": "{count} episode",
         "other": "{count} episodes"
@@ -613,7 +616,8 @@
         "one": "{count} chapter",
         "other": "{count} chapters"
       },
-      "hidden": "Not on the site yet: no published episodes"
+      "hidden": "Not on the site yet: no published episodes",
+      "openBoard": "Open board"
     },
     "add": {
       "title": "Add a video",
@@ -627,7 +631,9 @@
       "resultEmpty": "Add a link to see how it gets classified.",
       "publishedMsg": "Published — it found its home.",
       "pendingMsg": "Pending — it needs a hand. Fix it in the Pending tab.",
-      "duplicate": "This video was already added. Here it is:"
+      "duplicate": "This video was already added. Here it is:",
+      "duplicateTrashed": "In the trash — restore it instead of adding it again.",
+      "openTrash": "Open the Trash"
     },
     "bulk": {
       "title": "Bulk add",
@@ -654,6 +660,7 @@
       "placement": "Placement",
       "details": "Details",
       "noLinks": "No YouTube links found in that text.",
+      "trashed": "In the trash — restore it.",
       "outcomes": {
         "created": "Created",
         "would-create": "Will be created",
@@ -681,9 +688,9 @@
       "saved": "Saved {title}.",
       "nowPublished": "Published {title} at {route}.",
       "nowPending": "{title} is pending again.",
-      "deleted": "Deleted {title}.",
-      "deleteTitle": "Delete this video?",
-      "deleteText": "“{title}” and its ratings will be deleted."
+      "deleted": "Moved {title} to the trash.",
+      "deleteTitle": "Move this video to the trash?",
+      "deleteText": "“{title}” leaves the site now and stays in the trash for 7 days with its ratings — you can restore it from the Trash tab. After that it is deleted forever."
     },
     "broken": {
       "title": {
@@ -720,6 +727,110 @@
       "next": "Next page",
       "pageOf": "Page {page} of {pages}",
       "pageSuffix": ", page {page} of {pages}"
+    },
+    "board": {
+      "kicker": "Series board",
+      "docTitle": "Board: {name}",
+      "back": "Back to admin",
+      "publicPage": "View public page",
+      "section": "Section",
+      "noVideos": "This series has no published episodes or chapters yet. Publish videos into it (Add video, Bulk add or Pending tabs) to arrange them here.",
+      "seasons": "Seasons",
+      "unsaved": "unsaved changes",
+      "listTitle": {
+        "anime": {
+          "one": "{count} episode",
+          "other": "{count} episodes"
+        },
+        "manga": {
+          "one": "{count} chapter",
+          "other": "{count} chapters"
+        }
+      },
+      "hint": "Drag by the ⠿ handle, use the Move up / Move down buttons or, with a row focused, Alt+↑ and Alt+↓. Saving renumbers them 1, 2, 3… in this order.",
+      "empty": "Nothing published here.",
+      "position": "Position {position}",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "moved": "{label} moved to position {position} of {total}",
+      "dragCancelled": "Move cancelled. {label} is back at position {position} of {total}",
+      "save": "Save order",
+      "discard": "Discard",
+      "dirty": "Order changed and not saved yet.",
+      "saved": {
+        "one": "Order saved: {count} item numbered.",
+        "other": "Order saved: numbered 1 to {count}."
+      },
+      "discarded": "Changes discarded.",
+      "stale": "The list changed since you opened it (another edit or another admin). It was reloaded keeping your order — check it and save again.",
+      "conflict": "Another admin saved a different order — check it and save again.",
+      "leaveTitle": "Leave without saving the order?",
+      "leaveText": "The new order hasn't been saved and will be lost.",
+      "leaveConfirm": "Leave without saving",
+      "notFound": "Series not found or in the trash",
+      "notFoundHint": "It may have been deleted or moved to the trash — trashed series can be restored from the Trash tab.",
+      "backToSeries": "Back to Series",
+      "editing": "Edit {label}"
+    },
+    "trash": {
+      "title": "Trash",
+      "hint": "Removed items stay here for 7 days, with their ratings, and are then deleted forever. While in the trash they are not shown on the site.",
+      "seriesTitle": {
+        "one": "{count} series",
+        "other": "{count} series"
+      },
+      "videosTitle": {
+        "one": "{count} video",
+        "other": "{count} videos"
+      },
+      "empty": "The trash is empty.",
+      "seriesEmpty": "No series in the trash.",
+      "videosEmpty": "No videos in the trash.",
+      "removed": "Moved to trash {when}",
+      "purgeIn": {
+        "one": "Deleted forever in {count} day",
+        "other": "Deleted forever in {count} days"
+      },
+      "purgeSoon": "Will be deleted soon",
+      "restore": "Restore",
+      "restoring": "Restoring…",
+      "deleteForever": "Delete forever",
+      "purgeTitle": "Delete “{name}” forever?",
+      "purgeSeriesText": {
+        "one": "The series, its {count} video in the trash and every rating will be deleted now. This can’t be undone.",
+        "other": "The series, its {count} videos in the trash and every rating will be deleted now. This can’t be undone."
+      },
+      "purgeVideoText": "The video and all its ratings will be deleted now. This can’t be undone.",
+      "purged": "Deleted “{name}” forever.",
+      "restoredSeries": "Restored the series {name}.",
+      "restoredSeriesPending": {
+        "one": "{count} video came back as pending — check the Pending tab.",
+        "other": "{count} videos came back as pending — check the Pending tab."
+      },
+      "restoredVideo": "Restored “{title}”.",
+      "restoredVideoPending": "“{title}” came back as pending: its slot was taken while it was in the trash. Fix it in the Pending tab.",
+      "restoreConflict": "This video can’t be restored while its series “{series}” is in the trash. Restore the series first.",
+      "restoreConflictNoName": "This video can’t be restored while its series is in the trash. Restore the series first."
+    },
+    "preview": {
+      "banner": "Draft preview",
+      "docTitle": "Preview: {title}",
+      "note": "Only admins can see this page. It is not indexed and has no ratings.",
+      "trashed": "In the trash",
+      "pendingWhy": "Why it is pending",
+      "backToBoard": "Back to the board",
+      "backToPending": "Back to Pending",
+      "backToTrash": "View in Trash",
+      "details": "Details",
+      "youtubeId": "YouTube ID",
+      "channel": "Channel",
+      "route": "Route",
+      "noRoute": "No route — not published",
+      "added": "Added",
+      "updated": "Updated",
+      "availability": "Availability",
+      "available": "Available on YouTube",
+      "none": "—"
     }
   },
   "genre": {

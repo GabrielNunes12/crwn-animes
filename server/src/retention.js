@@ -1,9 +1,12 @@
 // Deletes personal data we no longer need (see docs/API.md, "Personal data we keep"):
 // expired sessions and e-mail tokens, accounts never verified within 7 days,
-// and anonymous rating activity older than 30 days.
+// anonymous rating activity older than 30 days, and series/videos that have
+// been in the trash for 7 days (with their ratings).
 
 const DAY = 24 * 60 * 60 * 1000;
 const UNVERIFIED_TTL_MS = 7 * DAY;
+/** How long a trashed series/video (and its ratings) is kept before the purge. */
+export const TRASH_TTL_MS = 7 * DAY;
 const ACTIVITY_DAYS = 30;
 const HOUR = 60 * 60 * 1000;
 
@@ -33,11 +36,29 @@ export function purgeExpired(db, now = new Date()) {
   return result;
 }
 
+/**
+ * Deletes series and videos trashed at least 7 days before `now`, for good:
+ * their ratings, rating activity and per-video stats go with them (FK
+ * cascades; the aggregates already left them out while they were in the
+ * trash). A series takes every video it still has. Checkpoints the WAL when
+ * anything went, like an account deletion (ratings are personal data).
+ */
+export function purgeTrash(db, now = new Date()) {
+  const before = new Date(now.getTime() - TRASH_TTL_MS).toISOString();
+  const result = db.transaction(() => ({
+    series: db.prepare("DELETE FROM series WHERE deleted_at IS NOT NULL AND deleted_at <= ?").run(before).changes,
+    videos: db.prepare("DELETE FROM videos WHERE deleted_at IS NOT NULL AND deleted_at <= ?").run(before).changes,
+  }))();
+  if (result.series || result.videos) checkpoint(db);
+  return result;
+}
+
 /** Runs now and then every hour. The timer is unref'd so it never keeps the process alive. */
 export function startRetention(db, { intervalMs = HOUR } = {}) {
   const run = () => {
     try {
       purgeExpired(db);
+      purgeTrash(db);
     } catch (error) {
       console.error(`[retention] ${error.message}`);
     }

@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { Link } from "react-router";
 import { adminApi } from "../../api/client.js";
 import { ChipsInput } from "../../components/ChipsInput/ChipsInput.jsx";
 import { ConfirmDialog } from "../../components/ConfirmDialog/ConfirmDialog.jsx";
@@ -139,11 +140,14 @@ export function SeriesTab({ genres, reloadSeries, reloadKey }) {
                 <SeriesCounts counts={s.videoCounts} />
               </div>
               <div className="cluster">
+                <Link className="btn btn-sm btn-primary" to={`/admin/series/${s.id}`}>
+                  {t("admin.series.openBoard")}
+                </Link>
                 <button type="button" className="btn btn-sm" onClick={() => startEdit(s)}>
                   {t("common.edit")}
                 </button>
                 <button type="button" className="btn btn-sm btn-danger" onClick={() => setToDelete(s)}>
-                  {t("common.delete")}
+                  {t("admin.moveToTrash")}
                 </button>
               </div>
             </li>
@@ -155,6 +159,7 @@ export function SeriesTab({ genres, reloadSeries, reloadKey }) {
       <ConfirmDialog
         open={Boolean(toDelete)}
         title={t("admin.series.deleteTitle", { name: toDelete?.name ?? "" })}
+        confirmLabel={t("admin.moveToTrash")}
         busy={deleteState.busy}
         onConfirm={onDelete}
         onClose={() => {

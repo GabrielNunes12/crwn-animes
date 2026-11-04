@@ -13,6 +13,7 @@ import { loadSession } from "./middleware/session.js";
 import { createRatingService } from "./ratingService.js";
 import { createRepository } from "./repository.js";
 import { createSitemap, createTemplate, renderPage, resolvePage, robotsTxt } from "./seo.js";
+import { createTrashService } from "./trashService.js";
 import { adminRoutes } from "./routes/admin.js";
 import { authRoutes } from "./routes/auth.js";
 import { catalogRoutes } from "./routes/catalog.js";
@@ -79,10 +80,11 @@ export function createApp({ db, config: overrides = {}, mailer, fetchVideoInfo =
   const repo = createRepository(db);
   const videos = createVideoService({ repo, fetchVideoInfo });
   const ratings = createRatingService({ db });
+  const trash = createTrashService({ db, repo, videos });
   const auth = createAuthService({ db, config, mailer, beforeDeleteUser: ratings.removeAllForUser });
 
   const app = express();
-  app.locals.services = { repo, videos, auth, ratings, mailer, config };
+  app.locals.services = { repo, videos, trash, auth, ratings, mailer, config };
   app.set("trust proxy", parseTrustProxy(config.trustProxy)); // throws on "true"/garbage
   app.set("etag", "weak");
 
@@ -103,7 +105,7 @@ export function createApp({ db, config: overrides = {}, mailer, fetchVideoInfo =
 
   app.use("/api/auth", authRoutes({ auth, config }));
   app.use("/api/me", meRoutes({ auth, ratings, config }));
-  app.use("/api/admin", adminRoutes({ repo, videos }));
+  app.use("/api/admin", adminRoutes({ repo, videos, trash }));
   // The dev outbox only exists when e-mails are not really sent.
   if (!config.isProduction && !config.smtp) app.use("/api/dev", devRoutes({ mailer }));
   app.use("/api", ratingRoutes({ repo, ratings }));

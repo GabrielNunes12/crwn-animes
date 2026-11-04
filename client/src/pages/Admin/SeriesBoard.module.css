@@ -1,0 +1,184 @@
+@layer components {
+  .back {
+    display: inline-flex;
+    gap: 0.4em;
+    font-weight: 600;
+    font-size: var(--step--1);
+    margin-block-end: var(--space-4);
+  }
+  .head {
+    display: grid;
+    gap: var(--space-1);
+    margin-block-end: var(--space-5);
+  }
+  .kicker {
+    color: var(--muted);
+    font-size: var(--step--1);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .publicLink {
+    justify-self: start;
+    font-weight: 600;
+  }
+  .sectionBar {
+    margin-block-end: var(--space-4);
+  }
+  .panel {
+    padding-block-start: var(--space-2);
+  }
+  .dot {
+    display: inline-block;
+    inline-size: 0.5rem;
+    block-size: 0.5rem;
+    border-radius: 50%;
+    background: var(--warning);
+    flex: none;
+  }
+
+  /* Save / Discard: stays in view under the sticky header while scrolling a long list. */
+  .toolbar {
+    position: sticky;
+    inset-block-start: calc(var(--header-h) + var(--space-2));
+    z-index: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2) var(--space-4);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  .toolbar[data-dirty] {
+    border-color: var(--warning);
+    box-shadow: var(--shadow);
+  }
+  .dirtyNote {
+    font-size: var(--step--1);
+    font-weight: 600;
+  }
+
+  .list {
+    display: grid;
+    gap: var(--space-2);
+    padding: 0;
+  }
+  .row {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    /* Long seasons: skip layout/paint of rows far off screen (no JS virtualisation). */
+    content-visibility: auto;
+    contain-intrinsic-size: auto 5rem;
+    transition:
+      box-shadow var(--dur-fast),
+      border-color var(--dur-fast);
+  }
+  .row:focus-visible {
+    outline: 2px solid var(--secondary);
+    outline-offset: 2px;
+  }
+  .row[data-dragging] {
+    border-color: var(--primary);
+    box-shadow: var(--shadow-lift);
+    position: relative;
+    z-index: 1;
+    /* Keep the dragged row laid out even when content-visibility would skip it. */
+    content-visibility: visible;
+  }
+  .row[data-unavailable] .thumb {
+    opacity: 0.5;
+  }
+  .rowMain {
+    display: grid;
+    grid-template-columns: auto auto auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+  }
+  .handle {
+    display: grid;
+    place-items: center;
+    inline-size: 2rem;
+    block-size: 2.75rem;
+    border-radius: var(--radius-sm);
+    color: var(--muted);
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: grab;
+    /* Touch: the finger drags the row instead of scrolling the page. */
+    touch-action: none;
+    user-select: none;
+  }
+  .handle:hover {
+    background: var(--elevated);
+    color: var(--text);
+  }
+  .list[data-dragging],
+  .list[data-dragging] .handle {
+    cursor: grabbing;
+  }
+  .pos {
+    min-inline-size: 2.25rem;
+    padding: 0.2em 0.5em;
+    border-radius: var(--radius-pill);
+    background: var(--elevated);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+  }
+  .thumb {
+    inline-size: 6rem;
+    block-size: auto;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-radius: var(--radius-sm);
+    background: var(--skeleton);
+  }
+  .text {
+    display: grid;
+    gap: 0.15rem;
+    min-inline-size: 0;
+    justify-items: start;
+  }
+  .label {
+    font-weight: 700;
+  }
+  .title {
+    color: var(--muted);
+    font-size: var(--step--1);
+    overflow-wrap: anywhere;
+  }
+  .actions {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-2);
+  }
+  @media (min-width: 62rem) {
+    .rowMain {
+      grid-template-columns: auto auto auto minmax(0, 1fr) auto;
+    }
+    .actions {
+      grid-column: auto;
+      justify-content: flex-end;
+    }
+  }
+  @media (max-width: 30rem) {
+    .thumb {
+      display: none;
+    }
+    .rowMain {
+      grid-template-columns: auto auto minmax(0, 1fr);
+    }
+  }
+  .edit {
+    padding-block-start: var(--space-3);
+    border-block-start: 1px dashed var(--border-strong);
+  }
+}

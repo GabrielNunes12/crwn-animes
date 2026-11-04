@@ -11,9 +11,10 @@ const SAVE_EVERY_MS = 10_000;
 /**
  * YouTube player behind a thumbnail facade. The IFrame API script is only
  * requested after the user presses play (or opted into "Always load").
- * Mount with key={video.youtubeVideoId}.
+ * Mount with key={video.youtubeVideoId}. `persist={false}` (admin draft preview) never
+ * writes watch progress.
  */
-export function Player({ video, autoStart = false, onEnded, next, nextLabel }) {
+export function Player({ video, autoStart = false, onEnded, next, nextLabel, persist = true }) {
   const { t } = useT();
   const id = video.youtubeVideoId;
   const [alwaysLoad, setAlwaysLoad] = useState(() => getBool(ALWAYS_LOAD_KEY));
@@ -40,6 +41,7 @@ export function Player({ video, autoStart = false, onEnded, next, nextLabel }) {
     const mount = mountRef.current;
 
     const save = (ended = false) => {
+      if (!persist) return;
       try {
         if (!player?.getCurrentTime) return;
         const position = player.getCurrentTime();

@@ -27,7 +27,7 @@ export function createRatingService({ db, now = () => new Date() }) {
       WHERE video_id = @videoId AND day = @day`),
     byUser: db.prepare(`
       SELECT r.score, r.reaction, r.updated_at, v.id AS video_id, v.youtube_video_id, v.source_title,
-        v.section, v.season, v.number, v.status, s.slug AS series_slug
+        v.section, v.season, v.number, v.status, v.deleted_at, s.slug AS series_slug
       FROM ratings r JOIN videos v ON v.id = r.video_id LEFT JOIN series s ON s.id = v.series_id
       WHERE r.user_id = ? ORDER BY r.updated_at DESC`),
   };

@@ -252,8 +252,9 @@
       border-color var(--dur-fast),
       transform var(--dur-fast) var(--ease-out);
   }
-  a.chip:hover,
-  button.chip:hover {
+  /* :where() keeps hover at .chip's specificity, so a pressed/current chip keeps its
+     on-accent text and fill on hover (dark-mode hover used to give text 2.6:1). */
+  :where(a.chip, button.chip):hover {
     color: var(--text);
     border-color: var(--primary);
     transform: translateY(-1px);
@@ -262,7 +263,8 @@
   .chip[aria-pressed="true"],
   .chip.is-active {
     background: var(--primary-fill);
-    border-color: transparent;
+    /* ≥ 3:1 against the page in both themes (the pink fill alone is 2.8:1 on the light page). */
+    border-color: var(--primary);
     color: var(--on-accent);
   }
 

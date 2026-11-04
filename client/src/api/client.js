@@ -157,5 +157,34 @@ export const adminApi = {
   bulk: (data) => post("/admin/videos/bulk", data),
   healthCheck: () => post("/admin/videos/health-check"),
   updateVideo: (id, data) => apiFetch(`/admin/videos/${enc(id)}`, { method: "PATCH", body: data }),
+  /** v1.4: moves the video to the 7-day trash (204). */
   deleteVideo: (id) => apiFetch(`/admin/videos/${enc(id)}`, { method: "DELETE" }),
+
+  // v1.4 — series board, trash, draft preview
+  /**
+   * GET /api/admin/series/:id → { series (with videoCounts), sections: { anime, manga } }, each
+   * section `{ seasons, videos }` = exactly the set PUT …/order expects. 404 when unknown or trashed.
+   */
+  board: (id, opts) => apiFetch(`/admin/series/${enc(id)}`, opts),
+  /**
+   * PUT /api/admin/series/:id/order → { videos } (numbers become 1..n in this order).
+   * `expected` = the order last loaded from the board; another admin's save in between → 409
+   * CONFLICT with `details.current`, and nothing changes.
+   */
+  reorder: (seriesId, { section, season, videoIds, expected }) =>
+    apiFetch(`/admin/series/${enc(seriesId)}/order`, {
+      method: "PUT",
+      body: { section, season: section === "manga" ? 1 : Number(season), videoIds, expected },
+    }),
+  /** GET /api/admin/videos/:id/preview → { video, series } (pending and trashed included). */
+  preview: (videoId, opts) => apiFetch(`/admin/videos/${enc(videoId)}/preview`, opts),
+  /** GET /api/admin/trash → { series: TrashedSeries[], videos: TrashedVideo[] } */
+  trash: (opts) => apiFetch("/admin/trash", opts),
+  /** → { series, published, pending } */
+  restoreSeries: (id) => post(`/admin/trash/series/${enc(id)}/restore`),
+  /** → { video }; 409 CONFLICT while its series is still in the trash. */
+  restoreVideo: (id) => post(`/admin/trash/videos/${enc(id)}/restore`),
+  /** Delete forever (204), ratings included. */
+  purgeSeries: (id) => apiFetch(`/admin/trash/series/${enc(id)}`, { method: "DELETE" }),
+  purgeVideo: (id) => apiFetch(`/admin/trash/videos/${enc(id)}`, { method: "DELETE" }),
 };

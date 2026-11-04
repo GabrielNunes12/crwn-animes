@@ -1,8 +1,10 @@
 // Usage: node src/scripts/bench-admin-lists.js [videoCount=50000]
 // Builds a throwaway database (temp file, WAL) with `videoCount` videos over
-// 1,000 series and some ratings, then times the paginated list endpoints over
-// real HTTP (admin session) and prints p50/p95 per request. Nothing touches
-// the configured database.
+// 1,000 series and some ratings, then times the paginated list endpoints and
+// /api/search over real HTTP (admin session) and prints p50/p95 per request.
+// When the schema has the v1.4 trash (videos.deleted_at), 1% of the videos and
+// 10 series (with their videos) are moved to the trash first, so the lists
+// also have to skip trashed rows. Nothing touches the configured database.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -60,10 +62,16 @@ db.transaction(() => {
   }
   db.prepare("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, 1, '2999-01-01T00:00:00.000Z')").run(hashToken("bench"));
 })();
+const app = createApp({ db, config: { nodeEnv: "test", isProduction: false, rateLimit: { max: 1e9, windowMs: 60_000 } } });
+const hasTrash = db.prepare("SELECT 1 FROM pragma_table_info('videos') WHERE name = 'deleted_at'").get();
+if (hasTrash) {
+  const { trash } = app.locals.services;
+  for (let id = 101; id <= VIDEOS; id += 100) trash.trashVideo(id);
+  for (let id = 990; id < 1000; id++) trash.trashSeries(id);
+}
 db.exec("ANALYZE");
 console.timeEnd("seed");
 
-const app = createApp({ db, config: { nodeEnv: "test", isProduction: false, rateLimit: { max: 1e9, windowMs: 60_000 } } });
 const server = await new Promise((resolve) => {
   const s = app.listen(0, "127.0.0.1", () => resolve(s));
 });
@@ -85,6 +93,12 @@ const cases = [
   "/api/admin/videos?availability=unavailable&status=published&q=naruto",
   "/api/admin/series?q=magica&offset=50",
   "/api/latest?section=manga&offset=5000",
+  "/api/search", // browse everything, A-Z
+  "/api/search?q=pokemon",
+  "/api/search?q=pokemon&sort=top",
+  "/api/search?sort=new&offset=500",
+  "/api/search?q=alias%2099&section=manga",
+  "/api/search?genre=a%C3%A7%C3%A3o&sort=top&offset=100",
 ];
 
 const pct = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)];
@@ -108,7 +122,7 @@ for (const url of cases) {
     p95: pct(times, 95).toFixed(1),
   });
 }
-console.log(`${VIDEOS} videos, ${SERIES} series, ${RUNS} sequential requests each (ms):`);
+console.log(`${VIDEOS} videos, ${SERIES} series${hasTrash ? " (1% of videos + 10 series in the trash)" : ""}, ${RUNS} sequential requests each (ms):`);
 console.table(results);
 
 server.close();

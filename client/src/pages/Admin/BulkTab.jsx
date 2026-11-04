@@ -28,6 +28,7 @@ export function BulkResults({ results, preview }) {
           {results.map((row, i) => {
             const p = row.preview ?? row.video ?? {};
             const route = rowRoute(row);
+            const trashed = row.outcome === "duplicate" && Boolean(row.video?.deletedAt);
             return (
               <tr key={`${row.input}-${i}`} data-outcome={row.outcome}>
                 <td className={styles.inputCell}>
@@ -35,6 +36,12 @@ export function BulkResults({ results, preview }) {
                 </td>
                 <td>
                   <span className={`badge ${styles[`outcome-${row.outcome}`] ?? ""}`}>{t(`admin.bulk.outcomes.${row.outcome}`)}</span>
+                  {trashed && (
+                    <>
+                      {" "}
+                      <span className={`badge ${styles.trashed}`}>{t("admin.preview.trashed")}</span>
+                    </>
+                  )}
                 </td>
                 <td>
                   {p.section ? (
@@ -43,7 +50,7 @@ export function BulkResults({ results, preview }) {
                       {p.seriesSlug ? ` · ${p.seriesSlug}` : ""}
                       {p.season > 1 ? ` · S${p.season}` : ""}
                       {p.number != null ? ` · #${p.number}` : ""}
-                      {p.status && <span className="hint"> ({t(`admin.status.${p.status}`)})</span>}
+                      {p.status && !trashed && <span className="hint"> ({t(`admin.status.${p.status}`)})</span>}
                     </>
                   ) : (
                     <span className="hint">—</span>
@@ -58,6 +65,11 @@ export function BulkResults({ results, preview }) {
                   {row.message && locale === "en" && <p>{row.message}</p>}
                   {row.preview?.reasons?.length > 0 && <p className="hint">{row.preview.reasons.join("; ")}</p>}
                   {row.video?.title && <p className="hint">{row.video.title}</p>}
+                  {trashed && (
+                    <p>
+                      {t("admin.bulk.trashed")} <Link to="/admin?tab=trash">{t("admin.add.openTrash")}</Link>
+                    </p>
+                  )}
                 </td>
               </tr>
             );

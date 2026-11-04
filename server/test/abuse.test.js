@@ -351,6 +351,8 @@ describe("2. races between concurrent requests", () => {
       const after = await Promise.all(storm);
       assert.equal(after[0].status, 204);
       assert.ok(after.slice(1).every((r) => r.status === 200 || r.status === 404));
+      // v1.4: DELETE moves it to the trash (ratings kept 7 days); deleting it forever removes them.
+      assert.equal((await admin.del(`/api/admin/trash/videos/${a.id}`)).status, 204);
       assert.equal(srv.db.prepare("SELECT COUNT(*) AS n FROM ratings WHERE video_id = ?").get(a.id).n, 0);
       assert.equal(srv.db.prepare("SELECT COUNT(*) AS n FROM rating_activity WHERE video_id = ?").get(a.id).n, 0);
       assertRatingsConsistent(srv.db, "after delete");
@@ -487,7 +489,7 @@ describe("2. races between concurrent requests", () => {
       const [patched, deleted] = await Promise.all([admin.patch(`/api/admin/videos/${v3.id}`, { url: vid(81) }), admin.del(`/api/admin/videos/${v3.id}`)]);
       assert.equal(deleted.status, 204);
       assert.ok([200, 404].includes(patched.status), String(patched.status));
-      assert.equal(srv.db.prepare("SELECT COUNT(*) AS n FROM videos WHERE id = ?").get(v3.id).n, 0);
+      assert.equal(srv.db.prepare("SELECT COUNT(*) AS n FROM videos WHERE id = ? AND deleted_at IS NULL").get(v3.id).n, 0, "in the trash");
     }));
 
   test("concurrent series creation with one slug (or names that slugify to it): one 201, the rest 409; renames to one slug: one wins", () =>

@@ -1,5 +1,6 @@
 import { seriesRoute, videoRoute } from "./routing.js";
 import { canonicalGenres, genreKey, genreSpellings, sortGenres } from "./genres.js";
+import { TRASH_TTL_MS } from "./retention.js";
 import { NEEDLE_MATCH, NEEDLE_RANK, searchNormalize, searchText } from "./search.js";
 
 const parseJson = (text, fallback) => {
@@ -22,6 +23,13 @@ export const ratingAverage = (average, count) => ({
   count: count ?? 0,
 });
 
+/** { deletedAt, purgeAt } of a trashed row (v1.4 trash), {} for a live one. */
+const trashFields = (row) =>
+  row.deleted_at
+    ? { deletedAt: row.deleted_at, purgeAt: new Date(Date.parse(row.deleted_at) + TRASH_TTL_MS).toISOString() }
+    : {};
+
+// Trashed series/videos (only admins ever see them) also carry deletedAt + purgeAt.
 function toSeries(row) {
   return {
     id: row.id,
@@ -31,6 +39,7 @@ function toSeries(row) {
     aliases: parseJson(row.aliases, []),
     genres: parseJson(row.genres, []),
     coverUrl: row.cover_url,
+    ...trashFields(row),
   };
 }
 
@@ -61,15 +70,17 @@ function toVideo(row) {
     overrides: parseJson(row.overrides, {}),
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
+    ...trashFields(row),
   };
-  video.route = video.status === "published" ? videoRoute(video) : null;
+  // A trashed video has no page (its status says what restoring brings back).
+  video.route = video.status === "published" && !row.deleted_at ? videoRoute(video) : null;
   return video;
 }
 
 /** Drops the admin-only fields. */
 export function publicVideo(video) {
   if (!video) return video;
-  const { classification, overrides, ...rest } = video;
+  const { classification, overrides, deletedAt, purgeAt, ...rest } = video;
   return rest;
 }
 
@@ -87,7 +98,7 @@ const SEARCH_SELECT = `
     ${NEEDLE_RANK} AS match_rank,
     COUNT(*) OVER () AS total
   FROM series_stats st JOIN series s ON s.id = st.series_id
-  WHERE (@section IS NULL OR st.section = @section) AND ${NEEDLE_MATCH}
+  WHERE (@section IS NULL OR st.section = @section) AND s.deleted_at IS NULL AND ${NEEDLE_MATCH}
     AND (@genre IS NULL OR EXISTS (SELECT 1 FROM json_each(s.genres) g WHERE g.value = @genre))`;
 
 // Fixed ORDER BY per sort (never built from user input). Ties end on name,
@@ -113,7 +124,10 @@ const VIDEO_SELECT = `
 // fixed fragments (never from user input) so each filter combination gets its
 // own prepared statement whose plan can use an index: "(@x IS NULL OR col = @x)"
 // would defeat it. Order: newest created first, id breaking ties, which the
-// videos_created / videos_status_created indexes serve without sorting.
+// videos_created / videos_status_created indexes serve without sorting. Both
+// are partial (WHERE deleted_at IS NULL, db.js migration 13): trashed videos
+// are never listed here, and the condition below is what lets the planner use them.
+const ADMIN_VIDEO_LIVE = "v.deleted_at IS NULL";
 const ADMIN_VIDEO_FILTERS = {
   status: "v.status = @status",
   availability: "v.availability = @availability",
@@ -129,18 +143,23 @@ const ADMIN_SERIES_SELECT = `
   SELECT s.*, COUNT(*) OVER () AS total,
     COALESCE((SELECT video_count FROM series_stats WHERE series_id = s.id AND section = 'anime'), 0) AS anime_count,
     COALESCE((SELECT video_count FROM series_stats WHERE series_id = s.id AND section = 'manga'), 0) AS manga_count
-  FROM series s WHERE ${NEEDLE_MATCH}`;
+  FROM series s WHERE s.deleted_at IS NULL AND ${NEEDLE_MATCH}`;
 
 export function createRepository(db) {
   const q = {
-    allSeries: db.prepare("SELECT * FROM series ORDER BY name COLLATE NOCASE"),
-    seriesNames: db.prepare("SELECT id, name FROM series ORDER BY id"),
+    // Live series only (the classifier never routes a video into the trash).
+    allSeries: db.prepare("SELECT * FROM series WHERE deleted_at IS NULL ORDER BY name COLLATE NOCASE"),
+    seriesNames: db.prepare("SELECT id, name FROM series WHERE deleted_at IS NULL ORDER BY id"),
     // Same matching as /api/search (search_text = name + aliases); name order, id breaks ties.
     adminSeriesPage: db.prepare(`${ADMIN_SERIES_SELECT}
       ORDER BY s.name COLLATE NOCASE, s.id LIMIT @limit OFFSET @offset`),
-    adminSeriesCount: db.prepare(`SELECT COUNT(*) AS n FROM series s WHERE ${NEEDLE_MATCH}`),
-    seriesBySlug: db.prepare("SELECT * FROM series WHERE slug = ?"),
-    seriesById: db.prepare("SELECT * FROM series WHERE id = ?"),
+    adminSeriesCount: db.prepare(`SELECT COUNT(*) AS n FROM series s WHERE s.deleted_at IS NULL AND ${NEEDLE_MATCH}`),
+    seriesBySlug: db.prepare("SELECT * FROM series WHERE slug = ? AND deleted_at IS NULL"),
+    seriesVideoCounts: db.prepare("SELECT section, video_count FROM series_stats WHERE series_id = ?"),
+    seriesById: db.prepare("SELECT * FROM series WHERE id = ? AND deleted_at IS NULL"),
+    // Including the trash: a trashed series keeps its slug reserved.
+    anySeriesBySlug: db.prepare("SELECT * FROM series WHERE slug = ?"),
+    anySeriesById: db.prepare("SELECT * FROM series WHERE id = ?"),
     insertSeries: db.prepare(`
       INSERT INTO series (slug, name, synopsis, aliases, genres, cover_url, search_text)
       VALUES (@slug, @name, @synopsis, @aliases, @genres, @coverUrl, @searchText)`),
@@ -155,7 +174,7 @@ export function createRepository(db) {
       SELECT s.*, st.video_count, st.rating_n AS rating_count,
         CASE WHEN st.rating_n > 0 THEN CAST(st.rating_sum AS REAL) / st.rating_n END AS rating_avg
       FROM series_stats st JOIN series s ON s.id = st.series_id
-      WHERE st.section = @section AND ${NEEDLE_MATCH}
+      WHERE st.section = @section AND s.deleted_at IS NULL AND ${NEEDLE_MATCH}
         AND (@genre IS NULL OR EXISTS (SELECT 1 FROM json_each(s.genres) g WHERE g.value = @genre))
       ORDER BY s.name COLLATE NOCASE, s.id`),
     search: Object.fromEntries(
@@ -172,49 +191,51 @@ export function createRepository(db) {
     // What reclassifying needs of each pending video (no joins, no rating lookups).
     pendingForReclassify: db.prepare(`
       SELECT id, source_title, section, series_id, season, number, status, classification, overrides
-      FROM videos WHERE status = 'pending' ORDER BY id`),
+      FROM videos WHERE status = 'pending' AND deleted_at IS NULL ORDER BY id`),
     seriesGenres: db.prepare("SELECT id, genres FROM series WHERE id IS NOT @excludeId ORDER BY id"),
     // Genres worth a page: series with a published video YouTube still serves.
     listedSeriesGenres: db.prepare(`
       SELECT s.id, s.genres FROM series s
-      WHERE EXISTS (SELECT 1 FROM videos v
-        WHERE v.series_id = s.id AND v.status = 'published' AND v.availability = 'ok')
+      WHERE s.deleted_at IS NULL AND EXISTS (SELECT 1 FROM videos v
+        WHERE v.series_id = s.id AND v.status = 'published' AND v.deleted_at IS NULL AND v.availability = 'ok')
       ORDER BY s.id`),
     // ---- server-rendered pages (src/seo.js) and the sitemap ----
     seriesSectionStats: db.prepare(`
       SELECT COUNT(*) AS video_count, MAX(published_at) AS latest_published_at FROM videos
-      WHERE status = 'published' AND series_id = ? AND section = ?`),
+      WHERE status = 'published' AND deleted_at IS NULL AND series_id = ? AND section = ?`),
     // Manga routes have no season: the lowest season wins if two share a number.
     publishedAt: db.prepare(`${VIDEO_SELECT}
-      WHERE v.status = 'published' AND v.series_id = @seriesId AND v.section = @section
+      WHERE v.status = 'published' AND v.deleted_at IS NULL AND v.series_id = @seriesId AND v.section = @section
         AND v.number = @number AND (@section = 'manga' OR v.season = @season)
       ORDER BY v.season LIMIT 1`),
     sitemapSeries: db.prepare(`
       SELECT s.slug, v.section, MAX(v.published_at) AS lastmod
       FROM videos v JOIN series s ON s.id = v.series_id
-      WHERE v.status = 'published' AND v.section IS NOT NULL
+      WHERE v.status = 'published' AND v.deleted_at IS NULL AND s.deleted_at IS NULL AND v.section IS NOT NULL
       GROUP BY s.id, v.section ORDER BY v.section, s.slug`),
     sitemapVideos: db.prepare(`
       SELECT s.slug AS series_slug, v.section, v.season, v.number, v.published_at, v.updated_at
       FROM videos v JOIN series s ON s.id = v.series_id
-      WHERE v.status = 'published' AND v.availability = 'ok' AND v.section IS NOT NULL AND v.number IS NOT NULL
+      WHERE v.status = 'published' AND v.deleted_at IS NULL AND s.deleted_at IS NULL AND v.availability = 'ok'
+        AND v.section IS NOT NULL AND v.number IS NOT NULL
       ORDER BY v.section, s.slug, v.season, v.number`),
     latestPublishedAt: db.prepare(`
-      SELECT MAX(published_at) AS at FROM videos WHERE status = 'published' AND (@section IS NULL OR section = @section)`),
+      SELECT MAX(published_at) AS at FROM videos
+      WHERE status = 'published' AND deleted_at IS NULL AND (@section IS NULL OR section = @section)`),
     sectionSummary: db.prepare(`
       SELECT section, COUNT(DISTINCT series_id) AS series_count, COUNT(*) AS video_count
-      FROM videos WHERE status = 'published' GROUP BY section`),
+      FROM videos WHERE status = 'published' AND deleted_at IS NULL GROUP BY section`),
     publishedInSeries: db.prepare(`${VIDEO_SELECT}
-      WHERE v.status = 'published' AND v.series_id = @seriesId AND v.section = @section
+      WHERE v.status = 'published' AND v.deleted_at IS NULL AND v.series_id = @seriesId AND v.section = @section
         AND (@season IS NULL OR v.season = @season)
       ORDER BY v.season, v.number`),
     // Served by the partial unique index videos_published_slot (series_id, section, season, ...).
     publishedSeasons: db.prepare(`
       SELECT DISTINCT season FROM videos
-      WHERE status = 'published' AND series_id = ? AND section = ?
+      WHERE status = 'published' AND deleted_at IS NULL AND series_id = ? AND section = ?
       ORDER BY season`).pluck(),
     latest: db.prepare(`${VIDEO_SELECT}
-      WHERE v.status = 'published' AND v.availability = 'ok'
+      WHERE v.status = 'published' AND v.deleted_at IS NULL AND v.availability = 'ok'
         AND (@section IS NULL OR v.section = @section)
       ORDER BY v.published_at DESC, v.id DESC LIMIT @limit OFFSET @offset`),
     // Bayesian average (C*m + sum) / (C + n): C = @c, m = site-wide mean (@m, from
@@ -224,7 +245,7 @@ export function createRepository(db) {
       WITH top AS (
         SELECT st.video_id, st.n, (@c * @m + st.total) / (@c + st.n) AS score
         FROM video_rating_stats st JOIN videos tv ON tv.id = st.video_id
-        WHERE st.n >= @minCount AND tv.status = 'published' AND tv.availability = 'ok'
+        WHERE st.n >= @minCount AND tv.status = 'published' AND tv.deleted_at IS NULL AND tv.availability = 'ok'
           AND (@section IS NULL OR tv.section = @section)
         ORDER BY score DESC, st.n DESC, st.video_id DESC
         LIMIT @limit
@@ -239,22 +260,27 @@ export function createRepository(db) {
       )
       ${VIDEO_SELECT}
       JOIN recent ON recent.video_id = v.id
-      WHERE v.status = 'published' AND v.availability = 'ok'
+      WHERE v.status = 'published' AND v.deleted_at IS NULL AND v.availability = 'ok'
         AND (@section IS NULL OR v.section = @section)
       ORDER BY recent.n DESC, v.published_at DESC, v.id DESC
       LIMIT @limit`),
     randomVideo: db.prepare(`${VIDEO_SELECT}
-      WHERE v.status = 'published' AND v.availability = 'ok'
+      WHERE v.status = 'published' AND v.deleted_at IS NULL AND v.availability = 'ok'
         AND (@section IS NULL OR v.section = @section)
       ORDER BY RANDOM() LIMIT 1`),
-    videoById: db.prepare(`${VIDEO_SELECT} WHERE v.id = ?`),
+    videoById: db.prepare(`${VIDEO_SELECT} WHERE v.id = ? AND v.deleted_at IS NULL`),
+    anyVideoById: db.prepare(`${VIDEO_SELECT} WHERE v.id = ?`),
+    // Including the trash: youtube_video_id stays unique.
     videoByYoutubeId: db.prepare(`${VIDEO_SELECT} WHERE v.youtube_video_id = ?`),
     videosFiltered: db.prepare(`${VIDEO_SELECT}
-      WHERE (@status IS NULL OR v.status = @status) AND (@availability IS NULL OR v.availability = @availability)
+      WHERE v.deleted_at IS NULL AND (@status IS NULL OR v.status = @status)
+        AND (@availability IS NULL OR v.availability = @availability)
       ORDER BY v.created_at DESC, v.id DESC`),
-    allVideoIds: db.prepare("SELECT id, youtube_video_id FROM videos ORDER BY id"),
+    // The health check skips the trash.
+    allVideoIds: db.prepare("SELECT id, youtube_video_id FROM videos WHERE deleted_at IS NULL ORDER BY id"),
     staleVideoIds: db.prepare(`
-      SELECT id, youtube_video_id FROM videos WHERE checked_at IS NULL OR checked_at < ? ORDER BY id`),
+      SELECT id, youtube_video_id FROM videos
+      WHERE (checked_at IS NULL OR checked_at < ?) AND deleted_at IS NULL ORDER BY id`),
     setAvailability: db.prepare(`
       UPDATE videos SET availability = @availability, checked_at = ${NOW_ISO} WHERE id = @id`),
     swapYoutubeId: db.prepare(`
@@ -263,7 +289,7 @@ export function createRepository(db) {
       WHERE id = @id`),
     slotOwner: db.prepare(`
       SELECT id FROM videos
-      WHERE status = 'published' AND series_id = @seriesId AND section = @section
+      WHERE status = 'published' AND deleted_at IS NULL AND series_id = @seriesId AND section = @section
         AND season = @season AND number = @number AND id IS NOT @excludeId`),
     insertVideo: db.prepare(`
       INSERT INTO videos (youtube_video_id, source_title, title_search, channel, section, series_id, season, number, status,
@@ -276,6 +302,40 @@ export function createRepository(db) {
         published_at = COALESCE(published_at, CASE WHEN @status = 'published' THEN ${NOW_ISO} END)
       WHERE id = @id`),
     deleteVideo: db.prepare("DELETE FROM videos WHERE id = ?"),
+
+    // ---- trash (v1.4). deleted_at is ISO 8601, like published_at. ----
+    trashSeries: db.prepare("UPDATE series SET deleted_at = @at WHERE id = @id AND deleted_at IS NULL"),
+    // Every live video of the series (any status/section) goes with it.
+    trashSeriesVideos: db.prepare(`
+      UPDATE videos SET deleted_at = @at, trashed_with_series = 1 WHERE series_id = @id AND deleted_at IS NULL`),
+    trashVideo: db.prepare(`
+      UPDATE videos SET deleted_at = @at, trashed_with_series = 0 WHERE id = @id AND deleted_at IS NULL`),
+    // Served by the partial indexes series_trashed / videos_trashed (deleted_at, id).
+    // video_count: every video of the series, i.e. what deleting it forever removes (FK
+    // cascade), including videos trashed on their own before it (also listed under videos).
+    trashedSeries: db.prepare(`
+      SELECT s.*, (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id) AS video_count
+      FROM series s WHERE s.deleted_at IS NOT NULL ORDER BY s.deleted_at DESC, s.id DESC`),
+    trashedVideos: db.prepare(`${VIDEO_SELECT}
+      WHERE v.deleted_at IS NOT NULL AND v.trashed_with_series = 0 ORDER BY v.deleted_at DESC, v.id DESC`),
+    trashedSeriesById: db.prepare("SELECT * FROM series WHERE id = ? AND deleted_at IS NOT NULL"),
+    trashedVideoById: db.prepare(`${VIDEO_SELECT} WHERE v.id = ? AND v.deleted_at IS NOT NULL`),
+    // Oldest published first: if two ever claim one slot, the older one keeps it.
+    videosTrashedWithSeries: db.prepare(`${VIDEO_SELECT}
+      WHERE v.series_id = ? AND v.deleted_at IS NOT NULL AND v.trashed_with_series = 1
+      ORDER BY v.published_at IS NULL, v.published_at, v.id`),
+    restoreVideo: db.prepare(`
+      UPDATE videos SET deleted_at = NULL, trashed_with_series = 0, status = @status, classification = @classification,
+        updated_at = datetime('now')
+      WHERE id = @id AND deleted_at IS NOT NULL`),
+    restoreSeries: db.prepare("UPDATE series SET deleted_at = NULL WHERE id = ? AND deleted_at IS NOT NULL"),
+    purgeSeries: db.prepare("DELETE FROM series WHERE id = ? AND deleted_at IS NOT NULL"),
+    purgeVideo: db.prepare("DELETE FROM videos WHERE id = ? AND deleted_at IS NOT NULL"),
+
+    // ---- reorder (PUT /api/admin/series/:id/order) ----
+    setNumber: db.prepare("UPDATE videos SET number = ? WHERE id = ?"),
+    renumber: db.prepare(`
+      UPDATE videos SET number = @number, overrides = @overrides, updated_at = datetime('now') WHERE id = @id`),
   };
 
   const placement = (p) => ({
@@ -335,10 +395,13 @@ export function createRepository(db) {
   const adminVideoStatement = (keys) => {
     const key = keys.join(",");
     if (!adminVideoStatements.has(key)) {
-      const where = keys.length ? `WHERE ${keys.map((k) => ADMIN_VIDEO_FILTERS[k]).join(" AND ")}` : "";
+      const where = `WHERE ${[ADMIN_VIDEO_LIVE, ...keys.map((k) => ADMIN_VIDEO_FILTERS[k])].join(" AND ")}`;
       adminVideoStatements.set(key, {
         page: db.prepare(`${VIDEO_SELECT} ${where} ORDER BY ${ADMIN_VIDEO_ORDER} LIMIT @limit OFFSET @offset`),
-        count: db.prepare(`SELECT COUNT(*) AS n FROM videos v ${where}`).pluck(),
+        // Unfiltered: every row minus the trash, so SQLite's btree count (no row visits) still applies.
+        count: keys.length
+          ? db.prepare(`SELECT COUNT(*) AS n FROM videos v ${where}`).pluck()
+          : db.prepare("SELECT (SELECT COUNT(*) FROM videos) - (SELECT COUNT(*) FROM videos WHERE deleted_at IS NOT NULL)").pluck(),
       });
     }
     return adminVideoStatements.get(key);
@@ -348,11 +411,14 @@ export function createRepository(db) {
     const row = q.videoById.get(id);
     return row ? toVideo(row) : null;
   };
+  const one = (row, map) => (row ? map(row) : null);
 
   return {
     /** Runs `fn` in one SQLite transaction (sync functions only). */
     transaction: (fn) => db.transaction(fn)(),
+    /** Live series (not in the trash), by name. */
     listSeries: () => q.allSeries.all().map(toSeries),
+    /** The live series with this slug, or null (a trashed one is not there). */
     getSeries: (slug) => {
       const row = q.seriesBySlug.get(slug);
       return row ? toSeries(row) : null;
@@ -361,6 +427,16 @@ export function createRepository(db) {
       const row = q.seriesById.get(id);
       return row ? toSeries(row) : null;
     },
+    /** { anime, manga }: live published videos per section (series_stats), as in the admin series list. */
+    seriesVideoCounts: (id) => {
+      const counts = { anime: 0, manga: 0 };
+      for (const row of q.seriesVideoCounts.all(id)) counts[row.section] = row.video_count;
+      return counts;
+    },
+    /** Live or trashed (then with deletedAt/purgeAt); null once purged. */
+    getAnySeriesById: (id) => one(q.anySeriesById.get(id), toSeries),
+    /** The series holding this slug, trashed ones included (their slug stays reserved), or null. */
+    seriesHoldingSlug: (slug) => one(q.anySeriesBySlug.get(slug), toSeries),
     createSeries: (series) => {
       const { lastInsertRowid } = q.insertSeries.run(seriesParams(series));
       return toSeries(q.seriesById.get(lastInsertRowid));
@@ -370,7 +446,7 @@ export function createRepository(db) {
       q.updateSeries.run({ id, ...seriesParams(series, id) });
       return toSeries(q.seriesById.get(id));
     },
-    /** Videos (and through them ratings) go with it: ON DELETE CASCADE. */
+    /** Hard delete. Videos (and through them ratings) go with it: ON DELETE CASCADE. */
     deleteSeries: (id) => q.deleteSeries.run(id).changes > 0,
     /** Bumped by triggers on every series/video change; keys in-memory caches. */
     catalogVersion: () => q.catalogVersion.get(),
@@ -485,7 +561,11 @@ export function createRepository(db) {
       const row = q.randomVideo.get({ section });
       return row ? toVideo(row) : null;
     },
+    /** A live video (published or pending), or null when unknown or in the trash. */
     getVideo,
+    /** Live or trashed (then with deletedAt/purgeAt); null once purged. */
+    getAnyVideo: (id) => one(q.anyVideoById.get(id), toVideo),
+    /** Live or trashed: a YouTube video can only be added once, the trash included. */
     getVideoByYoutubeId: (youtubeVideoId) => {
       const row = q.videoByYoutubeId.get(youtubeVideoId);
       return row ? toVideo(row) : null;
@@ -514,6 +594,55 @@ export function createRepository(db) {
       q.updateVideo.run({ id, ...placement(fields) });
       return getVideo(id);
     },
+    /** Hard delete (ratings cascade). The admin API trashes instead (src/trashService.js). */
     deleteVideo: (id) => q.deleteVideo.run(id).changes > 0,
+
+    // ---- trash (v1.4; the rules live in src/trashService.js) ----
+    /** Trashes a live series and every live video of it (same `at`); false when not live. */
+    trashSeries: (id, at) => {
+      if (q.trashSeries.run({ id, at }).changes === 0) return false;
+      q.trashSeriesVideos.run({ id, at });
+      return true;
+    },
+    /** false when the video is not live. */
+    trashVideo: (id, at) => q.trashVideo.run({ id, at }).changes > 0,
+    /**
+     * { series: TrashedSeries[], videos: TrashedVideo[] }, newest first. Videos trashed with their series
+     * are only counted under it (videoCount = every video its delete-forever removes); videos trashed on
+     * their own are listed, and counted under their series too when it is trashed later.
+     */
+    listTrash: () => ({
+      series: q.trashedSeries.all().map((row) => ({ ...toSeries(row), videoCount: row.video_count })),
+      videos: q.trashedVideos.all().map(toVideo),
+    }),
+    getTrashedSeries: (id) => one(q.trashedSeriesById.get(id), toSeries),
+    getTrashedVideo: (id) => one(q.trashedVideoById.get(id), toVideo),
+    /** Trashed videos that went to the trash with series `seriesId`, oldest published first. */
+    videosTrashedWithSeries: (seriesId) => q.videosTrashedWithSeries.all(seriesId).map(toVideo),
+    /** Brings a trashed video back with `status`/`classification` (a taken slot makes it pending). */
+    restoreVideo: (id, { status, classification }) =>
+      q.restoreVideo.run({ id, status, classification: JSON.stringify(classification ?? {}) }).changes > 0,
+    restoreSeries: (id) => q.restoreSeries.run(id).changes > 0,
+    /** Deletes a trashed series/video for good (ratings cascade); false when it is not in the trash. */
+    purgeTrashedSeries: (id) => q.purgeSeries.run(id).changes > 0,
+    purgeTrashedVideo: (id) => q.purgeVideo.run(id).changes > 0,
+
+    /**
+     * Gives `videos` ([{ id, number, overrides }], live published videos of one
+     * series/section/season) the numbers 1..n in that order and pins each one
+     * as overrides.number, so re-classifying never undoes it. Videos whose
+     * number changes are first moved to -n, so the unique published-slot index
+     * never sees two videos in one slot mid-way. Call inside a transaction.
+     */
+    renumber: (videos) => {
+      const changes = videos
+        .map((video, index) => ({ video, number: index + 1 }))
+        .filter(({ video, number }) => video.number !== number || video.overrides?.number !== number);
+      for (const { video, number } of changes) if (video.number !== number) q.setNumber.run(-number, video.id);
+      for (const { video, number } of changes) {
+        q.renumber.run({ id: video.id, number, overrides: JSON.stringify({ ...video.overrides, number }) });
+      }
+      return changes.length;
+    },
   };
 }
