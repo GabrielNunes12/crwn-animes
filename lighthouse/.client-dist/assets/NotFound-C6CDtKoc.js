@@ -1,1 +1,0 @@
-import{b as e,j as t,r as n}from"./index-BPFCGt5p.js";import{r}from"./useTitle-CtgY22_y.js";var i=t();function a(){let{t}=e();return r(t(`notFound.title`),t(`meta.notFound`)),(0,i.jsx)(n,{error:{status:404}})}export{a as Component};
