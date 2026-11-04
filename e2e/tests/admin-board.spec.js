@@ -3,10 +3,12 @@
 //   - /admin/series/:id: reorder a season by keyboard (Alt+↑/↓), by the row buttons and by
 //     dragging the ⠿ handle; "Salvar ordem" renumbers 1..n, which the public series page and
 //     the episode routes follow, and ratings stay with their video; leaving with unsaved
-//     changes asks first; "Descartar".
+//     changes asks first; "Descartar". A stale board's save is refused (expected order → 409) and
+//     local watch progress follows the video, not its old episode number.
 //   - DELETE is a soft delete: trashed items vanish from every public surface (series page,
 //     episode route, search, sitemap, aggregates) but wait in the "Lixeira" tab for 7 days with
-//     their ratings; "Restaurar" brings them back; "Apagar para sempre" removes them for good.
+//     their ratings; "Restaurar" brings them back; "Apagar para sempre" removes them for good;
+//     re-adding a trashed YouTube video says "Na lixeira — restaure-o".
 //   - /admin/preview/:id: an admin-only, noindex view of a draft (pending) video.
 //
 // Every test seeds its own series (unique name/slug), so the file is safe in parallel and
@@ -394,8 +396,8 @@ test.describe("series board", () => {
   });
 
   test("local watch progress follows the video, not the episode number, after a reorder", async ({ admin, browser, baseURL }) => {
-    // Lead note (cycle 4): the client patch that rewrites progress routes after a reorder had not landed when
-    // this was written. Before it, the finished episode's OLD route marks whichever video now holds that number.
+    // Progress is stored per YouTube ID together with the route it was watched at. After a reorder that
+    // old route belongs to another video: it must not mark that one as watched (cycle 4 review fix).
     const KEY = "crwn:progress:v1";
     const S = await seedBoardSeries(admin, "Marcado", [
       ["Ana", "anime", 1, 1],
@@ -755,7 +757,6 @@ test.describe("trash (Lixeira): edge cases", () => {
   });
 
   test("re-adding a YouTube video that is in the trash → 409 “restore it instead”, and Adicionar vídeo says “Na lixeira — restaure-o”", async ({ page, admin }) => {
-    // Lead note (cycle 4): the client alert for this case was being patched when this was written.
     const S = await seedBoardSeries(admin, "Readd", [["Um", "anime", 1, 1]]);
     const video = S.v.Um;
     expect((await admin.delete(`/api/admin/videos/${video.id}`)).status()).toBe(204);
