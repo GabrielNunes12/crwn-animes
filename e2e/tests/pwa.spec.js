@@ -494,13 +494,15 @@ test.describe("Cache Storage: search terms and “Limpar histórico” (v1.5 rev
     for (const url of searches) expect(url.searchParams.getAll("q").filter((q) => q.trim()), `${url.pathname}${url.search} keeps a search term on the device`).toEqual([]);
   });
 
-  test("“Limpar histórico” also deletes the offline catalog copy (crwn-api-*) and keeps the app shell", async ({ page }) => {
+  test("“Limpar histórico” also deletes the offline copy of catalog data and images (crwn-api-*, crwn-thumbs-*) and keeps the app shell", async ({ page }) => {
     await page.goto("/");
     await swControls(page);
     await page.goto(`/anime/${SERIES.slug}`);
     await expect(page.getByRole("heading", { level: 1, name: SERIES.name })).toBeVisible();
     const seriesData = `/api/anime/series/${SERIES.slug}`;
     await waitForCached(page, seriesData);
+    const thumbData = `/api/thumbs/${ep(1).youtubeVideoId}.jpg`;
+    await waitForCached(page, thumbData);
     // Some watch history, so the button is enabled.
     await page.evaluate((v) => localStorage.setItem("crwn:progress:v1", JSON.stringify({ [v.youtubeVideoId]: { t: 30, d: 100, at: Date.now() - 1000, route: v.route, title: v.title, thumb: null } })), ep(1));
     await page.goto("/account");
@@ -510,6 +512,8 @@ test.describe("Cache Storage: search terms and “Limpar histórico” (v1.5 rev
     const entries = await settledCacheEntries(page);
     const before = ["/api/latest", seriesData]; // cached on "/" and the series page; /account does not ask for them
     for (const e of entries.filter((x) => x.cache.startsWith("crwn-api-"))) expect(before, `${e.url} survived “Limpar histórico”`).not.toContain(new URL(e.url).pathname);
+    // /account shows no thumbnail, so nothing refills the image cache meanwhile.
+    expect(entries.filter((e) => e.cache.startsWith("crwn-thumbs-")).map((e) => e.url), "cached images are cleared too").toEqual([]);
     expect(entries.some((e) => e.cache.startsWith("crwn-shell-") && new URL(e.url).pathname === "/"), "the app shell stays (offline still works)").toBe(true);
     expect(await page.evaluate(() => localStorage.getItem("crwn:progress:v1"))).toBeNull();
   });
