@@ -16,7 +16,7 @@ import { createHash } from "node:crypto";
 import dns from "node:dns";
 import https from "node:https";
 import net from "node:net";
-import { IMAGE_TYPES, abortion, createImageSource, mediaType, sniffImageType, upstreamError } from "./imageCache.js";
+import { IMAGE_TYPES, abortion, createImageSource, deadline, mediaType, sniffImageType, upstreamError } from "./imageCache.js";
 import { isPublicAddress } from "./netPolicy.js";
 
 export const COVER_MAX_BYTES = 2 * 1024 * 1024;
@@ -133,12 +133,15 @@ export async function fetchCover(
 ) {
   const target = coverTarget(sourceUrl);
   if (!target) throw upstreamError();
-  const signal = AbortSignal.timeout(timeoutMs);
+  const timer = deadline(timeoutMs);
+  const { signal } = timer;
   try {
     const pinned = await Promise.race([resolvePublic(target.hostname, lookup), abortion(signal)]);
     return await Promise.race([download(target, pinned, { request, signal, maxBytes }), abortion(signal)]);
   } catch {
     throw upstreamError();
+  } finally {
+    timer.clear();
   }
 }
 

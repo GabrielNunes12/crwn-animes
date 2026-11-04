@@ -131,6 +131,10 @@ export default defineConfig({
         CLIENT_ORIGIN: baseURL,
         ADMIN_EMAILS: "admin@e2e.test",
         RATE_LIMIT_MAX: "100000",
+        // The per-IP limit on image cache misses (v1.5) is its own setting, not RATE_LIMIT_MAX:
+        // every e2e request comes from one loopback address, and a run loads hundreds of new
+        // thumbnails. Its 429 is tested on a private instance (pwa.spec.js).
+        IMAGE_MISS_RATE_MAX: "100000",
         SMTP_HOST: "",
         TRUST_PROXY: "",
         // Same-origin thumbnails (v1.5): fetched from the fake upstream (127.0.0.1 is in

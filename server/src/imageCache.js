@@ -58,6 +58,17 @@ export function sniffImageType(bytes) {
 /** "image/JPEG; charset=x" -> "image/jpeg". */
 export const mediaType = (header) => String(header ?? "").split(";")[0].trim().toLowerCase();
 
+/**
+ * An AbortSignal that fires after `ms`, and clear() to call once done. Unlike
+ * AbortSignal.timeout() its timer keeps the process alive, so the deadline holds
+ * even when nothing else is running (a script, a unit test).
+ */
+export function deadline(ms) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return { signal: controller.signal, clear: () => clearTimeout(timer) };
+}
+
 /** Rejects (502) once `signal` aborts, for code that might ignore it. Never an unhandled rejection. */
 export function abortion(signal) {
   const promise = new Promise((resolve, reject) => {

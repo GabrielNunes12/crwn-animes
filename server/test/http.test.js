@@ -7,7 +7,7 @@ import { addVideo, lastEmail, signUp, startServer, tokenFrom } from "./helpers.j
 
 const EXPECTED_CSP =
   "default-src 'self';script-src 'self' https://www.youtube.com https://s.ytimg.com;" +
-  "frame-src https://www.youtube-nocookie.com https://www.youtube.com;img-src 'self' data: https:;" +
+  "frame-src https://www.youtube-nocookie.com https://www.youtube.com;img-src 'self' data:;" +
   "style-src 'self' 'unsafe-inline';font-src 'self';connect-src 'self';object-src 'none';base-uri 'self';" +
   "frame-ancestors 'none';form-action 'self';worker-src 'self';manifest-src 'self'";
 

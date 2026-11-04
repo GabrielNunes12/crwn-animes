@@ -177,7 +177,7 @@ describe("GET /api/thumbs/:id.jpg", () => {
       const res = await get(other, thumb(vid(1)));
       assert.equal(res.status, 200);
       assert.deepEqual(res.body, fakeJpeg(vid(1)));
-      assert.equal(other.services.thumbnails.stats().files, cacheFiles(srv.thumbDir).length, "indexed from the directory");
+      assert.equal(other.services.images.stats().files, cacheFiles(srv.thumbDir).length, "indexed from the directory");
     } finally {
       await other.close(); // the directory is the first server's: not removed
     }
@@ -249,6 +249,7 @@ describe("GET /api/thumbs/:id.jpg", () => {
     const printed = await captureConsole(async () => {
       for (const [name, respond] of cases) {
         up.respond = respond;
+        srv.services.images.thumbnails.forgetFailures(); // each case is a fresh attempt (failure memory: below)
         const before = up.calls.length;
         const started = Date.now();
         const res = await get(srv, thumb(vid(2)));
@@ -257,7 +258,7 @@ describe("GET /api/thumbs/:id.jpg", () => {
         assert.doesNotMatch(res.json.error.message, /ytimg|youtube|vid0000/i, `${name}: no upstream detail`);
         assert.equal(res.headers.get("cache-control"), "private, no-store", name);
         assert.match(res.headers.get("content-type"), /^application\/json/, name);
-        assert.equal(up.calls.length, before + 1, `${name}: one attempt, failures are not cached`);
+        assert.equal(up.calls.length, before + 1, `${name}: one attempt, nothing cached`);
         assert.ok(Date.now() - started < TIMEOUT_MS + 1500, `${name}: answered in time`);
         assert.deepEqual(cacheFiles(srv.thumbDir).filter((f) => f.startsWith(vid(2))), [], `${name}: nothing on disk`);
         if (respond === endless) {
@@ -278,8 +279,9 @@ describe("GET /api/thumbs/:id.jpg", () => {
     assert.equal(limit.body.length, THUMB_MAX_BYTES);
     assert.equal(fs.statSync(path.join(srv.thumbDir, `${vid(5)}.jpg`)).size, THUMB_MAX_BYTES);
 
-    // And the failing ID works as soon as YouTube does.
+    // And the failing ID works once its failure is forgotten (10 minutes) and YouTube delivers.
     up.respond = (url) => jpegResponse(idOf(url));
+    srv.services.images.thumbnails.forgetFailures();
     assert.equal((await get(srv, thumb(vid(2)))).status, 200);
   });
 
@@ -312,7 +314,10 @@ describe("GET /api/thumbs/:id.jpg", () => {
     assert.deepEqual((await Promise.all(failed)).map((r) => r.status), Array(6).fill(502));
     assert.equal(up.calls.length, start + 1, "6 requests, 1 upstream fetch");
     up.respond = (url) => jpegResponse(idOf(url));
-    assert.equal((await get(srv, thumb(vid(102)))).status, 200, "the next request tries again");
+    assert.equal((await get(srv, thumb(vid(102)))).status, 502, "remembered: no new attempt for 10 minutes");
+    assert.equal(up.calls.length, start + 1);
+    srv.services.images.thumbnails.forgetFailures();
+    assert.equal((await get(srv, thumb(vid(102)))).status, 200, "then it tries again");
     assert.equal(up.calls.length, start + 2);
   });
 
@@ -335,7 +340,7 @@ describe("GET /api/thumbs/:id.jpg", () => {
     await sleep(40);
     assert.equal(holds.length, 4, "no fifth fetch while 4 are going");
     assert.deepEqual(
-      (({ inFlight, queued }) => ({ inFlight, queued }))(srv.services.thumbnails.stats()),
+      (({ inFlight, queued }) => ({ inFlight, queued }))(srv.services.images.thumbnails.stats()),
       { inFlight: 4, queued: 6 }
     );
     for (let released = 0; released < ids.length; released++) {
@@ -348,7 +353,7 @@ describe("GET /api/thumbs/:id.jpg", () => {
     assert.equal(up.calls.length - before, ids.length);
     assert.equal(peak, 4, "never more than 4 at once");
     assert.deepEqual(
-      (({ inFlight, queued }) => ({ inFlight, queued }))(srv.services.thumbnails.stats()),
+      (({ inFlight, queued }) => ({ inFlight, queued }))(srv.services.images.thumbnails.stats()),
       { inFlight: 0, queued: 0 }
     );
     up.respond = (url) => jpegResponse(idOf(url));
@@ -545,7 +550,7 @@ describe("cached thumbnails of videos deleted for good are removed", () => {
   test("delete forever (video, series), the 7-day purge, and the retention job's prune of unused files", async () => {
     const srv = await startServer();
     try {
-      const { trash, repo, thumbnails } = srv.services;
+      const { trash, repo, images } = srv.services;
       const admin = quickUser(srv, "admin@example.com", "admin").client;
       const v = {};
       for (const [n, title] of [
@@ -579,9 +584,9 @@ describe("cached thumbnails of videos deleted for good are removed", () => {
       trash.trashVideo(v[2].id);
       srv.db.prepare("UPDATE videos SET deleted_at = ? WHERE id = ?").run(new Date(Date.now() - 8 * DAY).toISOString(), v[2].id);
       const removed = [];
-      assert.deepEqual(purgeTrash(srv.db, new Date(), { onPurged: (ids) => removed.push(...ids) }), { series: 0, videos: 1 });
-      assert.deepEqual(removed, [vid(2)]);
-      thumbnails.remove(removed);
+      assert.deepEqual(purgeTrash(srv.db, new Date(), { onPurged: (gone) => removed.push(gone) }), { series: 0, videos: 1 });
+      assert.deepEqual(removed, [{ youtubeIds: [vid(2)], seriesIds: [] }]);
+      images.purge(removed[0]);
       assert.deepEqual(cacheFiles(srv.thumbDir), [5, 6].map(file));
 
       // An admin points a video at another upload: the old ID's file is pruned by the hourly job.
@@ -589,11 +594,11 @@ describe("cached thumbnails of videos deleted for good are removed", () => {
       assert.equal((await get(srv, thumb(vid(5)))).status, 404, "the old ID is no video any more");
       trash.trashVideo(v[6].id);
       srv.db.prepare("UPDATE videos SET deleted_at = ? WHERE id = ?").run(new Date(Date.now() - 8 * DAY).toISOString(), v[6].id);
-      startRetention(srv.db, { intervalMs: 3_600_000, thumbnails })(); // runs once now, then stopped
+      startRetention(srv.db, { intervalMs: 3_600_000, images })(); // runs once now, then stopped
       assert.equal(repo.getAnyVideo(v[6].id), null, "purged by the job");
       assert.deepEqual(cacheFiles(srv.thumbDir), [], "purged video's file and the swapped-out upload's file are gone");
-      assert.deepEqual(thumbnails.stats().files, 0);
-      assert.equal(thumbnails.stats().bytes, 0);
+      assert.deepEqual(images.stats().files, 0);
+      assert.equal(images.stats().bytes, 0);
     } finally {
       await srv.close();
     }
@@ -629,7 +634,8 @@ describe("Video.thumbnailUrl is same-origin everywhere (v1.5)", () => {
         if (Array.isArray(node)) return node.forEach((n) => walk(n, where));
         if (!node || typeof node !== "object") return;
         if ("youtubeVideoId" in node) {
-          assert.equal(node.thumbnailUrl, `/api/thumbs/${node.youtubeVideoId}.jpg`, where);
+          // A trashed video (admin trash, preview) has none: the client shows its placeholder.
+          assert.equal(node.thumbnailUrl, node.deletedAt ? null : `/api/thumbs/${node.youtubeVideoId}.jpg`, where);
           seen++;
         }
         Object.values(node).forEach((n) => walk(n, where));

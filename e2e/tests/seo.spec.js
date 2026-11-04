@@ -210,9 +210,6 @@ test.describe("server-rendered SEO head", () => {
   });
 
   test("robots.txt (v1.5 review fix): Allow /api/thumbs/ and /api/covers/ before Disallow /api/, so crawlers can read og:image", async ({ request }) => {
-    // PENDING server patch (docs/API.md v1.5 "Review fixes"): robotsTxt() still has no Allow lines.
-    // Remove this test.fail() once server/src/seo.js robotsTxt() adds them.
-    test.fail();
     const lines = (await (await request.get(`${API_ORIGIN}/robots.txt`)).text()).split("\n").map((l) => l.trim());
     const disallowApi = lines.indexOf("Disallow: /api/");
     expect(disallowApi).toBeGreaterThan(-1);

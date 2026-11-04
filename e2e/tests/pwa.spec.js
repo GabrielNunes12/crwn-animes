@@ -9,7 +9,7 @@
 // The update flow needs a second build. Instead of rebuilding, a tiny reverse proxy in front of the
 // API origin (its own port, so its own origin and registration) starts serving /sw.js with a new
 // build id, exactly what a deploy changes; the browser's own update check then finds it.
-import { chromium } from "@playwright/test";
+import { chromium, request as playwrightRequest } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import http from "node:http";
 import {
@@ -29,7 +29,9 @@ import {
   seedSeries,
   uniqueEmail,
   upstreamHits,
+  THUMB_UPSTREAM,
 } from "./fixtures.js";
+import { startPrivateApi } from "./security/helpers.js";
 
 test.use({ serviceWorkers: "allow" });
 
@@ -623,19 +625,35 @@ test.describe("same-origin thumbnails", () => {
   });
 
   test("a failed upstream fetch is remembered (v1.5 review fix): repeat requests answer 502 without asking upstream again", async ({ request, admin }) => {
-    // PENDING server patch (docs/API.md v1.5 "Review fixes": failure memory, 10 min per id).
-    // Remove this test.fail() once server/src/thumbnails.js remembers failures.
-    test.fail();
     const id = fakeYouTubeId("upFail");
     await ensureVideo(admin, { youtubeId: id, title: `Thumb fail memory ${id}` });
     for (let i = 0; i < 3; i++) expect((await request.get(`${API_ORIGIN}/api/thumbs/${id}.jpg`)).status(), `request ${i + 1}`).toBe(502);
     expect(await upstreamHits(request, id), "one upstream attempt, then the failure is remembered").toBe(1);
   });
 
+  test("cache misses are rate-limited per IP (private instance, IMAGE_MISS_RATE_MAX=3): 429 + Retry-After; cached images and 404s do not count", async ({}, testInfo) => {
+    const api = await startPrivateApi({ ADMIN_EMAILS: ADMIN.email, IMAGE_MISS_RATE_MAX: "3", THUMB_UPSTREAM, THUMB_CACHE_DIR: testInfo.outputPath("thumbs") });
+    const admin = await playwrightRequest.newContext({ baseURL: api.origin });
+    try {
+      await createUser(admin, { ...ADMIN }); // ADMIN_EMAILS promotes it on this instance
+      const ids = Array.from({ length: 4 }, () => fakeYouTubeId("lim"));
+      for (const id of ids) await ensureVideo(admin, { youtubeId: id, title: `Limit ${id}` });
+      const thumb = (id) => admin.get(`/api/thumbs/${id}.jpg`);
+      for (const id of ids.slice(0, 3)) expect((await thumb(id)).status(), `miss ${id}`).toBe(200);
+      expect((await thumb(ids[0])).status(), "a cached image is not a miss").toBe(200);
+      expect((await thumb(fakeYouTubeId("limNo"))).status(), "an unknown id is decided before the limit").toBe(404);
+      const limited = await thumb(ids[3]);
+      expect(limited.status(), "the 4th miss in the window").toBe(429);
+      expect(Number(limited.headers()["retry-after"])).toBeGreaterThan(0);
+      expect((await limited.json()).error.code).toBe("RATE_LIMITED");
+      expect((await thumb(ids[1])).status(), "cached images still load while limited").toBe(200);
+    } finally {
+      await admin.dispose();
+      await api.stop();
+    }
+  });
+
   test("admin responses (v1.5 review fix): a trashed video has thumbnailUrl null", async ({ admin }) => {
-    // PENDING server patch (docs/API.md v1.5 "Review fixes"). Remove this test.fail() once admin
-    // responses null the thumbnail of trashed videos.
-    test.fail();
     const id = fakeYouTubeId("tNull");
     const video = await ensureVideo(admin, { youtubeId: id, title: `Thumb null ${id}` });
     expect(video.thumbnailUrl).toBe(`/api/thumbs/${id}.jpg`);
@@ -655,9 +673,6 @@ test.describe("same-origin series covers (v1.5 review fix)", () => {
   // e2e has no external network, so every cover fetch fails: 502 and the client's placeholder are
   // the expected outcome here (the SSRF rules are covered by the server's unit tests).
   test("coverUrl is /api/covers/<id>.img?v=<hash>; the admin keeps the source URL; 404 unknown/trashed; 502 → placeholder; og:image absolute", async ({ page, request, admin, baseURL, externalRequests }) => {
-    // PENDING server patch (docs/API.md v1.5 "Same-origin series covers"): coverUrl is still the
-    // admin-typed https URL. Remove this test.fail() once /api/covers lands.
-    test.fail();
     const tag = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     const source = `https://covers.e2e.example/capa-${tag}.jpg`;
     const { series } = await seedSeries(admin, { name: `Saga Capa ${tag}`, slug: `saga-capa-${tag}`, aliases: [], genres: ["Capas"] }, [

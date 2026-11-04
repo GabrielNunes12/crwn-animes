@@ -9,7 +9,7 @@
 // details. Caching, single-flight, the concurrency cap and the failure memory
 // live in src/imageCache.js.
 import { THUMB_UPSTREAM_DEFAULT } from "./config.js";
-import { abortion, createImageCache, createImageSource, mediaType, sniffImageType, upstreamError } from "./imageCache.js";
+import { abortion, createImageCache, createImageSource, deadline, mediaType, sniffImageType, upstreamError } from "./imageCache.js";
 
 /** A YouTube video ID. Nothing else ever becomes an upstream URL or a file name. */
 export const THUMB_ID = /^[A-Za-z0-9_-]{11}$/;
@@ -33,7 +33,8 @@ export async function fetchYoutubeThumbnail(
   } = {}
 ) {
   if (typeof id !== "string" || !THUMB_ID.test(id)) throw upstreamError();
-  const signal = AbortSignal.timeout(timeoutMs);
+  const timer = deadline(timeoutMs);
+  const { signal } = timer;
   let reader = null;
   // A pending read() resolves { done: true } once cancelled; the loop then sees signal.aborted.
   const cancel = () => reader?.cancel().catch(() => {});
@@ -70,6 +71,7 @@ export async function fetchYoutubeThumbnail(
     // Timeout, network error, refused redirect, bad answer: one 502, no upstream detail kept or logged.
     throw upstreamError();
   } finally {
+    timer.clear();
     signal.removeEventListener("abort", cancel);
   }
 }

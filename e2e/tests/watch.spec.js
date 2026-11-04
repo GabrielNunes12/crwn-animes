@@ -45,7 +45,7 @@ test.describe("episode page", () => {
       await expect(stars(4)).toBeAttached(); // visually hidden radio inside a star label
       // v1.5: the poster is our own copy (/api/thumbs, fetched by the server), so before play there
       // is no YouTube traffic at all — not even i.ytimg.com.
-      const poster = page.locator(`img[src="/api/thumbs/${video.youtubeVideoId}.jpg"]`);
+      const poster = page.getByRole("button", { name: `Reproduzir: ${title}` }).locator(`img[src="/api/thumbs/${video.youtubeVideoId}.jpg"]`);
       await expect(poster).toBeVisible();
       await expect.poll(() => poster.evaluate((img) => (img.complete ? img.naturalWidth : 0)), { message: "the same-origin poster loads" }).toBe(FAKE_THUMB_WIDTH);
       expect(ytRequests, "no youtube.com / youtube-nocookie.com / ytimg.com request before pressing play").toEqual([]);

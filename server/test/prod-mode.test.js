@@ -23,33 +23,13 @@ import { after, before, describe, test } from "node:test";
 import tls from "node:tls";
 import { SERVER_DIR } from "../src/config.js";
 import { openDatabase } from "../src/db.js";
+import { TEST_TLS } from "./tls-fixture.js";
 
 const APP_URL = "https://crwn.example";
 const SMTP_PASS = "smtp-secret-Zx81qq";
 
-// TEST-ONLY self-signed certificate for 127.0.0.1 (valid until 2126) and its key,
-// used by the fake SMTP server's STARTTLS. Not a secret: it protects nothing.
-const SMTP_TLS = {
-  key: `-----BEGIN PRIVATE KEY-----
-MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgwpMB6IssEdzmIUb5
-gJwwMe9UwWym0W7CtFg83lKpteWhRANCAAT+NC+iuLKnJMC1eXrKcvK49xC7lMKa
-LmvihqtwHlSRS6Yo3yjXuAmgczbjZJxUsxr5oJ7nNcuk2lN/fbDyydwk
------END PRIVATE KEY-----
-`,
-  cert: `-----BEGIN CERTIFICATE-----
-MIIBtTCCAVugAwIBAgIUQH6UdrWznTr/S2b+hgsbTkS1/rEwCgYIKoZIzj0EAwIw
-GTEXMBUGA1UEAwwOY3J3bi10ZXN0LXNtdHAwIBcNMjYxMTA0MDAzMTU2WhgPMjEy
-NjEwMTEwMDMxNTZaMBkxFzAVBgNVBAMMDmNyd24tdGVzdC1zbXRwMFkwEwYHKoZI
-zj0CAQYIKoZIzj0DAQcDQgAE/jQvoriypyTAtXl6ynLyuPcQu5TCmi5r4oarcB5U
-kUumKN8o17gJoHM242ScVLMa+aCe5zXLpNpTf32w8sncJKN/MH0wHQYDVR0OBBYE
-FDkBSij6lcO357hDrWxBPKc0xsAGMB8GA1UdIwQYMBaAFDkBSij6lcO357hDrWxB
-PKc0xsAGMBoGA1UdEQQTMBGHBH8AAAGCCWxvY2FsaG9zdDAPBgNVHRMBAf8EBTAD
-AQH/MA4GA1UdDwEB/wQEAwIChDAKBggqhkjOPQQDAgNIADBFAiAkGtP8EwWilu2N
-desRvaJ7KwclSGyNhZ+rApGeSyHYDgIhAOowLaF08XKq/iO3OhRJ4ApJYjqnSuYj
-QKtoGEiC/pZi
------END CERTIFICATE-----
-`,
-};
+// The fake SMTP server's STARTTLS uses the test-only certificate of tls-fixture.js.
+const SMTP_TLS = TEST_TLS;
 /** A file with the test certificate, for the spawned server's NODE_EXTRA_CA_CERTS. */
 const SMTP_CA_FILE = path.join(os.tmpdir(), `crwn-test-smtp-ca-${process.pid}.pem`);
 fs.writeFileSync(SMTP_CA_FILE, SMTP_TLS.cert);
