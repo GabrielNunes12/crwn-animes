@@ -29,7 +29,7 @@ const EXPECTED_CSP =
   "default-src 'self';script-src 'self' https://www.youtube.com https://s.ytimg.com;" +
   "frame-src https://www.youtube-nocookie.com https://www.youtube.com;img-src 'self' data: https:;" +
   "style-src 'self' 'unsafe-inline';font-src 'self';connect-src 'self';object-src 'none';base-uri 'self';" +
-  "frame-ancestors 'none';form-action 'self'";
+  "frame-ancestors 'none';form-action 'self';worker-src 'self';manifest-src 'self'";
 
 /** Decodes the few entities escapeHtml() produces. */
 const unescapeHtml = (s) =>
@@ -193,7 +193,8 @@ describe("server-rendered SEO meta", () => {
     assert.equal(ld["@type"], "VideoObject");
     assert.equal(ld.name, "One Piece — Episódio 2");
     assert.equal(ld.description, h.description);
-    assert.equal(ld.thumbnailUrl, v.op2.thumbnailUrl);
+    assert.equal(v.op2.thumbnailUrl, `/api/thumbs/${v.op2.youtubeVideoId}.jpg`);
+    assert.equal(ld.thumbnailUrl, `http://app.test/api/thumbs/${v.op2.youtubeVideoId}.jpg`, "absolute (APP_URL), same-origin");
     assert.equal(ld.uploadDate, v.op2.publishedAt);
     assert.equal(ld.embedUrl, `https://www.youtube-nocookie.com/embed/${v.op2.youtubeVideoId}`);
     assert.deepEqual(ld.isPartOf, { "@type": "TVSeries", name: "One Piece", image: h.og.image, url: "http://app.test/anime/one-piece" });
@@ -210,7 +211,8 @@ describe("server-rendered SEO meta", () => {
     srv.db.prepare("UPDATE series SET cover_url = NULL WHERE slug = 'one-piece'").run();
     try {
       const noCover = head((await get("/anime/one-piece/episode/2")).text);
-      assert.equal(noCover.og.image, v.op2.thumbnailUrl);
+      assert.equal(noCover.og.image, `http://app.test/api/thumbs/${v.op2.youtubeVideoId}.jpg`, "absolute (APP_URL)");
+      assert.equal(noCover.jsonLd[0].thumbnailUrl, noCover.og.image);
       assert.equal(noCover.twitterCard, "summary_large_image");
       const series = head((await get("/anime/one-piece")).text);
       assert.equal(series.og.image, null);

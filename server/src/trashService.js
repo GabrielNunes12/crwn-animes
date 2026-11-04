@@ -8,8 +8,9 @@ import { checkpoint } from "./retention.js";
 // Trashed rows are invisible everywhere else: the repository's live queries
 // filter on deleted_at, and the triggers of db.js migration 13 keep every
 // aggregate (series_stats, rating_totals) to live videos. Everything below
-// is synchronous and runs in one transaction per call.
-export function createTrashService({ db, repo, videos, now = () => new Date() }) {
+// is synchronous and runs in one transaction per call. `onPurged(youtubeIds)`
+// runs after a delete-forever commits (the app removes their cached thumbnails).
+export function createTrashService({ db, repo, videos, now = () => new Date(), onPurged = () => {} }) {
   const transaction = (fn) => db.transaction(fn)();
 
   /**
@@ -85,14 +86,25 @@ export function createTrashService({ db, repo, videos, now = () => new Date() })
 
     /** DELETE /api/admin/trash/series/:id — for good: its videos and their ratings go too. */
     deleteSeriesForever(id) {
-      if (!transaction(() => repo.purgeTrashedSeries(id))) throw notFound("There is no series with this id in the trash.");
+      let youtubeIds = [];
+      const purged = transaction(() => {
+        youtubeIds = repo.youtubeIdsOfSeries(id); // its videos go with it (FK cascade)
+        return repo.purgeTrashedSeries(id);
+      });
+      if (!purged) throw notFound("There is no series with this id in the trash.");
       checkpoint(db); // ratings are personal data: no copy left in the WAL
+      onPurged(youtubeIds);
     },
 
     /** DELETE /api/admin/trash/videos/:id */
     deleteVideoForever(id) {
-      if (!transaction(() => repo.purgeTrashedVideo(id))) throw notFound("There is no video with this id in the trash.");
+      const video = transaction(() => {
+        const trashed = repo.getTrashedVideo(id);
+        return trashed && repo.purgeTrashedVideo(id) ? trashed : null;
+      });
+      if (!video) throw notFound("There is no video with this id in the trash.");
       checkpoint(db);
+      onPurged([video.youtubeVideoId]);
     },
   };
 }

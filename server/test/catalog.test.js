@@ -70,7 +70,7 @@ describe("catalog", () => {
       assert.equal(video.isNew, true);
       assert.ok(video.publishedAt);
       assert.deepEqual(video.rating, { average: null, count: 0 });
-      assert.equal(video.thumbnailUrl, `https://i.ytimg.com/vi/${video.youtubeVideoId}/hqdefault.jpg`);
+      assert.equal(video.thumbnailUrl, `/api/thumbs/${video.youtubeVideoId}.jpg`, "same-origin (v1.5)");
     }
     const empty = await srv.client().get("/api/manga/series/bleach");
     assert.deepEqual(empty.body.videos, [], "series exists, no manga yet");

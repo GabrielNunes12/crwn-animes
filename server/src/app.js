@@ -20,11 +20,14 @@ import { catalogRoutes } from "./routes/catalog.js";
 import { devRoutes } from "./routes/dev.js";
 import { meRoutes } from "./routes/me.js";
 import { ratingRoutes } from "./routes/ratings.js";
+import { thumbRoutes } from "./routes/thumbs.js";
+import { createThumbnailCache, fetchYoutubeThumbnail } from "./thumbnails.js";
 import { createVideoService } from "./videoService.js";
 import { fetchVideoInfo as youtubeFetchVideoInfo } from "./youtube.js";
 
-// Content-Security-Policy from docs/API.md (v1.1). YouTube embeds need the
-// youtube(-nocookie) frames and scripts; thumbnails come from i.ytimg.com.
+// Content-Security-Policy from docs/API.md (v1.1, v1.5). YouTube embeds need the
+// youtube(-nocookie) frames and scripts; video thumbnails are same-origin
+// (/api/thumbs); the service worker and the web manifest come from this origin.
 const CSP_DIRECTIVES = {
   defaultSrc: ["'self'"],
   scriptSrc: ["'self'", "https://www.youtube.com", "https://s.ytimg.com"],
@@ -37,6 +40,8 @@ const CSP_DIRECTIVES = {
   baseUri: ["'self'"],
   frameAncestors: ["'none'"],
   formAction: ["'self'"],
+  workerSrc: ["'self'"],
+  manifestSrc: ["'self'"],
 };
 
 /** Maps body-parser and unknown errors to the API's error shape. */
@@ -72,19 +77,33 @@ export function toHttpError(err) {
  * @param config          settings from loadConfig() (missing keys get defaults)
  * @param mailer          { send(message), outbox } (default: createMailer(config))
  * @param fetchVideoInfo  async (youtubeVideoId) => { title, channel } (default: YouTube oEmbed)
+ * @param fetchThumbnail  async (youtubeVideoId) => Buffer of a JPEG ≤ 512 KB, throws on failure
+ *                        (default: hqdefault.jpg from i.ytimg.com, src/thumbnails.js)
  */
-export function createApp({ db, config: overrides = {}, mailer, fetchVideoInfo = youtubeFetchVideoInfo } = {}) {
+export function createApp({
+  db,
+  config: overrides = {},
+  mailer,
+  fetchVideoInfo = youtubeFetchVideoInfo,
+  fetchThumbnail = (id) => fetchYoutubeThumbnail(id),
+} = {}) {
   const config = { ...loadConfig({}), ...overrides };
   mailer ??= createMailer(config);
 
   const repo = createRepository(db);
   const videos = createVideoService({ repo, fetchVideoInfo });
   const ratings = createRatingService({ db });
-  const trash = createTrashService({ db, repo, videos });
+  const thumbnails = createThumbnailCache({
+    dir: config.thumbCacheDir,
+    maxBytes: Math.floor(config.thumbCacheMb * 1024 * 1024),
+    fetchThumbnail,
+    isKnown: (id) => repo.thumbnailState(id) !== null,
+  });
+  const trash = createTrashService({ db, repo, videos, onPurged: (youtubeIds) => thumbnails.remove(youtubeIds) });
   const auth = createAuthService({ db, config, mailer, beforeDeleteUser: ratings.removeAllForUser });
 
   const app = express();
-  app.locals.services = { repo, videos, trash, auth, ratings, mailer, config };
+  app.locals.services = { repo, videos, trash, auth, ratings, mailer, config, thumbnails };
   app.set("trust proxy", parseTrustProxy(config.trustProxy)); // throws on "true"/garbage
   app.set("etag", "weak");
 
@@ -101,6 +120,8 @@ export function createApp({ db, config: overrides = {}, mailer, fetchVideoInfo =
   app.use("/api", noStore); // catalog GETs switch to a public cache in their router
   // Bodies must be JSON (415) and writes must come from the app's own origin (403 CROSS_SITE_REQUEST).
   app.use("/api", requireJsonBody, requireSameOrigin(config), express.json({ limit: "20kb" }));
+  // Same-origin thumbnails (v1.5): anonymous, so before the session lookup (no cookie work per image).
+  app.use("/api/thumbs", thumbRoutes({ repo, thumbnails }));
   app.use("/api", loadSession(auth));
 
   app.use("/api/auth", authRoutes({ auth, config }));
@@ -162,8 +183,19 @@ export function createApp({ db, config: overrides = {}, mailer, fetchVideoInfo =
         index: false, // "/" goes through the SEO fallback below, like every other page
         setHeaders(res, file) {
           const relative = path.relative(config.clientDist, file).split(path.sep);
+          const root = relative.length === 1 ? relative[0] : null;
           if (relative[0] === "assets") res.set("Cache-Control", "public, max-age=31536000, immutable");
-          else if (file.endsWith(".html")) res.set("Cache-Control", "no-cache");
+          // PWA (v1.5): the browser must always see the current service worker and manifest.
+          else if (root === "sw.js") {
+            res.set({
+              "Cache-Control": "no-cache",
+              "Content-Type": "text/javascript; charset=utf-8",
+              "Service-Worker-Allowed": "/",
+            });
+          } else if (root === "manifest.webmanifest") {
+            res.set("Cache-Control", "no-cache");
+            res.setHeader("Content-Type", "application/manifest+json"); // res.set() would add a charset JSON types do not have
+          } else if (file.endsWith(".html")) res.set("Cache-Control", "no-cache"); // offline.html too
         },
       })
     );

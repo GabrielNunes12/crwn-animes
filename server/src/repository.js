@@ -46,6 +46,9 @@ function toSeries(row) {
 const NEW_FOR_MS = 7 * 24 * 60 * 60 * 1000;
 const NOW_ISO = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 
+/** Video.thumbnailUrl: GET /api/thumbs/<id>.jpg (src/routes/thumbs.js). IDs are [A-Za-z0-9_-]{11}. */
+const thumbnailPath = (youtubeVideoId) => `/api/thumbs/${youtubeVideoId}.jpg`;
+
 // Full video, as admins see it. Public responses go through publicVideo().
 function toVideo(row) {
   const video = {
@@ -53,7 +56,8 @@ function toVideo(row) {
     youtubeVideoId: row.youtube_video_id,
     title: row.source_title,
     channel: row.channel,
-    thumbnailUrl: `https://i.ytimg.com/vi/${row.youtube_video_id}/hqdefault.jpg`,
+    // Same-origin (v1.5): the server fetches and caches it, the browser never contacts Google before Play.
+    thumbnailUrl: thumbnailPath(row.youtube_video_id),
     section: row.section,
     seriesId: row.series_id,
     seriesSlug: row.series_slug ?? null,
@@ -272,6 +276,8 @@ export function createRepository(db) {
     anyVideoById: db.prepare(`${VIDEO_SELECT} WHERE v.id = ?`),
     // Including the trash: youtube_video_id stays unique.
     videoByYoutubeId: db.prepare(`${VIDEO_SELECT} WHERE v.youtube_video_id = ?`),
+    youtubeIdTrashed: db.prepare("SELECT deleted_at IS NOT NULL FROM videos WHERE youtube_video_id = ?").pluck(),
+    youtubeIdsOfSeries: db.prepare("SELECT youtube_video_id FROM videos WHERE series_id = ?").pluck(),
     videosFiltered: db.prepare(`${VIDEO_SELECT}
       WHERE v.deleted_at IS NULL AND (@status IS NULL OR v.status = @status)
         AND (@availability IS NULL OR v.availability = @availability)
@@ -570,6 +576,13 @@ export function createRepository(db) {
       const row = q.videoByYoutubeId.get(youtubeVideoId);
       return row ? toVideo(row) : null;
     },
+    /** "live", "trashed" or null (no video has this YouTube ID): what GET /api/thumbs may serve. */
+    thumbnailState: (youtubeVideoId) => {
+      const trashed = q.youtubeIdTrashed.get(youtubeVideoId);
+      return trashed === undefined ? null : trashed ? "trashed" : "live";
+    },
+    /** YouTube IDs of every video of a series, trashed ones included (what its purge deletes). */
+    youtubeIdsOfSeries: (seriesId) => q.youtubeIdsOfSeries.all(seriesId),
     listVideos: (status = null, availability = null) => q.videosFiltered.all({ status, availability }).map(toVideo),
     /** [{ id, youtube_video_id }] of every video, or only those not checked since `olderThan` (ISO). */
     videoIdsToCheck: (olderThan = null) => (olderThan ? q.staleVideoIds.all(olderThan) : q.allVideoIds.all()),
