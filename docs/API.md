@@ -487,3 +487,29 @@ count). Days with no activity appear with `count: 0`.
 Client: an admin "Métricas" tab — KPI tiles, a daily ratings bar chart (inline SVG, accessible: a
 `<table>` fallback/description, no chart library), pending-queue age and top reasons, top series —
 and a "Atualizado às HH:MM" line with a refresh button.
+
+---
+
+# v1.7 additions (cycle 7 — performance budget)
+
+## Responsive thumbnails
+`GET /api/thumbs/:id.jpg` keeps serving YouTube's `hqdefault` (480×360). New `GET /api/thumbs/:id-m.jpg`
+serves `mqdefault` (320×180, same validation, cache, single-flight, failure memory, rate limit and
+headers; cached as a separate file). `Video` gains `thumbnailSrcSet` =
+`"/api/thumbs/<id>-m.jpg 320w, /api/thumbs/<id>.jpg 480w"`; the client uses `srcset` + `sizes`
+on every thumbnail. SEO keeps the 480w URL.
+
+## Client performance
+- Route prefetch: hovering (≥ 100 ms) or focusing a link to a lazy route preloads that route's module
+  (never data, never for admin routes unless the user is an admin); respects `navigator.connection.saveData`.
+- Explicit `width`/`height` (or aspect-ratio) on every image (no layout shift), `fetchpriority="high"`
+  on the first visible hero/poster image only, `loading="lazy"` elsewhere, fonts `font-display: swap`
+  with the Latin subset preloaded.
+- Budgets (enforced in CI): Lighthouse ≥ 90 for Performance, Accessibility, Best Practices and SEO on
+  `/`, a series page and an episode page (mobile preset, simulated throttling), main JS ≤ 200 KB gzip
+  for the initial route, CLS ≤ 0.05, LCP ≤ 2.5 s (simulated).
+
+## CI
+A `lighthouse` job builds the client, starts the real server with seeded data (and the fake thumbnail
+upstream), runs `@lhci/cli` against the three URLs with the budgets above as assertions, and uploads
+the reports as an artifact. No data leaves the runner (no LHCI server / temporary public storage).
