@@ -9,6 +9,7 @@ import {
   MAX_IMPORT_BYTES,
   parseRoute,
   PROGRESS_KEY,
+  pruneSeriesProgress,
   saveProgress,
   seriesProgress,
   subscribeProgress,
@@ -257,6 +258,43 @@ describe("watched N of M + Continue target", () => {
     expect(sp).toMatchObject({ watched: 1, total: 2, target: list[1], touched: true });
     expect(sp.isWatched(list[0])).toBe(true);
     expect(buildSeriesIndex(map)["anime/s"]).toEqual({ watched: 1, started: 1 });
+  });
+
+  it("an entry of a video in the list counts for that video only, whatever route it stored (reorder)", () => {
+    // [A, B] was reordered to [B, A]: A's entry still says episode 1, B's says episode 2.
+    const A = v(1);
+    const B = v(2);
+    const list = [{ ...B, number: 1, route: A.route }, { ...A, number: 2, route: B.route }];
+    const map = { [A.youtubeVideoId]: { ...done(1), route: A.route }, [B.youtubeVideoId]: { ...mid(2), route: B.route } };
+    const sp = seriesProgress(list, map);
+    expect(sp).toMatchObject({ watched: 1, total: 2, resume: true });
+    expect(sp.target.youtubeVideoId).toBe(B.youtubeVideoId);
+    expect(sp.isWatched(list[0])).toBe(false); // B
+    expect(sp.isWatched(list[1])).toBe(true); // A
+  });
+
+  it("pruneSeriesProgress moves known videos to their current routes and keeps swapped links", () => {
+    const A = v(1);
+    const B = v(2);
+    const list = [{ ...B, number: 1, route: A.route }, { ...A, number: 2, route: B.route }];
+    localStorage.setItem(
+      PROGRESS_KEY,
+      JSON.stringify({
+        [A.youtubeVideoId]: { ...done(1), route: A.route },
+        [B.youtubeVideoId]: { ...mid(2), route: B.route },
+        swapped0001: { ...done(3), route: B.route }, // unknown ID at a live route: kept
+        deleted0001: { ...done(4), route: "/anime/s/episode/9" }, // unknown ID, dead route: removed
+        other000001: { ...done(5), route: "/anime/other/episode/1" }, // other series: untouched
+      }),
+    );
+    expect(pruneSeriesProgress("anime", "s", list)).toBe(3);
+    const all = getAllProgress();
+    expect(all[A.youtubeVideoId].route).toBe("/anime/s/episode/2");
+    expect(all[B.youtubeVideoId].route).toBe("/anime/s/episode/1");
+    expect(all.swapped0001.route).toBe("/anime/s/episode/2");
+    expect(all.deleted0001).toBeUndefined();
+    expect(all.other000001.route).toBe("/anime/other/episode/1");
+    expect(pruneSeriesProgress("anime", "s", list)).toBe(0); // idempotent
   });
 
   it("everything watched: no target", () => {

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router";
 import { adminApi } from "../../api/client.js";
 import { TextField } from "../../components/Form/TextField.jsx";
 import { useT } from "../../i18n/useT.js";
@@ -9,9 +10,9 @@ import styles from "./Admin.module.css";
 const EMPTY = { url: "", title: "", section: "", seriesSlug: "", season: "", number: "" };
 
 export function AddVideoTab({ series }) {
-  const { t } = useT();
+  const { t, locale } = useT();
   const [form, setForm] = useState(EMPTY);
-  const [state, setState] = useState({ busy: false, error: null, result: null, duplicate: false });
+  const [state, setState] = useState({ busy: false, error: null, result: null, duplicate: false, serverMessage: "" });
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
 
   async function onSubmit(e) {
@@ -23,18 +24,20 @@ export function AddVideoTab({ series }) {
     if (form.seriesSlug) body.seriesSlug = form.seriesSlug;
     if (numOrUndef(form.season) != null) body.season = numOrUndef(form.season);
     if (numOrUndef(form.number) != null) body.number = numOrUndef(form.number);
-    setState({ busy: true, error: null, result: null, duplicate: false });
+    setState({ busy: true, error: null, result: null, duplicate: false, serverMessage: "" });
     try {
       const { video } = await adminApi.addVideo(body);
-      setState({ busy: false, error: null, result: video, duplicate: false });
+      setState({ busy: false, error: null, result: video, duplicate: false, serverMessage: "" });
       setForm(EMPTY);
     } catch (err) {
-      if (err.code === "CONFLICT" && err.details?.video) setState({ busy: false, error: null, result: err.details.video, duplicate: true });
-      else setState({ busy: false, error: err, result: null, duplicate: false });
+      if (err.code === "CONFLICT" && err.details?.video) setState({ busy: false, error: null, result: err.details.video, duplicate: true, serverMessage: err.message ?? "" });
+      else setState({ busy: false, error: err, result: null, duplicate: false, serverMessage: "" });
     }
   }
 
   const r = state.result;
+  // v1.4: adding a YouTube video that is in the trash → 409 with the trashed video ("restore it instead").
+  const trashed = state.duplicate && Boolean(r?.deletedAt);
   return (
     <div className={styles.split}>
       <form className="card stack" onSubmit={onSubmit} aria-labelledby="add-title">
@@ -69,9 +72,20 @@ export function AddVideoTab({ series }) {
         <h2 id="add-result-title">{t("admin.add.result")}</h2>
         {!r && <p className="muted">{t("admin.add.resultEmpty")}</p>}
         {r && (
-          <div className={`card stack ${styles.resultCard}`} data-status={r.status}>
-            {state.duplicate && <p className="alert alert-info">{t("admin.add.duplicate")}</p>}
-            <p className={styles.resultHeadline}>{r.status === "published" ? t("admin.add.publishedMsg") : t("admin.add.pendingMsg")}</p>
+          <div className={`card stack ${styles.resultCard}`} data-status={trashed ? "trashed" : r.status}>
+            {trashed ? (
+              <div className="alert alert-error stack" role="alert" style={{ "--stack-gap": "var(--space-2)" }}>
+                <p className={styles.resultHeadline}>{t("admin.add.duplicateTrashed")}</p>
+                {/* The server's own words only in English (the UI never shows English text in pt-BR). */}
+                {locale === "en" && state.serverMessage && <p className="hint">{state.serverMessage}</p>}
+                <Link to="/admin?tab=trash">{t("admin.add.openTrash")}</Link>
+              </div>
+            ) : (
+              <>
+                {state.duplicate && <p className="alert alert-info">{t("admin.add.duplicate")}</p>}
+                <p className={styles.resultHeadline}>{r.status === "published" ? t("admin.add.publishedMsg") : t("admin.add.pendingMsg")}</p>
+              </>
+            )}
             <VideoSummary video={r} />
             <Reasons classification={r.classification} />
           </div>

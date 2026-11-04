@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 const here = dirname(fileURLToPath(import.meta.url));
 const tokens = readFileSync(join(here, "tokens.css"), "utf8");
 const seriesCss = readFileSync(join(here, "../pages/Series/Series.module.css"), "utf8");
+const globalCss = readFileSync(join(here, "global.css"), "utf8");
 
 /** Token values of a block: the base :root, overridden by the light block when asked. */
 function theme(light) {
@@ -55,6 +56,55 @@ describe("colour contrast", () => {
     for (const light of [false, true]) {
       const vars = theme(light);
       expect(contrast(resolve(vars, fg), resolve(vars, bg))).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  /** "a, :where(b, c):hover" → ["a", ":where(b, c):hover"] (commas inside parentheses don't split). */
+  function splitSelectors(list) {
+    const out = [];
+    let depth = 0;
+    let cur = "";
+    for (const ch of list) {
+      if (ch === "(") depth += 1;
+      if (ch === ")") depth -= 1;
+      if (ch === "," && depth === 0) {
+        out.push(cur.trim());
+        cur = "";
+      } else cur += ch;
+    }
+    out.push(cur.trim());
+    return out.filter(Boolean);
+  }
+  // Selector specificity [b, c] for the simple selectors used here (no ids); :where() counts 0.
+  function specificity(selector) {
+    const sel = selector.replace(/:where\([^)]*\)/g, "");
+    const b = (sel.match(/\.[\w-]+|\[[^\]]+\]|:(?!:)[\w-]+/g) ?? []).length;
+    const c = (sel.replace(/\[[^\]]+\]|\.[\w-]+|:[\w-]+/g, " ").match(/\b[a-z]+\b/g) ?? []).length;
+    return b * 100 + c;
+  }
+  const rules = [...globalCss.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ selectors: splitSelectors(m[1]), body: m[2] }));
+
+  it("a pressed / current chip keeps its on-accent text and outline on hover (≥ 4.5:1 text, ≥ 3:1 outline)", () => {
+    const pressed = rules.find((r) => r.selectors.includes('.chip[aria-pressed="true"]'));
+    const hovers = rules.filter((r) => r.selectors.some((x) => x.includes("chip") && x.includes(":hover")));
+    expect(hovers.length).toBeGreaterThan(0);
+    // Hover may never out-rank the pressed/current rule (it used to: button.chip:hover set --text on the pink fill).
+    for (const h of hovers) {
+      if (!/\bcolor:|border-color:|background/.test(h.body)) continue;
+      for (const sel of h.selectors) {
+        for (const p of pressed.selectors) expect(specificity(sel), `${sel} vs ${p}`).toBeLessThan(specificity(p));
+      }
+    }
+    const fg = pressed.body.match(/\scolor:\s*([^;]+);/)[1].trim();
+    const bg = pressed.body.match(/background:\s*([^;]+);/)[1].trim();
+    const outline = pressed.body.match(/border-color:\s*([^;]+);/)[1].trim();
+    for (const light of [false, true]) {
+      const vars = theme(light);
+      expect(contrast(resolve(vars, fg), resolve(vars, bg))).toBeGreaterThanOrEqual(4.5);
+      // WCAG 1.4.11: the pressed chip's boundary against the page and against cards.
+      for (const around of ["var(--bg)", "var(--surface)"]) {
+        expect(contrast(resolve(vars, outline), resolve(vars, around))).toBeGreaterThanOrEqual(3);
+      }
     }
   });
 });

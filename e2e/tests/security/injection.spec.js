@@ -107,13 +107,14 @@ test.describe("SQL / NoSQL-style injection", () => {
         ["DELETE", `/api/admin/trash/videos/${e}`],
       ];
       for (const [method, url] of ids) {
-        const data = method === "PATCH" ? { name: "x" } : method === "PUT" ? { section: "anime", season: 1, videoIds: [video.id] } : undefined;
+        const data = method === "PATCH" ? { name: "x" } : method === "PUT" ? { section: "anime", season: 1, videoIds: [video.id], expected: [video.id] } : undefined;
         const res = await admin.fetch(url, { method, ...(data ? { data } : {}) });
         expect([400, 404], `${method} ${url}`).toContain(res.status());
         expectNoLeak(await res.text(), `${method} ${url}`);
       }
       // Payloads inside a reorder body are refused, and never renumber anything.
-      for (const data of [{ section: p, season: 1, videoIds: [video.id] }, { section: "anime", season: p, videoIds: [video.id] }, { section: "anime", season: 1, videoIds: [p] }]) {
+      const order = { section: "anime", season: 1, videoIds: [video.id], expected: [video.id] };
+      for (const data of [{ ...order, section: p }, { ...order, season: p }, { ...order, videoIds: [p] }, { ...order, expected: [p] }]) {
         const res = await admin.put(`/api/admin/series/${video.seriesId}/order`, { data });
         expect(res.status(), `PUT order ${JSON.stringify(data)}`).toBe(400);
         expectNoLeak(await res.text(), `PUT order ${JSON.stringify(data)}`);

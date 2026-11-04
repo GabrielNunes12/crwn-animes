@@ -166,11 +166,15 @@ export const adminApi = {
    * section `{ seasons, videos }` = exactly the set PUT …/order expects. 404 when unknown or trashed.
    */
   board: (id, opts) => apiFetch(`/admin/series/${enc(id)}`, opts),
-  /** PUT /api/admin/series/:id/order → { videos } (numbers become 1..n in this order). */
-  reorder: (seriesId, { section, season, videoIds }) =>
+  /**
+   * PUT /api/admin/series/:id/order → { videos } (numbers become 1..n in this order).
+   * `expected` = the order last loaded from the board; another admin's save in between → 409
+   * CONFLICT with `details.current`, and nothing changes.
+   */
+  reorder: (seriesId, { section, season, videoIds, expected }) =>
     apiFetch(`/admin/series/${enc(seriesId)}/order`, {
       method: "PUT",
-      body: { section, season: section === "manga" ? 1 : Number(season), videoIds },
+      body: { section, season: section === "manga" ? 1 : Number(season), videoIds, expected },
     }),
   /** GET /api/admin/videos/:id/preview → { video, series } (pending and trashed included). */
   preview: (videoId, opts) => apiFetch(`/admin/videos/${enc(videoId)}/preview`, opts),

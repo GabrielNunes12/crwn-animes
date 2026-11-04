@@ -100,7 +100,7 @@ describe("admin Trash tab", () => {
 
     await user.click(within(seriesRow()).getByRole("button", { name: "Delete forever" }));
     const dialog = screen.getByRole("dialog", { name: "Delete “Naruto” forever?" });
-    expect(dialog).toHaveTextContent("The series, its 12 videos and every rating will be deleted now. This can’t be undone.");
+    expect(dialog).toHaveTextContent("The series, its 12 videos in the trash and every rating will be deleted now. This can’t be undone.");
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(db.calls.filter((c) => c.startsWith("DELETE"))).toEqual([]);
 

@@ -161,6 +161,29 @@ describe("Series page — seasons, watched N of M and Continue", () => {
     expect(all.manga000099.route).toBe("/manga/op/chapter/99");
   });
 
+  it("after a reorder (every old route still exists), progress follows the video, not the route", async () => {
+    // Before: A = episode 1 (finished), B = episode 2 (in progress). The admin saved the order [B, A].
+    const [A, B] = [VIDEOS[0].youtubeVideoId, VIDEOS[1].youtubeVideoId];
+    saveProgress(A, { position: 1400, duration: 1400, route: "/anime/op/episode/1", now: 1 });
+    saveProgress(B, { position: 300, duration: 1400, route: "/anime/op/episode/2", now: 2 });
+    const reordered = [
+      { ...VIDEOS[1], number: 1, route: "/anime/op/episode/1" },
+      { ...VIDEOS[0], number: 2, route: "/anime/op/episode/2" },
+      ...VIDEOS.slice(2),
+    ];
+    setup("/anime/op", reordered);
+    await screen.findByRole("heading", { level: 1, name: "OP" });
+    expect(screen.getByText("Watched 1 of 5")).toBeInTheDocument();
+    // B (now episode 1) is the one in progress — not "watched" because A used to live at /episode/1.
+    expect(screen.getByRole("link", { name: /Continue: Episode 1/ })).toHaveAttribute("href", "/anime/op/episode/1");
+    const row = (n) => screen.getAllByRole("listitem").find((li) => li.textContent.startsWith(`Episode ${n}`));
+    expect(row(1)).not.toHaveAttribute("data-done");
+    expect(row(2)).toHaveAttribute("data-done", "true");
+    // Stored routes are rewritten, so the cards and "Continue watching" agree.
+    await waitFor(() => expect(getAllProgress()[A].route).toBe("/anime/op/episode/2"));
+    expect(getAllProgress()[B].route).toBe("/anime/op/episode/1");
+  });
+
   it("pruneSeriesProgress never clears anything without a published list", () => {
     saveProgress("ghost000099", { position: 100, duration: 100, route: "/anime/op/episode/99" });
     expect(pruneSeriesProgress("anime", "op", [])).toBe(0);

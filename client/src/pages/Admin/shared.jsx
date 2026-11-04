@@ -3,11 +3,15 @@ import { useT } from "../../i18n/useT.js";
 import { videoLabel } from "../../lib/format.js";
 import styles from "./Admin.module.css";
 
-export function StatusBadge({ status, availability }) {
+export function StatusBadge({ status, availability, trashed = false }) {
   const { t } = useT();
   return (
     <span className="cluster" style={{ "--cluster-gap": "0.3rem" }}>
-      <span className={`badge ${status === "published" ? styles.published : styles.pending}`}>{t(`admin.status.${status}`)}</span>
+      {trashed ? (
+        <span className={`badge ${styles.trashed}`}>{t("admin.preview.trashed")}</span>
+      ) : (
+        <span className={`badge ${status === "published" ? styles.published : styles.pending}`}>{t(`admin.status.${status}`)}</span>
+      )}
       {availability === "unavailable" && <span className="badge badge-warn">{t("common.unavailable")}</span>}
     </span>
   );
@@ -40,7 +44,7 @@ export function VideoSummary({ video }) {
     <div className={styles.summary}>
       <img src={video.thumbnailUrl} alt="" width="160" height="90" loading="lazy" decoding="async" className={styles.thumb} />
       <div className="stack" style={{ "--stack-gap": "0.3rem", minInlineSize: 0 }}>
-        <StatusBadge status={video.status} availability={video.availability} />
+        <StatusBadge status={video.status} availability={video.availability} trashed={Boolean(video.deletedAt)} />
         <p className={styles.videoTitle}>{video.title}</p>
         <p className="hint">
           {[video.section && t(`common.${video.section}`), video.seriesName, video.number != null && videoLabel(t, video)].filter(Boolean).join(" · ") || t("admin.unclassified")}

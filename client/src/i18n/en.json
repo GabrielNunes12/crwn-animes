@@ -476,7 +476,7 @@
         "name": "Ratings",
         "what": "Your user id, the video, your score (1–5) and optional reaction",
         "why": "The rating and reactions feature",
-        "until": "You remove the rating or delete your account"
+        "until": "You remove the rating or delete your account. If the video is moved to the trash, its ratings are kept for up to 7 more days and can’t be changed while it is there; then they are deleted with it."
       },
       "activity": {
         "name": "Rating activity (not personal data)",
@@ -631,7 +631,9 @@
       "resultEmpty": "Add a link to see how it gets classified.",
       "publishedMsg": "Published — it found its home.",
       "pendingMsg": "Pending — it needs a hand. Fix it in the Pending tab.",
-      "duplicate": "This video was already added. Here it is:"
+      "duplicate": "This video was already added. Here it is:",
+      "duplicateTrashed": "In the trash — restore it instead of adding it again.",
+      "openTrash": "Open the Trash"
     },
     "bulk": {
       "title": "Bulk add",
@@ -658,6 +660,7 @@
       "placement": "Placement",
       "details": "Details",
       "noLinks": "No YouTube links found in that text.",
+      "trashed": "In the trash — restore it.",
       "outcomes": {
         "created": "Created",
         "would-create": "Will be created",
@@ -760,6 +763,7 @@
       },
       "discarded": "Changes discarded.",
       "stale": "The list changed since you opened it (another edit or another admin). It was reloaded keeping your order — check it and save again.",
+      "conflict": "Another admin saved a different order — check it and save again.",
       "leaveTitle": "Leave without saving the order?",
       "leaveText": "The new order hasn't been saved and will be lost.",
       "leaveConfirm": "Leave without saving",
@@ -793,8 +797,8 @@
       "deleteForever": "Delete forever",
       "purgeTitle": "Delete “{name}” forever?",
       "purgeSeriesText": {
-        "one": "The series, its {count} video and every rating will be deleted now. This can’t be undone.",
-        "other": "The series, its {count} videos and every rating will be deleted now. This can’t be undone."
+        "one": "The series, its {count} video in the trash and every rating will be deleted now. This can’t be undone.",
+        "other": "The series, its {count} videos in the trash and every rating will be deleted now. This can’t be undone."
       },
       "purgeVideoText": "The video and all its ratings will be deleted now. This can’t be undone.",
       "purged": "Deleted “{name}” forever.",

@@ -35,7 +35,7 @@ function adminRoutes() {
     ["DELETE", `/api/admin/videos/${vid}`, null],
     // v1.4: board, reorder, draft preview and the trash.
     ["GET", `/api/admin/series/${sid}`, null],
-    ["PUT", `/api/admin/series/${sid}/order`, { section: "anime", season: 1, videoIds: seed.videos.map((v) => v.id).reverse() }],
+    ["PUT", `/api/admin/series/${sid}/order`, { section: "anime", season: 1, videoIds: seed.videos.map((v) => v.id).reverse(), expected: seed.videos.map((v) => v.id) }],
     ["GET", `/api/admin/videos/${vid}/preview`, null],
     ["GET", "/api/admin/trash", null],
     ["POST", `/api/admin/trash/series/${sid}/restore`, null],

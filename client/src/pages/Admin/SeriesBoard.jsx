@@ -315,7 +315,8 @@ function Board({ board, error, loading, reload, updateVideos }) {
     setMessage({ text: "", tone: "success" });
     const videoIds = order;
     try {
-      const res = await adminApi.reorder(series.id, { section, season, videoIds });
+      // `expected`: the order as loaded (ids in current number order) — optimistic concurrency.
+      const res = await adminApi.reorder(series.id, { section, season, videoIds, expected: serverIds });
       const updated = new Map((Array.isArray(res?.videos) ? res.videos : []).map((v) => [v.id, v]));
       // Older/odd responses without videos: number them 1..n locally (the server did the same).
       const local = new Map(videoIds.map((id, i) => [id, i + 1]));
@@ -330,10 +331,11 @@ function Board({ board, error, loading, reload, updateVideos }) {
       setSaveState({ busy: false, error: null });
       setMessage({ text: t("admin.board.saved", { count: videoIds.length }), tone: "success" });
     } catch (err) {
-      if (err?.code === "VALIDATION_ERROR") {
-        // The set of videos changed under us: reload, keeping the local order for the ones still there.
+      if (err?.code === "VALIDATION_ERROR" || err?.code === "CONFLICT") {
+        // The videos (400) or their order (409: another admin saved) changed under us: reload,
+        // keeping the local order for the ones still there.
         setSaveState({ busy: false, error: null });
-        setMessage({ text: t("admin.board.stale"), tone: "info" });
+        setMessage({ text: t(err.code === "CONFLICT" ? "admin.board.conflict" : "admin.board.stale"), tone: "info" });
         reload();
       } else {
         setSaveState({ busy: false, error: err });

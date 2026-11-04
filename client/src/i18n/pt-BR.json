@@ -476,7 +476,7 @@
         "name": "Avaliações",
         "what": "Seu id de usuário, o vídeo, sua nota (1–5) e a reação opcional",
         "why": "O recurso de avaliações e reações",
-        "until": "Você remover a avaliação ou excluir sua conta"
+        "until": "Você remover a avaliação ou excluir sua conta. Se o vídeo for para a lixeira, as avaliações dele ficam guardadas por até mais 7 dias e não podem ser alteradas enquanto ele estiver lá; depois, são apagadas junto com ele."
       },
       "activity": {
         "name": "Atividade de avaliações (não é dado pessoal)",
@@ -631,7 +631,9 @@
       "resultEmpty": "Adicione um link para ver como ele é classificado.",
       "publishedMsg": "Publicado — encontrou seu lugar.",
       "pendingMsg": "Pendente — precisa de uma ajuda. Corrija na aba Pendentes.",
-      "duplicate": "Este vídeo já foi adicionado. Aqui está ele:"
+      "duplicate": "Este vídeo já foi adicionado. Aqui está ele:",
+      "duplicateTrashed": "Na lixeira — restaure-o em vez de adicionar de novo.",
+      "openTrash": "Abrir a Lixeira"
     },
     "bulk": {
       "title": "Adicionar em lote",
@@ -658,6 +660,7 @@
       "placement": "Destino",
       "details": "Detalhes",
       "noLinks": "Nenhum link do YouTube encontrado nesse texto.",
+      "trashed": "Na lixeira — restaure-o.",
       "outcomes": {
         "created": "Criado",
         "would-create": "Será criado",
@@ -760,6 +763,7 @@
       },
       "discarded": "Alterações descartadas.",
       "stale": "A lista mudou desde que você a abriu (outra edição ou outro admin). Ela foi recarregada mantendo a sua ordem — confira e salve de novo.",
+      "conflict": "Outro administrador salvou uma ordem diferente — confira e salve de novo.",
       "leaveTitle": "Sair sem salvar a ordem?",
       "leaveText": "A nova ordem ainda não foi salva e será perdida.",
       "leaveConfirm": "Sair sem salvar",
@@ -793,8 +797,8 @@
       "deleteForever": "Apagar para sempre",
       "purgeTitle": "Apagar “{name}” para sempre?",
       "purgeSeriesText": {
-        "one": "A série, o {count} vídeo dela e todas as avaliações serão apagados agora. Isso não pode ser desfeito.",
-        "other": "A série, os {count} vídeos dela e todas as avaliações serão apagados agora. Isso não pode ser desfeito."
+        "one": "A série, o {count} vídeo dela na lixeira e todas as avaliações serão apagados agora. Isso não pode ser desfeito.",
+        "other": "A série, os {count} vídeos dela na lixeira e todas as avaliações serão apagados agora. Isso não pode ser desfeito."
       },
       "purgeVideoText": "O vídeo e todas as avaliações dele serão apagados agora. Isso não pode ser desfeito.",
       "purged": "“{name}” foi apagado para sempre.",

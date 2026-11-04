@@ -337,6 +337,129 @@ test.describe("series board", () => {
       expect(await apiSeason(admin, S, 2)).toEqual([["Foxtrot", 1], ["Golf", 2], ["Hotel", 3]]);
     });
   });
+
+  test("a stale board cannot overwrite an order saved meanwhile (expected order → 409 CONFLICT)", async ({ page, context, admin }) => {
+    const S = await seedBoardSeries(admin, "Conflito", [
+      ["Ana", "anime", 1, 1],
+      ["Bia", "anime", 1, 2],
+      ["Caio", "anime", 1, 3],
+    ]);
+    const ids = (...keys) => keys.map((k) => S.v[k].id);
+    const putOrder = (videoIds, expected) => admin.put(`/api/admin/series/${S.id}/order`, { data: { section: "anime", season: 1, videoIds, expected } });
+
+    await test.step("API: a wrong `expected` → 409 with the current order, nothing changes; the right one → 200", async () => {
+      const stale = await putOrder(ids("Caio", "Bia", "Ana"), ids("Bia", "Ana", "Caio"));
+      expect(stale.status()).toBe(409);
+      const { error } = await stale.json();
+      expect(error.code).toBe("CONFLICT");
+      expect(error.details.current).toEqual(ids("Ana", "Bia", "Caio"));
+      expect(await apiSeason(admin, S, 1)).toEqual([["Ana", 1], ["Bia", 2], ["Caio", 3]]);
+      // Same order as now: a no-op that succeeds.
+      expect((await putOrder(ids("Ana", "Bia", "Caio"), ids("Ana", "Bia", "Caio"))).status()).toBe(200);
+    });
+
+    await test.step("UI: two tabs load the board; tab 1 saves first; tab 2's save is refused, keeps its draft, and only a second, informed save wins", async () => {
+      const second = await context.newPage();
+      for (const p of [page, second]) {
+        await p.goto(`/admin/series/${S.id}`);
+        await expectRows(p, [["Ana", 1], ["Bia", 2], ["Caio", 3]]);
+      }
+      await boardRow(page, 3, 3).focus();
+      await page.keyboard.press("Alt+ArrowUp");
+      await page.keyboard.press("Alt+ArrowUp");
+      await expectRows(page, [["Caio", 3], ["Ana", 1], ["Bia", 2]]);
+      await page.getByRole("button", { name: "Salvar ordem" }).click();
+      await expect(page.getByRole("status").filter({ hasText: "Ordem salva" })).toBeVisible();
+      expect(await apiSeason(admin, S, 1)).toEqual([["Caio", 1], ["Ana", 2], ["Bia", 3]]);
+
+      await boardRow(second, 1, 1).getByRole("button", { name: "Mover para baixo" }).click();
+      await expectRows(second, [["Bia", 2], ["Ana", 1], ["Caio", 3]]);
+      const isReorder = (r) => r.request().method() === "PUT" && new URL(r.url()).pathname === `/api/admin/series/${S.id}/order`;
+      const [res] = await Promise.all([second.waitForResponse(isReorder), second.getByRole("button", { name: "Salvar ordem" }).click()]);
+      expect(res.status(), "the stale tab's save is refused").toBe(409);
+      await expect(second.getByRole("status").filter({ hasText: "Outro administrador" })).toHaveText(
+        "Outro administrador salvou uma ordem diferente — confira e salve de novo."
+      );
+      expect(await apiSeason(admin, S, 1), "tab 1's order is kept").toEqual([["Caio", 1], ["Ana", 2], ["Bia", 3]]);
+      // The board reloaded (labels show the numbers tab 1 saved) and kept tab 2's order as an unsaved draft.
+      await expectRows(second, [["Bia", 3], ["Ana", 2], ["Caio", 1]]);
+      await expect(dirtyNote(second)).toBeVisible();
+      // Saving again, now knowing the current order, is accepted.
+      await second.getByRole("button", { name: "Salvar ordem" }).click();
+      await expect(second.getByRole("status").filter({ hasText: "Ordem salva" })).toBeVisible();
+      await expectRows(second, [["Bia", 1], ["Ana", 2], ["Caio", 3]]);
+      expect(await apiSeason(admin, S, 1)).toEqual([["Bia", 1], ["Ana", 2], ["Caio", 3]]);
+      await second.close();
+    });
+  });
+
+  test("local watch progress follows the video, not the episode number, after a reorder", async ({ admin, browser, baseURL }) => {
+    // Lead note (cycle 4): the client patch that rewrites progress routes after a reorder had not landed when
+    // this was written. Before it, the finished episode's OLD route marks whichever video now holds that number.
+    const KEY = "crwn:progress:v1";
+    const S = await seedBoardSeries(admin, "Marcado", [
+      ["Ana", "anime", 1, 1],
+      ["Bia", "anime", 1, 2],
+      ["Caio", "anime", 1, 3],
+    ]);
+    const ana = S.v.Ana;
+    expect(ana.route).toBe(`/anime/${S.slug}/episode/1`);
+    // Ana finished, saved while she was Episódio 1.
+    const progress = { [ana.youtubeVideoId]: { t: 100, d: 100, at: Date.now() - 60_000, route: ana.route, title: ana.title, thumb: null } };
+
+    /** The series page in a fresh context whose localStorage holds `progress` (written once, before the app boots). */
+    const withProgress = async (fn) => {
+      const context = await anonymousContext(browser, baseURL);
+      await context.addInitScript(
+        ([key, value]) => {
+          if (sessionStorage.getItem("e2e:progress-seeded")) return;
+          localStorage.setItem(key, value);
+          sessionStorage.setItem("e2e:progress-seeded", "1");
+        },
+        [KEY, JSON.stringify(progress)]
+      );
+      try {
+        const page = await context.newPage();
+        await page.goto(`/anime/${S.slug}`);
+        await expect(page.getByRole("heading", { level: 1, name: S.name })).toBeVisible();
+        await fn(page, page.getByRole("region", { name: "Episódios" }).getByRole("listitem"), page.getByRole("link", { name: /Continuar:/ }));
+      } finally {
+        await context.close();
+      }
+    };
+
+    await test.step("before: Ana (Episódio 1) is watched; Continuar → Episódio 2 (Bia)", async () => {
+      await withProgress(async (page, episodes, continueLink) => {
+        await expect(page.getByText("1 de 3 assistidos", { exact: true })).toBeVisible();
+        await expect(episodes.nth(0)).toContainText("Assistido");
+        await expect(episodes.nth(1)).not.toContainText("Assistido");
+        await expect(continueLink).toHaveText(/Continuar: Episódio 2$/);
+        await expect(continueLink).toHaveAttribute("href", `/anime/${S.slug}/episode/2`);
+      });
+    });
+
+    await test.step("reorder to [Bia, Ana, Caio] (API, with `expected`)", async () => {
+      const res = await admin.put(`/api/admin/series/${S.id}/order`, {
+        data: { section: "anime", season: 1, videoIds: [S.v.Bia.id, ana.id, S.v.Caio.id], expected: [ana.id, S.v.Bia.id, S.v.Caio.id] },
+      });
+      expect(res.status()).toBe(200);
+    });
+
+    await test.step("after: only Ana (now Episódio 2) is watched; Continuar → Episódio 1 (Bia); the stored route follows Ana", async () => {
+      await withProgress(async (page, episodes, continueLink) => {
+        await expect(episodes).toHaveText([/^Episódio 1(?!\d).*Bia/, /^Episódio 2(?!\d).*Ana/, /^Episódio 3(?!\d).*Caio/]);
+        await expect(page.getByText("1 de 3 assistidos", { exact: true })).toBeVisible();
+        await expect(episodes.nth(0), "Bia was never watched").not.toContainText("Assistido");
+        await expect(episodes.nth(1)).toContainText("Assistido");
+        await expect(episodes.nth(2)).not.toContainText("Assistido");
+        await expect(continueLink).toHaveText(/Continuar: Episódio 1$/);
+        await expect(continueLink).toHaveAttribute("href", `/anime/${S.slug}/episode/1`);
+        await expect
+          .poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "{}"), KEY).then((all) => all[ana.youtubeVideoId]?.route))
+          .toBe(`/anime/${S.slug}/episode/2`);
+      });
+    });
+  });
 });
 
 test.describe("trash (Lixeira)", () => {
@@ -581,7 +704,7 @@ test.describe("trash (Lixeira)", () => {
       const row = panel.getByRole("listitem").filter({ hasText: T.slug });
       await row.getByRole("button", { name: "Apagar para sempre" }).click();
       const dialog = page.getByRole("dialog", { name: `Apagar “${T.name}” para sempre?` });
-      await expect(dialog).toContainText("A série, o 1 vídeo dela e todas as avaliações serão apagados agora.");
+      await expect(dialog).toContainText(/A série, o 1 vídeo dela (na lixeira )?e todas as avaliações serão apagados agora\./);
       await dialog.getByRole("button", { name: "Apagar para sempre" }).click();
       await expect(dialog).toBeHidden();
       await expect(panel.getByRole("status").filter({ hasText: "para sempre" })).toHaveText(`“${T.name}” foi apagado para sempre.`);
@@ -598,6 +721,78 @@ test.describe("trash (Lixeira)", () => {
       expect(recreated.status(), "the slug is free once the series is deleted forever").toBe(201);
     });
     await fan.context.close();
+  });
+});
+
+test.describe("trash (Lixeira): edge cases", () => {
+  test("delete forever counts every video of the series, including one trashed on its own before it", async ({ page, admin }) => {
+    const S = await seedBoardSeries(admin, "Contagem", [
+      ["Um", "anime", 1, 1],
+      ["Dois", "anime", 1, 2],
+    ]);
+    expect((await admin.delete(`/api/admin/videos/${S.v.Dois.id}`)).status()).toBe(204);
+    expect((await admin.delete(`/api/admin/series/${S.id}`)).status()).toBe(204);
+    const trash = await (await admin.get("/api/admin/trash")).json();
+    expect(trash.series.filter((s) => s.id === S.id)).toEqual([expect.objectContaining({ videoCount: 2 })]);
+    expect(trash.videos.filter((v) => v.seriesId === S.id).map((v) => v.id), "the episode trashed on its own is listed on its own").toEqual([S.v.Dois.id]);
+
+    await page.goto("/admin?tab=trash");
+    const panel = page.getByRole("tabpanel");
+    const seriesRow = panel.getByRole("listitem").filter({ hasText: S.slug });
+    const videoRow = panel.getByRole("listitem").filter({ hasText: S.v.Dois.title });
+    await expect(seriesRow).toContainText("2 vídeos");
+    await expect(videoRow).toHaveCount(1);
+    await seriesRow.getByRole("button", { name: "Apagar para sempre" }).click();
+    const dialog = page.getByRole("dialog", { name: `Apagar “${S.name}” para sempre?` });
+    await expect(dialog).toContainText(/A série, os 2 vídeos dela (na lixeira )?e todas as avaliações serão apagados agora\./);
+    await dialog.getByRole("button", { name: "Apagar para sempre" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(seriesRow).toHaveCount(0);
+    await expect(videoRow, "the episode trashed on its own went with its series").toHaveCount(0);
+    const after = await (await admin.get("/api/admin/trash")).json();
+    expect(after.series.filter((s) => s.id === S.id)).toEqual([]);
+    expect(after.videos.filter((v) => v.seriesId === S.id)).toEqual([]);
+  });
+
+  test("re-adding a YouTube video that is in the trash → 409 “restore it instead”, and Adicionar vídeo says “Na lixeira — restaure-o”", async ({ page, admin }) => {
+    // Lead note (cycle 4): the client alert for this case was being patched when this was written.
+    const S = await seedBoardSeries(admin, "Readd", [["Um", "anime", 1, 1]]);
+    const video = S.v.Um;
+    expect((await admin.delete(`/api/admin/videos/${video.id}`)).status()).toBe(204);
+    const again = await admin.post("/api/admin/videos", { data: { url: `https://youtu.be/${video.youtubeVideoId}`, title: video.title } });
+    expect(again.status()).toBe(409);
+    expect((await again.json()).error.code).toBe("CONFLICT");
+
+    await page.goto("/admin");
+    await page.getByRole("tab", { name: "Adicionar vídeo", exact: true }).click();
+    await page.getByLabel("Link ou ID do YouTube").fill(`https://www.youtube.com/watch?v=${video.youtubeVideoId}`);
+    await page.getByLabel("Título (opcional)").fill(video.title);
+    await page.getByRole("button", { name: "Adicionar vídeo", exact: true }).click();
+    const alert = page.getByRole("alert").filter({ hasText: "Na lixeira — restaure-o" });
+    await expect(alert).toBeVisible();
+    await expect(page.getByText("Publicado — encontrou seu lugar.")).toHaveCount(0);
+    // Nothing was added: the video is still only in the trash.
+    expect((await listAll(admin, "/api/admin/videos", { q: S.name })).filter((v) => v.id === video.id)).toEqual([]);
+    expect((await (await admin.get("/api/admin/trash")).json()).videos.filter((v) => v.id === video.id)).toHaveLength(1);
+    // Em lote: the preview says the same for that link.
+    await page.getByRole("tab", { name: "Em lote", exact: true }).click();
+    await page.getByLabel("Links", { exact: true }).fill(`https://youtu.be/${video.youtubeVideoId}`);
+    await page.getByRole("button", { name: "Pré-visualizar", exact: true }).click();
+    const bulkRow = page.getByRole("region", { name: "Prévia da importação em lote" }).getByRole("row").filter({ hasText: video.youtubeVideoId });
+    await expect(bulkRow).toContainText("Na lixeira — restaure-o.");
+    await expect(bulkRow.getByRole("link", { name: "Abrir a Lixeira" })).toHaveAttribute("href", "/admin?tab=trash");
+
+    // The Adicionar vídeo alert leads to the Lixeira, where it can be restored.
+    await page.getByRole("tab", { name: "Adicionar vídeo", exact: true }).click();
+    await page.getByLabel("Link ou ID do YouTube").fill(video.youtubeVideoId);
+    await page.getByLabel("Título (opcional)").fill(video.title);
+    await page.getByRole("button", { name: "Adicionar vídeo", exact: true }).click();
+    await alert.getByRole("link", { name: "Abrir a Lixeira" }).click();
+    await expect(page).toHaveURL(/\/admin\?tab=trash$/);
+    const row = page.getByRole("tabpanel").getByRole("listitem").filter({ hasText: video.title });
+    await row.getByRole("button", { name: "Restaurar" }).click();
+    await expect(row).toHaveCount(0);
+    expect((await (await page.request.get(`${API_ORIGIN}/api/videos/${video.id}`)).json()).video.route).toBe(`/anime/${S.slug}/episode/1`);
   });
 });
 

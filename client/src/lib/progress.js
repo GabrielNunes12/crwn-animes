@@ -250,7 +250,11 @@ export function buildSeriesIndex(entries) {
 export function seriesProgress(videos, entries) {
   const list = videos ?? [];
   const map = entries ?? {};
-  const routes = progressRoutes(map);
+  // Entries of videos in this list count for that video only (by YouTube ID): after a reorder
+  // their stored route may be another episode's. The route match is only for entries whose
+  // ID is unknown here (a swapped YouTube link keeps the episode's route).
+  const ids = new Set(list.map((v) => v.youtubeVideoId));
+  const routes = progressRoutes(Object.fromEntries(Object.entries(map).filter(([id]) => !ids.has(id))));
   const isWatched = (v) => entryCompleted(map[v.youtubeVideoId]) || (v.route != null && routes.watched.has(v.route));
   const isPlayable = (v) => Boolean(v.route) && v.availability !== "unavailable";
   const playable = list.filter(isPlayable);
@@ -277,11 +281,13 @@ export function seriesProgress(videos, entries) {
 }
 
 /**
- * Called by a series page with the FULL published list of that series in that section.
- * Entries whose route belongs to this series+section but matches no published video are
- * stale (episode deleted or renumbered): an entry whose YouTube ID still exists is moved
- * to that video's current route; any other one is removed. Other series are never touched.
- * Afterwards the cards' route-based counts agree with the page. Returns how many changed.
+ * Called by a series / watch page with the FULL published list of that series in that section.
+ * An entry whose YouTube ID is in the list gets that video's current route (episodes get
+ * renumbered: after a reorder every old route still exists but may be another video's).
+ * Entries with an unknown ID whose route belongs to this series+section are kept when the route
+ * still exists (a swapped YouTube link) and removed when it doesn't (episode deleted).
+ * Other series are never touched. Afterwards the cards' route-based counts and the
+ * "Continue watching" links agree with the page. Returns how many changed.
  */
 export function pruneSeriesProgress(section, slug, videos) {
   if (!section || !slug || !Array.isArray(videos) || videos.length === 0) return 0;
@@ -290,11 +296,17 @@ export function pruneSeriesProgress(section, slug, videos) {
   const all = getAllProgress();
   let changed = 0;
   for (const [id, e] of Object.entries(all)) {
+    const current = routeById.get(id);
+    if (current) {
+      if (e?.route !== current) {
+        all[id] = { ...e, route: current };
+        changed += 1;
+      }
+      continue;
+    }
     const r = parseRoute(e?.route);
     if (!r || r.section !== section || r.slug !== slug || routes.has(e.route)) continue;
-    const moved = routeById.get(id);
-    if (moved) all[id] = { ...e, route: moved };
-    else delete all[id];
+    delete all[id];
     changed += 1;
   }
   if (changed && writeJSON(PROGRESS_KEY, all)) emit();

@@ -153,9 +153,10 @@ test("admin: series CRUD, add videos, fix a pending one, trash a video and the s
     expect(all.filter((v) => [ep3, ch7, unknown].includes(v.youtubeVideoId))).toEqual([]);
     await page.goto("/anime/e2e-saga/episode/3");
     await expect(page.getByRole("heading", { level: 1, name: "Página não encontrada" })).toBeVisible();
-    // ...and wait in the trash: the series with the 2 videos trashed along with it, the chapter on its own.
+    // ...and wait in the trash: the series, counting every video its delete-forever removes (the 2 trashed
+    // along with it + the chapter trashed on its own before), and the chapter listed on its own.
     const trash = await (await admin.get("/api/admin/trash")).json();
-    expect(trash.series.filter((s) => s.slug === "e2e-saga")).toEqual([expect.objectContaining({ name: "E2E Saga", videoCount: 2 })]);
+    expect(trash.series.filter((s) => s.slug === "e2e-saga")).toEqual([expect.objectContaining({ name: "E2E Saga", videoCount: 3 })]);
     expect(trash.videos.filter((v) => [ep3, ch7, unknown].includes(v.youtubeVideoId)).map((v) => v.youtubeVideoId)).toEqual([ch7]);
   });
 
@@ -164,10 +165,11 @@ test("admin: series CRUD, add videos, fix a pending one, trash a video and the s
     await tab("Lixeira").click();
     const seriesItem = panel.getByRole("listitem").filter({ hasText: "e2e-saga" });
     await expect(seriesItem).toContainText("E2E Saga");
+    await expect(seriesItem).toContainText("3 vídeos");
     await expect(panel.getByRole("listitem").filter({ hasText: "E2E Saga Chapter 7 manga" })).toHaveCount(1);
     await seriesItem.getByRole("button", { name: "Apagar para sempre" }).click();
     const dialog = page.getByRole("dialog", { name: "Apagar “E2E Saga” para sempre?" });
-    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(/A série, os 3 vídeos dela (na lixeira )?e todas as avaliações serão apagados agora\./);
     await dialog.getByRole("button", { name: "Apagar para sempre" }).click();
     await expect(dialog).toBeHidden();
     await expect(panel.getByRole("status").filter({ hasText: "para sempre" })).toHaveText("“E2E Saga” foi apagado para sempre.");

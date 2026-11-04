@@ -35,6 +35,10 @@ function server({ empty = false } = {}) {
         db.failNextPut = false;
         return [400, { error: { code: "VALIDATION_ERROR", message: "videoIds must be exactly the published videos", details: {} } }];
       }
+      const current = db.videos.filter((v) => v.season === body.season).map((v) => v.id);
+      if (JSON.stringify(body.expected) !== JSON.stringify(current)) {
+        return [409, { error: { code: "CONFLICT", message: "The order changed.", details: { current } } }];
+      }
       const updated = body.videoIds.map((id, i) => {
         const v = db.videos.find((x) => x.id === id);
         return { ...v, number: i + 1, route: `/anime/op/episode/${i + 1}` };
@@ -172,7 +176,7 @@ describe("admin series board — keyboard reordering", () => {
 
     await user.click(save);
     expect(await screen.findByText("Order saved: numbered 1 to 6.")).toBeInTheDocument();
-    expect(db.puts).toEqual([{ section: "anime", season: 1, videoIds: [2, 1, 3, 4, 6, 5] }]);
+    expect(db.puts).toEqual([{ section: "anime", season: 1, videoIds: [2, 1, 3, 4, 6, 5], expected: [1, 2, 3, 4, 5, 6] }]);
     // Renumbered from the server's answer; the order stays and nothing is dirty any more.
     expect(shownIds()).toEqual([2, 1, 3, 4, 6, 5]);
     expect(rowOf("Episode 1")).toHaveAttribute("data-id", "2");
@@ -199,6 +203,24 @@ describe("admin series board — keyboard reordering", () => {
       [1, 3, 2, 4, 5, 6],
       [1, 3, 2, 4, 5, 6, 9],
     ]);
+  });
+
+  it("a 409 (another admin saved a different order) reloads, keeps the local order and says why", async () => {
+    const { db } = server();
+    const { user } = await openBoard({ locale: "pt-BR" });
+    await user.click(within(rowOf("Episódio 1")).getByRole("button", { name: "Mover para baixo" }));
+    expect(shownIds()).toEqual([2, 1, 3, 4, 5, 6]);
+    // Another admin saved [6, 5, 4, 3, 2, 1] in the meantime.
+    db.videos = [...[6, 5, 4, 3, 2, 1].map((id, i) => ({ ...ep(id, i + 1) })), ...db.videos.filter((v) => v.season === 2)];
+    await user.click(screen.getByRole("button", { name: "Salvar ordem" }));
+    expect(await screen.findByText("Outro administrador salvou uma ordem diferente — confira e salve de novo.")).toBeInTheDocument();
+    expect(db.puts[0].expected).toEqual([1, 2, 3, 4, 5, 6]);
+    // Reloaded: still our order (it differs from the new server order), so it stays unsaved.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Salvar ordem" })).not.toHaveAttribute("aria-disabled"));
+    expect(shownIds()).toEqual([2, 1, 3, 4, 5, 6]);
+    await user.click(screen.getByRole("button", { name: "Salvar ordem" }));
+    expect(await screen.findByText("Ordem salva: numerados de 1 a 6.")).toBeInTheDocument();
+    expect(db.puts[1]).toEqual({ section: "anime", season: 1, videoIds: [2, 1, 3, 4, 5, 6], expected: [6, 5, 4, 3, 2, 1] });
   });
 
   it("Discard puts the saved order back", async () => {

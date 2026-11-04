@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Navigate, useLoaderData, useLocation, useNavigate } from "react-router";
 import { AsyncView } from "../../components/Await/AsyncView.jsx";
 import { Skeleton } from "../../components/Skeleton/Skeleton.jsx";
@@ -13,7 +13,7 @@ import { useT } from "../../i18n/useT.js";
 import { videoLabel } from "../../lib/format.js";
 import { watchMeta } from "../../lib/meta.js";
 import { AUTOPLAY_KEY, getBool, setBool } from "../../lib/prefs.js";
-import { entryCompleted } from "../../lib/progress.js";
+import { entryCompleted, pruneSeriesProgress } from "../../lib/progress.js";
 import { resolveWatch } from "./resolveWatch.js";
 import styles from "./Watch.module.css";
 
@@ -45,6 +45,12 @@ function WatchView({ section, video, series, prev, next, videos }) {
   const isManga = section === "manga";
   const label = videoLabel(t, video);
   useTitle(...watchMeta(t, video, series));
+  // `videos` is the series' whole published list: stored routes follow renumbered episodes
+  // (progress is keyed by YouTube ID; routes only feed the cards and "Continue watching").
+  const seriesSlug = series?.slug ?? video.seriesSlug;
+  useEffect(() => {
+    pruneSeriesProgress(section, seriesSlug, videos);
+  }, [section, seriesSlug, videos]);
 
   const goNext = () => next?.route && navigate(next.route, { state: { autoplay: true } });
   const goPrev = () => prev?.route && navigate(prev.route);

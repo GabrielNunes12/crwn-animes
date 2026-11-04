@@ -54,6 +54,15 @@ describe("admin draft preview", () => {
     expect(screen.getByText("Sem rota — não está publicado")).toBeInTheDocument();
   });
 
+  it("has no board link when the series itself is in the trash (only the Trash tab)", async () => {
+    mockFetch(() => [200, { video: { ...pendingVideo, status: "published", deletedAt: "2026-11-03T10:00:00Z", purgeAt: "2026-11-10T10:00:00Z" }, series: { ...series, deletedAt: "2026-11-03T10:00:00Z", purgeAt: "2026-11-10T10:00:00Z" } }]);
+    renderApp(null, { routes, path: "/admin/preview/7" });
+    const banner = await screen.findByRole("region", { name: "Draft preview" });
+    expect(within(banner).queryByRole("link", { name: /Back to the board/ })).not.toBeInTheDocument();
+    expect(within(banner).getByRole("link", { name: "View in Trash" })).toHaveAttribute("href", "/admin?tab=trash");
+    expect(within(banner).getByText("In the trash")).toBeInTheDocument();
+  });
+
   it("shows a not-found card for an unknown or purged video", async () => {
     mockFetch(() => [404, { error: { code: "NOT_FOUND" } }]);
     renderApp(null, { routes, path: "/admin/preview/999" });

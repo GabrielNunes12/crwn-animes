@@ -76,7 +76,8 @@ function PreviewView({ video, series }) {
   const label = video.number != null || video.section ? videoLabel(t, video) : null;
 
   let boardHref = null;
-  if (seriesId != null) {
+  // A trashed series has no board (its endpoint 404s): the Trash tab link below is the way back.
+  if (seriesId != null && !series?.deletedAt) {
     const q = new URLSearchParams();
     if (video.section) q.set("section", video.section);
     if (video.section === "anime" && video.season) q.set("season", String(video.season));
