@@ -462,6 +462,8 @@ Series covers set by admins (any https URL) are now also fetched **by the server
 that keeps every row, id, index, trigger, foreign key and aggregate intact). A permanently deleted or
 purged series/video id is never handed out again, so no cached copy of `/api/videos/<id>` (browser,
 service worker, CDN) can ever show a different video under an old id.
+(Caveat: an id deleted *before* this migration and higher than the surviving maximum cannot be known
+and may be handed out once more; from the migration on, no id is ever reused.)
 
 ## Admin metrics (anonymous aggregates only)
 `GET /api/admin/metrics?days=30` (admin only, `private, no-store`; `days` 7–90, default 30) →
@@ -473,7 +475,7 @@ service worker, CDN) can ever show a different video under an old id.
   pendingQueue: { count: number, oldestAt: string | null, medianAgeHours: number | null,
                   byReason: { key: string, reason: string, count: number }[] },  // top 10; key ∈ no-section | no-series | series-trashed | no-number | guessed-number | slot-taken | ready
   ratings: { total: number, average: number | null,
-             daily: { day: string, count: number, average: number | null }[] },  // from rating_activity, last `days`
+             daily: { day: string, count: number, average: number | null }[] },  // last `days`; a day's average is null when count < 3 (no single scores revealed)
   topSeries: { id, name, slug, section, ratingCount, average }[],       // top 10 by Bayesian average, n ≥ 3
   thumbnails: { cachedFiles: number, cachedBytes: number, failuresRemembered: number }
 }
