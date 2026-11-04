@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { VideoListTab } from "./VideoListTab.jsx";
 import { SeriesTab } from "./SeriesTab.jsx";
 import { jsonResponse, mockFetch, renderApp } from "../../test/utils.jsx";
 import { adminApi, toPage } from "../../api/client.js";
+import { SEARCH_DELAY } from "./useAdminList.js";
 
 const video = (n, title = `Video ${n}`) => ({
   id: n, youtubeVideoId: `yt${n}`.padEnd(11, "x"), title, channel: null, thumbnailUrl: "", section: "anime", seriesId: 1,
@@ -108,24 +109,46 @@ describe("admin lists — search", () => {
     const box = screen.getByRole("searchbox", { name: "Search videos by title or series" });
     // Keystrokes in quick succession (synchronous, so always inside the debounce window).
     const typeFast = (text) => act(() => [...text].forEach((_, i) => fireEvent.change(box, { target: { value: text.slice(0, i + 1) } })));
-    typeFast("nar");
-    await waitFor(() => expect(pending.nar).toBeTypeOf("function"));
-    // Typing is debounced: one request for "nar", not one per key.
-    expect(fetchFn.mock.calls.filter(([u]) => params(u).has("q")).map(([u]) => params(u).get("q"))).toEqual(["nar"]);
-    // A new query goes back to the first page.
-    expect(params(fetchFn.mock.calls.at(-1)[0]).has("offset")).toBe(false);
+    const queries = () => fetchFn.mock.calls.filter(([u]) => params(u).has("q")).map(([u]) => params(u).get("q"));
 
-    typeFast("naruto");
-    // While searching, the heading counts results, not "published videos".
-    await screen.findByRole("heading", { level: 2, name: "2 results for “naruto”" });
-    expect(titles()).toEqual(["Naruto Shippuden 1", "Naruto Shippuden 2"]);
+    // The 300 ms debounce runs on a fake clock and is advanced explicitly: it used to be waited
+    // out in real time inside 1 s waitFor/findBy windows (twice), which the parallel suite could
+    // overrun. Only setTimeout is faked; shouldAdvanceTime keeps RTL's setTimeout(0) waits working.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+    try {
+      typeFast("nar");
+      act(() => vi.advanceTimersByTime(SEARCH_DELAY - 1));
+      expect(queries()).toEqual([]);
+      // The pause is over: exactly one request, for the whole word, not one per key.
+      act(() => vi.advanceTimersByTime(1));
+      expect(queries()).toEqual(["nar"]);
+      expect(pending.nar).toBeTypeOf("function");
+      // A new query goes back to the first page.
+      expect(params(fetchFn.mock.calls.at(-1)[0]).has("offset")).toBe(false);
+      const narSignal = fetchFn.mock.calls.at(-1)[1].signal;
 
-    // The "nar" response finally arrives: it must not replace the newer results.
-    pending.nar();
-    await new Promise((r) => setTimeout(r, 30));
-    expect(titles()).toEqual(["Naruto Shippuden 1", "Naruto Shippuden 2"]);
-    expect(screen.queryByText("Naruto STALE")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 2, name: "2 results for “naruto”" })).toBeInTheDocument();
+      typeFast("naruto");
+      act(() => vi.advanceTimersByTime(SEARCH_DELAY));
+      expect(queries()).toEqual(["nar", "naruto"]);
+      // The newer query aborted the one still in flight.
+      expect(narSignal.aborted).toBe(true);
+      // While searching, the heading counts results, not "published videos".
+      await screen.findByRole("heading", { level: 2, name: "2 results for “naruto”" });
+      expect(titles()).toEqual(["Naruto Shippuden 1", "Naruto Shippuden 2"]);
+
+      // The "nar" response finally arrives: it must not replace the newer results. Its whole
+      // chain (fetch → body → JSON → then) settles within a few macrotask turns (setImmediate is real).
+      await act(async () => {
+        pending.nar();
+        for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r));
+      });
+      expect(titles()).toEqual(["Naruto Shippuden 1", "Naruto Shippuden 2"]);
+      expect(screen.queryByText("Naruto STALE")).not.toBeInTheDocument();
+      expect(screen.getByRole("heading", { level: 2, name: "2 results for “naruto”" })).toBeInTheDocument();
+      expect(queries()).toEqual(["nar", "naruto"]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows an empty state for a search with no match (series tab)", async () => {

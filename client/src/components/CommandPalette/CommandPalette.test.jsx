@@ -149,3 +149,90 @@ describe("Command palette (⌘K / Ctrl+K)", () => {
     expect(screen.getByText("Ctrl + K")).toBeInTheDocument();
   });
 });
+
+describe("Command palette — a late native `close` event (Esc, then Ctrl+K at once)", () => {
+  /**
+   * jsdom's <dialog> has no behaviour (the component falls back to the `open` attribute), so this
+   * gives it the browser's: showModal() opens it, and close() fires `close` in a LATER task.
+   */
+  function browserLikeDialog() {
+    const proto = HTMLDialogElement.prototype;
+    const saved = { showModal: Object.getOwnPropertyDescriptor(proto, "showModal"), close: Object.getOwnPropertyDescriptor(proto, "close") };
+    const queued = [];
+    proto.showModal = function showModal() {
+      this.setAttribute("open", "");
+    };
+    proto.close = function close() {
+      if (!this.hasAttribute("open")) return;
+      this.removeAttribute("open");
+      queued.push(this); // the browser's "queue an element task … fire close"
+    };
+    const restore = () => {
+      for (const [name, d] of Object.entries(saved)) {
+        if (d) Object.defineProperty(proto, name, d);
+        else delete proto[name];
+      }
+    };
+    // Runs the queued task(s): what the browser does once the current task is over.
+    const runQueuedCloseEvents = () => act(() => queued.splice(0).forEach((d) => d.dispatchEvent(new Event("close"))));
+    return { restore, runQueuedCloseEvents };
+  }
+
+  it("the reopened palette stays open, and focus still returns to the trigger when it finally closes", async () => {
+    const dialog = browserLikeDialog();
+    try {
+      const { user } = setup();
+      await screen.findByRole("heading", { name: "Home page" });
+      const trigger = screen.getByRole("button", { name: /Quick search/ });
+      trigger.focus();
+
+      fireEvent.keyDown(document.body, { key: "k", ctrlKey: true });
+      expect(dialogOpen()).toBe(true);
+      expect(palette()).toHaveFocus();
+
+      // Esc and Ctrl+K in the same task: the `close` event queued by Esc's close() has not run yet.
+      fireEvent.keyDown(palette(), { key: "Escape" });
+      expect(dialogOpen()).toBe(false);
+      fireEvent.keyDown(document.body, { key: "k", ctrlKey: true });
+      expect(dialogOpen()).toBe(true);
+
+      // Now the late `close` event from the first Esc arrives: it must not close the new palette.
+      dialog.runQueuedCloseEvents();
+      expect(dialogOpen()).toBe(true);
+      expect(palette()).toHaveFocus();
+      // …and the palette still works.
+      await typeAndWait(user, "naru");
+
+      // A normal close afterwards: its own late event changes nothing, and focus goes back.
+      fireEvent.keyDown(palette(), { key: "Escape" });
+      dialog.runQueuedCloseEvents();
+      expect(dialogOpen()).toBe(false);
+      expect(trigger).toHaveFocus();
+      expect(palette()).toHaveValue("");
+    } finally {
+      dialog.restore();
+    }
+  });
+
+  it("a close the browser starts on its own (no Esc key from us) still closes it and returns focus", async () => {
+    const dialog = browserLikeDialog();
+    try {
+      setup();
+      await screen.findByRole("heading", { name: "Home page" });
+      const trigger = screen.getByRole("button", { name: /Quick search/ });
+      trigger.focus();
+      fireEvent.keyDown(document.body, { key: "k", ctrlKey: true });
+      expect(dialogOpen()).toBe(true);
+      // e.g. a close request handled natively: the dialog closes, then `close` fires.
+      act(() => palette().closest("dialog").close());
+      dialog.runQueuedCloseEvents();
+      expect(dialogOpen()).toBe(false);
+      expect(trigger).toHaveFocus();
+      // It can be opened again.
+      fireEvent.keyDown(document.body, { key: "k", ctrlKey: true });
+      expect(dialogOpen()).toBe(true);
+    } finally {
+      dialog.restore();
+    }
+  });
+});
