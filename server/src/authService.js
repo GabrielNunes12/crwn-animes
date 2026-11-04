@@ -6,6 +6,8 @@ import { createUserRepository, toUser } from "./userRepository.js";
 const HOUR = 60 * 60 * 1000;
 export const SESSION_TTL_MS = 30 * 24 * HOUR;
 const VERIFY_TTL_MS = 24 * HOUR;
+/** Live sessions per user; a new login drops the oldest beyond this. */
+export const MAX_SESSIONS_PER_USER = 20;
 const RESET_TTL_MS = 1 * HOUR;
 
 const invalidToken = () =>
@@ -63,11 +65,34 @@ export function createAuthService({ db, config, mailer, now = () => new Date(), 
     return row;
   }
 
-  function startSession(userId) {
+  /**
+   * Creates a session (in the caller's transaction). The user must still exist
+   * and, when `epoch` is given (the session epoch the caller's checks saw),
+   * still have that epoch: a password change/reset or sign-out-everywhere in
+   * between means 401, never a session. Keeps at most MAX_SESSIONS_PER_USER.
+   */
+  function startSession(userId, epoch) {
+    const user = users.findById(userId);
+    if (!user || (epoch !== undefined && epoch !== user.session_epoch)) throw invalidCredentials();
+    users.trimSessions(userId, { epoch: user.session_epoch, keep: MAX_SESSIONS_PER_USER - 1, now: iso() });
     const token = newToken();
-    users.createSession(hashToken(token), userId, iso(SESSION_TTL_MS));
+    try {
+      users.createSession(hashToken(token), userId, iso(SESSION_TTL_MS), user.session_epoch);
+    } catch (error) {
+      if (error.code === "SQLITE_CONSTRAINT_FOREIGNKEY") throw invalidCredentials(); // account deleted
+      throw error;
+    }
     return token;
   }
+
+  /**
+   * After an `await` (scrypt takes ~0.4 s) the account may have changed: true
+   * when `before` no longer describes it, i.e. it was deleted, or its password
+   * was changed/reset (new hash AND new session epoch). A new hash with the
+   * same epoch is only an upgrade-rehash by a concurrent login (same password).
+   */
+  const changedSince = (before, now) =>
+    !now || (now.password_hash !== before.password_hash && now.session_epoch !== before.session_epoch);
 
   return {
     users,
@@ -78,19 +103,26 @@ export function createAuthService({ db, config, mailer, now = () => new Date(), 
       return users.findSessionUser(hashToken(token), iso());
     },
 
-    /** Rotates the session: drops `oldToken` (if any) and returns a new token. */
-    rotateSession(userId, oldToken) {
-      if (oldToken) users.deleteSession(hashToken(oldToken));
-      return startSession(userId);
+    /**
+     * Rotates the session: drops `oldToken` (if any) and returns a new token.
+     * `epoch`: the user's session_epoch when the caller authenticated them
+     * (401 if it moved since); omitted = the current one.
+     */
+    rotateSession(userId, oldToken, epoch) {
+      return db.transaction(() => {
+        if (oldToken) users.deleteSession(hashToken(oldToken));
+        return startSession(userId, epoch);
+      })();
     },
 
     endSession(token) {
       if (token) users.deleteSession(hashToken(token));
     },
 
-    endAllSessions(userId) {
+    endAllSessions: db.transaction((userId) => {
+      users.bumpSessionEpoch(userId);
       users.deleteSessionsOfUser(userId);
-    },
+    }),
 
     async register({ email, password, displayName, locale }) {
       // Hash first in both branches so an existing e-mail does not answer faster.
@@ -158,12 +190,23 @@ export function createAuthService({ db, config, mailer, now = () => new Date(), 
         throw invalidCredentials();
       }
       if (!(await verifyPassword(password, row.password_hash))) throw invalidCredentials();
-      if (!row.email_verified_at) {
+      // Re-read after scrypt: a password change/reset or account deletion meanwhile wins.
+      let current = users.findById(row.id);
+      if (changedSince(row, current)) throw invalidCredentials();
+      if (!current.email_verified_at) {
         throw new HttpError(403, "Confirm your e-mail before logging in. Check your inbox or ask for a new link.", {}, "EMAIL_NOT_VERIFIED");
       }
-      // Hashes made with older (weaker) scrypt parameters are upgraded now that we know the password.
-      if (needsRehash(row.password_hash)) users.setPassword(row.id, await hashPassword(password));
-      return applyAdminRole(row);
+      // Hashes made with older (weaker) scrypt parameters are upgraded now that we know the password,
+      // but only over the hash just verified: never over a password set meanwhile.
+      if (needsRehash(current.password_hash)) {
+        const upgraded = await hashPassword(password);
+        users.setPasswordIfUnchanged(row.id, upgraded, current.password_hash);
+        current = users.findById(row.id);
+        if (changedSince(row, current)) throw invalidCredentials();
+      }
+      // The caller creates the session with current.session_epoch (rotateSession): if
+      // the password changes before that, the session is refused.
+      return applyAdminRole(current);
     },
 
     async forgotPassword({ email, locale }) {
@@ -181,10 +224,13 @@ export function createAuthService({ db, config, mailer, now = () => new Date(), 
       const passwordHash = await hashPassword(password);
       const userId = users.consumeEmailToken(tokenHash, "reset", iso()); // single use, even if raced
       if (!userId) throw invalidToken();
-      users.setPassword(userId, passwordHash);
-      users.markVerified(userId, iso());
-      users.deleteEmailTokens(userId, "verify");
-      users.deleteSessionsOfUser(userId);
+      db.transaction(() => {
+        users.setPassword(userId, passwordHash);
+        users.markVerified(userId, iso());
+        users.deleteEmailTokens(userId, "verify");
+        users.bumpSessionEpoch(userId); // also kills sessions of logins still in flight
+        users.deleteSessionsOfUser(userId);
+      })();
       const row = applyAdminRole(users.findById(userId));
       send(row.email, "passwordChanged", { locale, displayName: row.display_name, url: `${config.appUrl}/forgot-password` });
       return row;
@@ -196,7 +242,11 @@ export function createAuthService({ db, config, mailer, now = () => new Date(), 
       if (!row || !(await verifyPassword(currentPassword, row.password_hash))) throw invalidCredentials();
       const passwordHash = await hashPassword(newPassword);
       db.transaction(() => {
+        // Only over the password just checked: a reset or another change meanwhile wins
+        // (an upgrade-rehash by a concurrent login of the same password does not count).
+        if (changedSince(row, users.findById(userId))) throw invalidCredentials();
         users.setPassword(userId, passwordHash);
+        users.bumpSessionEpoch(userId); // also kills sessions of logins still in flight
         users.deleteSessionsOfUser(userId);
         // A reset link requested earlier must not undo this change.
         users.deleteEmailTokens(userId, "reset");

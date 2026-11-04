@@ -39,18 +39,15 @@ export function startRetention(db, { intervalMs = HOUR } = {}) {
 /**
  * Re-checks every video with YouTube once a day: hourly ticks pick the videos
  * not checked in the last 24 h. Unref'd; the first tick runs after a minute.
+ * videos.healthCheck() is single-flight: a tick that finds a run going (its
+ * own or an admin's POST /api/admin/videos/health-check) joins it.
  */
 export function startHealthChecks(videos, { intervalMs = HOUR, maxAgeMs = DAY, firstDelayMs = 60_000 } = {}) {
-  let running = false;
   const run = async () => {
-    if (running) return;
-    running = true;
     try {
       await videos.healthCheck({ olderThan: new Date(Date.now() - maxAgeMs).toISOString() });
     } catch (error) {
       console.error(`[health-check] ${error.message}`);
-    } finally {
-      running = false;
     }
   };
   const first = setTimeout(run, firstDelayMs);

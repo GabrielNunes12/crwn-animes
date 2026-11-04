@@ -119,6 +119,7 @@ test.describe("stored / reflected XSS in the SPA", () => {
     await expect(panel.getByText(TITLES[0], { exact: true }).first()).toBeVisible();
     await expectClean(page, dialogs, "/admin published");
     for (const tab of ["pending", "broken", "add", "bulk"]) await visitAndCheck(page, dialogs, `/admin?tab=${tab}`);
+    await page.request.post("/api/auth/logout"); // free the admin session (the server keeps at most 20 per user)
     await context.close();
   });
 

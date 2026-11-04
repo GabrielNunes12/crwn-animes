@@ -51,6 +51,20 @@ function readOverrides(v, { nullable, fields = ["section", "seriesSlug", "season
   return out;
 }
 
+// Longest pasted token looked at (a YouTube link with tracking parameters is ~150 chars).
+const BULK_TOKEN_MAX = 300;
+const LEADING_WRAP = new Set(["<", "(", '"', "'", "["]);
+const TRAILING_WRAP = new Set([">", ")", '"', "'", "]", "."]);
+
+/** "<https://youtu.be/x>," -> "https://youtu.be/x". Loops, not a regex: linear on any input. */
+function stripWrapping(token) {
+  let start = 0;
+  let end = token.length;
+  while (start < end && LEADING_WRAP.has(token[start])) start++;
+  while (end > start && TRAILING_WRAP.has(token[end - 1])) end--;
+  return token.slice(start, end);
+}
+
 /** Every YouTube ID in the pasted text / url list, de-duplicated, as [{ input, youtubeVideoId }]. */
 export function collectBulkInputs(text, urls) {
   const inputs = [];
@@ -62,7 +76,7 @@ export function collectBulkInputs(text, urls) {
       continue;
     }
     for (const token of trimmed.split(/[\s,;|]+/)) {
-      const clean = token.replace(/^[<("'[]+|[>)"'\].]+$/g, "");
+      const clean = stripWrapping(token.slice(0, BULK_TOKEN_MAX));
       if (/youtu\.?be|youtube(-nocookie)?\.com/i.test(clean)) inputs.push(clean);
     }
   }
@@ -109,7 +123,7 @@ export function adminRoutes({ repo, videos }) {
     const slug = fields.slug ?? slugify(fields.name);
     if (repo.getSeries(slug)) throw slugConflict(slug);
     const series = repo.createSeries({ aliases: [], genres: [], ...fields, slug });
-    res.status(201).json({ series, published: videos.reclassifyPending() });
+    res.status(201).json({ series, published: videos.reclassifyPending({ before: null, after: series }) });
   });
 
   router.patch("/series/:id", (req, res) => {
@@ -117,7 +131,7 @@ export function adminRoutes({ repo, videos }) {
     const fields = readSeries(bodyOf(req), { partial: true });
     if (fields.slug && fields.slug !== current.slug && repo.getSeries(fields.slug)) throw slugConflict(fields.slug);
     const series = repo.updateSeries(current.id, { ...current, ...fields });
-    res.json({ series, published: videos.reclassifyPending() });
+    res.json({ series, published: videos.reclassifyPending({ before: current, after: series }) });
   });
 
   router.delete("/series/:id", (req, res) => {

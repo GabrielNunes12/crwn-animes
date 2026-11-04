@@ -72,15 +72,16 @@ See [`.env.example`](.env.example) — each variable is documented there.
 - `src/seo.js` — page resolution (200/301/404) + `<head>` rendering, sitemap and robots.txt.
 - `src/db.js` — schema + migrations (`PRAGMA user_version`; an entry is SQL or a JS function: 4–5 `search_text`, 6 genre spellings, 7 manga chapters
   are always season 1, 8 `series_stats` / `rating_totals` / `catalog_version` + triggers, 9 `videos.title_search` +
-  admin list indexes. `catalog_version` keys the
-  in-memory genre and sitemap caches.); `src/retention.js` — cleanup and YouTube health-check jobs.
+  admin list indexes, 10 session epochs, 11 `series_version` (keys the classifier's pre-normalised catalog),
+  12 `video_rating_stats` + triggers (per-video rating count/sum for every video list and `/api/top-rated`).
+  `catalog_version` keys the in-memory genre and sitemap caches.); `src/retention.js` — cleanup and YouTube health-check jobs.
 
 ## Data we store and why
 
 | Table | Personal data | Why | Kept until |
 |---|---|---|---|
 | `users` | e-mail, display name, scrypt password hash, privacy-consent time | login, show your name, prove consent | account deleted; **unverified accounts are deleted after 7 days** |
-| `sessions` | SHA-256 of the session token, user id, expiry | stay logged in | 30-day expiry, purged hourly |
+| `sessions` | SHA-256 of the session token, user id, expiry, epoch | stay logged in | 30-day expiry, purged hourly; at most 20 per user (a login drops the oldest) |
 | `email_tokens` | SHA-256 of the token, user id, purpose (`verify`/`reset`), expiry | confirm e-mail, reset password | used, or expired (24 h / 1 h), purged hourly |
 | `ratings` | user id, video id, score, reaction | the rating feature | account deleted |
 | `rating_activity` | **not personal data**: per-video, per-day counts, no user id | "trending" | 30 days |
@@ -112,4 +113,14 @@ E-mail addresses with control characters (`\p{Cc}`: NUL, ESC, DEL, C1) are refus
   accounts older than 7 days, rating activity older than 30 days.
 - YouTube health check: hourly ticks re-check videos not checked in 24 h via
   oEmbed; 401/403/404 marks a video `unavailable` (hidden from latest/top-rated/
-  trending/random). Admins can also run it with `POST /api/admin/videos/health-check`.
+  trending/random). Admins can also run it with `POST /api/admin/videos/health-check`. Runs are single-flight:
+  a request (or tick) while one is going waits for that run and gets its result.
+
+## Concurrency rules (auth and catalog)
+
+- Each session stores its user's `session_epoch`; password change/reset and logout-all bump it, so every
+  older session (including one a login still in flight is about to create) is invalid.
+- Login re-reads the account after scrypt: deleted, or password changed/reset meanwhile → 401
+  `INVALID_CREDENTIALS` (never a session, never a 500). The upgrade-rehash only replaces the hash it verified.
+- Series POST/PATCH re-classify only pending videos whose title contains an old or new name/alias (or whose
+  override names the old/new slug), in one transaction; a synopsis/genre/cover edit re-classifies nothing.

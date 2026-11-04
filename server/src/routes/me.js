@@ -63,7 +63,7 @@ export function meRoutes({ auth, ratings, config }) {
     v.done();
     const row = await auth.changePassword(req.user.id, { currentPassword, newPassword, locale });
     // Every session was revoked; this device gets a fresh one.
-    setSessionCookie(res, config, auth.rotateSession(row.id, null));
+    setSessionCookie(res, config, auth.rotateSession(row.id, null, row.session_epoch));
     res.json({ user: auth.toUser(row) });
   });
 

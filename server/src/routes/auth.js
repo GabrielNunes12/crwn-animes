@@ -13,9 +13,12 @@ export function authRoutes({ auth, config }) {
   const limitReset = limit("reset-password");
   const limitVerify = limit("verify-email");
 
-  /** Rotates the session (drops the one in the cookie, if any) and sends { user }. */
+  /**
+   * Rotates the session (drops the one in the cookie, if any) and sends { user }.
+   * The session gets the epoch `row` was read with: 401 if it moved since.
+   */
   const signIn = (req, res, row, status = 200) => {
-    setSessionCookie(res, config, auth.rotateSession(row.id, req.sessionToken));
+    setSessionCookie(res, config, auth.rotateSession(row.id, req.sessionToken, row.session_epoch));
     res.status(status).json({ user: auth.toUser(row) });
   };
 

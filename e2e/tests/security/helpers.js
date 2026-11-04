@@ -47,6 +47,19 @@ export async function newAdminClient() {
   return ctx;
 }
 
+/**
+ * Logs a fresh admin session out, then disposes the client. Every password login creates a
+ * session and the server keeps at most 20 per user (dropping the oldest), so leaked sessions
+ * would eventually evict the shared admin session other specs use.
+ */
+export async function closeAdmin(ctx) {
+  try {
+    await ctx.post("/api/auth/logout");
+  } finally {
+    await ctx.dispose();
+  }
+}
+
 /** The sid value a request/browser context currently holds for localhost (or null). */
 export async function sidOf(ctx) {
   const state = await ctx.storageState();
@@ -203,7 +216,7 @@ export async function withAdmin(fn) {
   try {
     return await fn(ctx);
   } finally {
-    await ctx.dispose();
+    await closeAdmin(ctx);
   }
 }
 
@@ -216,6 +229,6 @@ export const test = baseTest.extend({
   admin: async ({}, use) => {
     const ctx = await newAdminClient();
     await use(ctx);
-    await ctx.dispose();
+    await closeAdmin(ctx);
   },
 });

@@ -23,15 +23,23 @@ export function createUserRepository(db) {
     setRole: db.prepare("UPDATE users SET role = ? WHERE id = ?"),
     setDisplayName: db.prepare("UPDATE users SET display_name = ? WHERE id = ?"),
     setPassword: db.prepare("UPDATE users SET password_hash = ? WHERE id = ?"),
+    setPasswordIfUnchanged: db.prepare("UPDATE users SET password_hash = ? WHERE id = ? AND password_hash = ?"),
+    bumpSessionEpoch: db.prepare("UPDATE users SET session_epoch = session_epoch + 1 WHERE id = ?"),
     replaceRegistration: db.prepare(
       "UPDATE users SET display_name = ?, password_hash = ?, privacy_accepted_at = ? WHERE id = ? AND email_verified_at IS NULL"
     ),
     deleteUser: db.prepare("DELETE FROM users WHERE id = ?"),
 
-    insertSession: db.prepare("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)"),
+    insertSession: db.prepare("INSERT INTO sessions (token_hash, user_id, expires_at, epoch) VALUES (?, ?, ?, ?)"),
+    // A session is only valid while its epoch is the user's current one.
     sessionUser: db.prepare(`
       SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
-      WHERE s.token_hash = ? AND s.expires_at > ?`),
+      WHERE s.token_hash = ? AND s.expires_at > ? AND s.epoch = u.session_epoch`),
+    // Keeps the newest `keep` sessions of a user (stale epochs first, then the oldest).
+    trimSessions: db.prepare(`
+      DELETE FROM sessions WHERE user_id = @userId AND rowid NOT IN (
+        SELECT rowid FROM sessions WHERE user_id = @userId AND epoch = @epoch AND expires_at > @now
+        ORDER BY expires_at DESC, rowid DESC LIMIT @keep)`),
     deleteSession: db.prepare("DELETE FROM sessions WHERE token_hash = ?"),
     deleteSessionsOfUser: db.prepare("DELETE FROM sessions WHERE user_id = ?"),
     sessionsOfUser: db.prepare("SELECT expires_at FROM sessions WHERE user_id = ? ORDER BY expires_at"),
@@ -51,13 +59,20 @@ export function createUserRepository(db) {
     setRole: (id, role) => q.setRole.run(role, id),
     setDisplayName: (id, displayName) => q.setDisplayName.run(displayName, id),
     setPassword: (id, passwordHash) => q.setPassword.run(passwordHash, id),
+    /** Compare-and-set: false when the stored hash is no longer `expectedHash` (changed meanwhile). */
+    setPasswordIfUnchanged: (id, passwordHash, expectedHash) =>
+      q.setPasswordIfUnchanged.run(passwordHash, id, expectedHash).changes > 0,
+    /** Invalidates every existing session of the user (and any being created with the old epoch). */
+    bumpSessionEpoch: (id) => q.bumpSessionEpoch.run(id),
     /** A new sign-up for a still-unverified e-mail replaces the pending one. */
     replaceRegistration: (id, { displayName, passwordHash, now }) =>
       q.replaceRegistration.run(displayName, passwordHash, now, id).changes > 0,
     /** Sessions, e-mail tokens and ratings go with it (ON DELETE CASCADE). */
     deleteUser: (id) => q.deleteUser.run(id).changes > 0,
 
-    createSession: (tokenHash, userId, expiresAt) => q.insertSession.run(tokenHash, userId, expiresAt),
+    createSession: (tokenHash, userId, expiresAt, epoch = 0) => q.insertSession.run(tokenHash, userId, expiresAt, epoch),
+    /** Deletes all but the newest `keep` live, current-epoch sessions of the user. */
+    trimSessions: (userId, { epoch, keep, now }) => q.trimSessions.run({ userId, epoch, keep, now }).changes,
     findSessionUser: (tokenHash, now) => q.sessionUser.get(tokenHash, now) ?? null,
     deleteSession: (tokenHash) => q.deleteSession.run(tokenHash),
     deleteSessionsOfUser: (userId) => q.deleteSessionsOfUser.run(userId),

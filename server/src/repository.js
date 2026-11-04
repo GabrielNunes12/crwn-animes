@@ -101,11 +101,13 @@ const SEARCH_ORDER = {
 };
 export const SEARCH_SORTS = Object.keys(SEARCH_ORDER);
 
+// Ratings come from video_rating_stats (kept by triggers, db.js migration 12).
 const VIDEO_SELECT = `
   SELECT v.*, s.slug AS series_slug, s.name AS series_name,
-    (SELECT AVG(r.score) FROM ratings r WHERE r.video_id = v.id) AS rating_avg,
-    (SELECT COUNT(*) FROM ratings r WHERE r.video_id = v.id) AS rating_count
-  FROM videos v LEFT JOIN series s ON s.id = v.series_id`;
+    CASE WHEN vr.n > 0 THEN CAST(vr.total AS REAL) / vr.n END AS rating_avg,
+    COALESCE(vr.n, 0) AS rating_count
+  FROM videos v LEFT JOIN series s ON s.id = v.series_id
+    LEFT JOIN video_rating_stats vr ON vr.video_id = v.id`;
 
 // Admin video list (GET /api/admin/videos). WHERE is assembled from these
 // fixed fragments (never from user input) so each filter combination gets its
@@ -166,6 +168,11 @@ export function createRepository(db) {
     searchCount: db.prepare(`SELECT COUNT(*) AS n FROM (${SEARCH_SELECT})`),
     siteRating: db.prepare("SELECT n, total FROM rating_totals WHERE id = 1"),
     catalogVersion: db.prepare("SELECT version FROM catalog_version WHERE id = 1").pluck(),
+    seriesVersion: db.prepare("SELECT version FROM series_version WHERE id = 1").pluck(),
+    // What reclassifying needs of each pending video (no joins, no rating lookups).
+    pendingForReclassify: db.prepare(`
+      SELECT id, source_title, section, series_id, season, number, status, classification, overrides
+      FROM videos WHERE status = 'pending' ORDER BY id`),
     seriesGenres: db.prepare("SELECT id, genres FROM series WHERE id IS NOT @excludeId ORDER BY id"),
     // Genres worth a page: series with a published video YouTube still serves.
     listedSeriesGenres: db.prepare(`
@@ -210,17 +217,21 @@ export function createRepository(db) {
       WHERE v.status = 'published' AND v.availability = 'ok'
         AND (@section IS NULL OR v.section = @section)
       ORDER BY v.published_at DESC, v.id DESC LIMIT @limit OFFSET @offset`),
-    // Bayesian average (C*m + sum) / (C + n): C = @c, m = site-wide mean.
+    // Bayesian average (C*m + sum) / (C + n): C = @c, m = site-wide mean (@m, from
+    // rating_totals). Per-video counts/sums come from video_rating_stats, so
+    // nothing is aggregated per request; the page is picked first, then joined.
     topRated: db.prepare(`
-      WITH stats AS (
-        SELECT video_id, COUNT(*) AS n, SUM(score) AS total FROM ratings GROUP BY video_id
-      ), site AS (SELECT AVG(score) AS m FROM ratings)
+      WITH top AS (
+        SELECT st.video_id, st.n, (@c * @m + st.total) / (@c + st.n) AS score
+        FROM video_rating_stats st JOIN videos tv ON tv.id = st.video_id
+        WHERE st.n >= @minCount AND tv.status = 'published' AND tv.availability = 'ok'
+          AND (@section IS NULL OR tv.section = @section)
+        ORDER BY score DESC, st.n DESC, st.video_id DESC
+        LIMIT @limit
+      )
       ${VIDEO_SELECT}
-      JOIN stats st ON st.video_id = v.id CROSS JOIN site
-      WHERE v.status = 'published' AND v.availability = 'ok' AND st.n >= @minCount
-        AND (@section IS NULL OR v.section = @section)
-      ORDER BY (@c * site.m + st.total) / (@c + st.n) DESC, st.n DESC, v.id DESC
-      LIMIT @limit`),
+      JOIN top ON top.video_id = v.id
+      ORDER BY top.score DESC, top.n DESC, v.id DESC`),
     trending: db.prepare(`
       WITH recent AS (
         SELECT video_id, SUM(count) AS n FROM rating_activity
@@ -280,6 +291,16 @@ export function createRepository(db) {
   const genreRows = (stmt, params = {}) => stmt.all(params).map((r) => ({ genres: parseJson(r.genres, []) }));
 
   /** Memoises fn() until the catalog changes (catalog_version is bumped by triggers on series/videos). */
+  /** Memoises fn() until a series is created, changed or deleted (series_version, db.js migration 11). */
+  const untilSeriesChange = (fn) => {
+    let cached = null;
+    return () => {
+      const version = q.seriesVersion.get();
+      if (!cached || cached.version !== version) cached = { version, value: fn() };
+      return cached.value;
+    };
+  };
+
   const untilCatalogChanges = (fn) => {
     let cached = null;
     return () => {
@@ -354,6 +375,7 @@ export function createRepository(db) {
     /** Bumped by triggers on every series/video change; keys in-memory caches. */
     catalogVersion: () => q.catalogVersion.get(),
     untilCatalogChanges,
+    untilSeriesChange,
     /** Canonical genres of series with >= 1 published, available video, sorted (cached). */
     listGenres: () => listedGenres(),
     /** The stored spelling of `genre` (any case), or null when no series uses it. */
@@ -439,8 +461,24 @@ export function createRepository(db) {
       const stmt = adminVideoStatement(keys);
       return { items: stmt.page.all(params).map(toVideo), total: stmt.count.get(params) };
     },
-    listTopRated: ({ limit, section = null, c = 5, minCount = 3 }) =>
-      q.topRated.all({ limit, section, c, minCount }).map(toVideo),
+    listTopRated: ({ limit, section = null, c = 5, minCount = 3 }) => {
+      const site = q.siteRating.get();
+      const m = site && site.n > 0 ? site.total / site.n : 0;
+      return q.topRated.all({ limit, section, c, m, minCount }).map(toVideo);
+    },
+    /** [{ id, title, section, seriesId, season, number, status, classification (JSON), overrides }] of pending videos. */
+    pendingForReclassify: () =>
+      q.pendingForReclassify.all().map((r) => ({
+        id: r.id,
+        title: r.source_title,
+        section: r.section,
+        seriesId: r.series_id,
+        season: r.season,
+        number: r.number,
+        status: r.status,
+        classification: r.classification,
+        overrides: parseJson(r.overrides, {}),
+      })),
     /** `since` is the first day (YYYY-MM-DD) that counts. */
     listTrending: ({ limit, section = null, since }) => q.trending.all({ limit, section, since }).map(toVideo),
     randomVideo: (section = null) => {

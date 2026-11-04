@@ -1,11 +1,15 @@
 import { MIN_PASSWORD } from "./password.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// RFC 5321 caps an address at 254 characters. Checking the length first also keeps EMAIL_RE
+// (which backtracks on long runs of dots) from freezing the page on a pasted 30k-char string.
+const MAX_EMAIL = 254;
+export const isEmail = (value) => value.length <= MAX_EMAIL && EMAIL_RE.test(value);
 
 /** Returns { field: translationKey } for every invalid registration field. */
 export function validateRegistration({ email, displayName, password, consent }) {
   const errors = {};
-  if (!EMAIL_RE.test(email.trim())) errors.email = "auth.errors.email";
+  if (!isEmail(email.trim())) errors.email = "auth.errors.email";
   const name = displayName.trim();
   if (name.length < 2 || name.length > 30) errors.displayName = "auth.errors.displayName";
   if (password.length < MIN_PASSWORD) errors.password = "auth.errors.passwordLength";

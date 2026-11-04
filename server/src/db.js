@@ -291,6 +291,52 @@ const MIGRATIONS = [
       CREATE INDEX series_name ON series (name COLLATE NOCASE, id);
     `);
   },
+
+  // 10: session epochs. Every session stores the epoch its user had when it
+  // was created; a password change/reset and "sign out everywhere" bump the
+  // user's epoch, so a session created by a login that was still in flight
+  // (scrypt takes ~0.4 s) is born invalid. Existing sessions keep working (0 = 0).
+  `
+  ALTER TABLE users ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE sessions ADD COLUMN epoch INTEGER NOT NULL DEFAULT 0;
+  `,
+
+  // 11: series_version is bumped by every series change; it keys the
+  // classifier's pre-normalised catalog (video inserts do not invalidate it).
+  `
+  CREATE TABLE series_version (id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER NOT NULL);
+  INSERT INTO series_version VALUES (1, 0);
+  CREATE TRIGGER series_sv_insert AFTER INSERT ON series BEGIN UPDATE series_version SET version = version + 1; END;
+  CREATE TRIGGER series_sv_update AFTER UPDATE ON series BEGIN UPDATE series_version SET version = version + 1; END;
+  CREATE TRIGGER series_sv_delete AFTER DELETE ON series BEGIN UPDATE series_version SET version = version + 1; END;
+  `,
+
+  // 12: per-video rating aggregates (count, sum), kept by triggers like
+  // series_stats, so video lists and /api/top-rated never aggregate ratings
+  // per request. Rows go with their video (FK cascade) and at n = 0.
+  `
+  CREATE TABLE video_rating_stats (
+    video_id  INTEGER PRIMARY KEY REFERENCES videos(id) ON DELETE CASCADE,
+    n         INTEGER NOT NULL,
+    total     INTEGER NOT NULL
+  );
+  INSERT INTO video_rating_stats SELECT video_id, COUNT(*), SUM(score) FROM ratings GROUP BY video_id;
+
+  CREATE TRIGGER ratings_vstats_insert AFTER INSERT ON ratings BEGIN
+    INSERT INTO video_rating_stats (video_id, n, total) VALUES (NEW.video_id, 1, NEW.score)
+      ON CONFLICT (video_id) DO UPDATE SET n = n + 1, total = total + excluded.total;
+  END;
+  CREATE TRIGGER ratings_vstats_update AFTER UPDATE OF score, video_id ON ratings BEGIN
+    UPDATE video_rating_stats SET n = n - 1, total = total - OLD.score WHERE video_id = OLD.video_id;
+    DELETE FROM video_rating_stats WHERE video_id = OLD.video_id AND n <= 0;
+    INSERT INTO video_rating_stats (video_id, n, total) VALUES (NEW.video_id, 1, NEW.score)
+      ON CONFLICT (video_id) DO UPDATE SET n = n + 1, total = total + excluded.total;
+  END;
+  CREATE TRIGGER ratings_vstats_delete AFTER DELETE ON ratings BEGIN
+    UPDATE video_rating_stats SET n = n - 1, total = total - OLD.score WHERE video_id = OLD.video_id;
+    DELETE FROM video_rating_stats WHERE video_id = OLD.video_id AND n <= 0;
+  END;
+  `,
 ];
 
 function parseList(text) {

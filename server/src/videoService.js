@@ -1,4 +1,4 @@
-import { classify, parseYouTubeId } from "./classifier.js";
+import { classify, normalize, parseYouTubeId, prepareCatalog } from "./classifier.js";
 import { HttpError, validationError } from "./errors.js";
 import { videoRoute } from "./routing.js";
 
@@ -24,11 +24,22 @@ const isGone = (error) => error instanceof HttpError && (error.status === 404 ||
 // Adds, re-classifies and corrects videos. The classifier decides where a
 // video goes; this layer also makes sure two published videos never claim the
 // same episode/chapter.
+/** Normalised names + aliases of a series (what the classifier matches titles against). */
+const needlesOf = (series) =>
+  series ? [...new Set([series.name, ...(series.aliases ?? [])].map(normalize).filter((n) => n.trim() !== ""))].sort() : [];
+
 export function createVideoService({ repo, fetchVideoInfo }) {
-  /** `claimed`: extra slots taken by videos not stored yet (bulk dry runs). */
-  function place(title, overrides, excludeId = null, claimed = null) {
-    const result = classify({ title }, repo.listSeries(), overrides);
-    if (overrides.seriesSlug && !result.seriesId) {
+  // Series with pre-normalised names, rebuilt only when a series changes.
+  const catalog = repo.untilSeriesChange(() => prepareCatalog(repo.listSeries()));
+
+  /**
+   * `claimed`: extra slots taken by videos not stored yet (bulk dry runs).
+   * `strict`: an unknown overrides.seriesSlug is a 400 (false while
+   * re-classifying: the video just stays pending, with the reason).
+   */
+  function place(title, overrides, excludeId = null, claimed = null, { strict = true } = {}) {
+    const result = classify({ title }, catalog(), overrides);
+    if (strict && overrides.seriesSlug && !result.seriesId) {
       throw validationError(
         { seriesSlug: `There is no series with slug "${overrides.seriesSlug}".` },
         `There is no series with slug "${overrides.seriesSlug}".`
@@ -68,6 +79,27 @@ export function createVideoService({ repo, fetchVideoInfo }) {
       if (owner) throw new HttpError(409, "This video was already added.", { video: owner });
       throw error;
     }
+  }
+
+  let healthRun = null;
+
+  /** One health-check run (see healthCheck()). */
+  async function runHealthCheck({ olderThan = null } = {}) {
+    const rows = repo.videoIdsToCheck(olderThan);
+    let checked = 0;
+    await mapLimit(rows, 3, async ({ id, youtube_video_id: youtubeVideoId }) => {
+      try {
+        await fetchVideoInfo(youtubeVideoId);
+        repo.setAvailability(id, "ok");
+        checked++;
+      } catch (error) {
+        if (isGone(error)) {
+          repo.setAvailability(id, "unavailable");
+          checked++;
+        }
+      }
+    });
+    return { checked, unavailable: repo.listVideos(null, "unavailable") };
   }
 
   const mergeOverrides = (current, changes) => {
@@ -116,14 +148,44 @@ export function createVideoService({ repo, fetchVideoInfo }) {
       });
     },
 
-    /** Runs the classifier again on every pending video, e.g. after a new series is added. */
-    reclassifyPending() {
-      const changed = [];
-      for (const video of repo.listVideos("pending")) {
-        const updated = repo.updateVideo(video.id, place(video.title, video.overrides, video.id));
-        if (updated.status === "published") changed.push(updated);
+    /**
+     * Runs the classifier again on pending videos after a series was created
+     * ({ after }) or edited ({ before, after }); returns the ones now published.
+     * Only a change of name, aliases (as the classifier normalises them) or slug
+     * can move a video, and only one whose title contains an old or new
+     * name/alias, or whose admin override names the old or new slug: the
+     * others are skipped. A synopsis/genre/cover edit does nothing. Without an
+     * argument every pending video is re-classified. One transaction; rows
+     * whose placement did not change are not rewritten.
+     */
+    reclassifyPending(change = null) {
+      let needles = null;
+      let slugs = null;
+      if (change) {
+        const before = needlesOf(change.before);
+        const after = needlesOf(change.after);
+        if (change.before && change.before.slug === change.after?.slug && before.join("|") === after.join("|")) return [];
+        needles = [...new Set([...before, ...after])];
+        slugs = new Set([change.before?.slug, change.after?.slug].filter(Boolean));
       }
-      return changed;
+      return repo.transaction(() => {
+        const changed = [];
+        for (const video of repo.pendingForReclassify()) {
+          if (needles && !slugs.has(video.overrides.seriesSlug)) {
+            const text = normalize(video.title);
+            if (!needles.some((needle) => text.includes(needle))) continue;
+          }
+          const p = place(video.title, video.overrides, video.id, null, { strict: false });
+          const same =
+            p.status === video.status && p.section === video.section && p.seriesId === video.seriesId &&
+            p.season === video.season && p.number === video.number &&
+            JSON.stringify(p.classification) === video.classification;
+          if (same) continue;
+          const updated = repo.updateVideo(video.id, p);
+          if (updated.status === "published") changed.push(updated);
+        }
+        return changed;
+      });
     },
 
     remove(id) {
@@ -197,22 +259,12 @@ export function createVideoService({ repo, fetchVideoInfo }) {
      * network/5xx problems leave it as it was (and unchecked, so it is retried).
      * `olderThan` (ISO) limits the run to videos not checked since then.
      */
-    async healthCheck({ olderThan = null } = {}) {
-      const rows = repo.videoIdsToCheck(olderThan);
-      let checked = 0;
-      await mapLimit(rows, 3, async ({ id, youtube_video_id: youtubeVideoId }) => {
-        try {
-          await fetchVideoInfo(youtubeVideoId);
-          repo.setAvailability(id, "ok");
-          checked++;
-        } catch (error) {
-          if (isGone(error)) {
-            repo.setAvailability(id, "unavailable");
-            checked++;
-          }
-        }
+    healthCheck(options = {}) {
+      // Single flight: while a run is going (admin or the daily job), callers share it.
+      healthRun ??= runHealthCheck(options).finally(() => {
+        healthRun = null;
       });
-      return { checked, unavailable: repo.listVideos(null, "unavailable") };
+      return healthRun;
     },
   };
 }
