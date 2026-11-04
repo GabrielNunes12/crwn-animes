@@ -15,3 +15,24 @@ describe("Privacy notice — ratings and the 7-day trash", () => {
     expect(screen.getByText(/Se o vídeo for para a lixeira, as avaliações dele ficam guardadas por até mais 7 dias e não podem ser alteradas enquanto ele estiver lá; depois, são apagadas junto com ele\./)).toBeInTheDocument();
   });
 });
+
+describe("Privacy notice — same-origin thumbnails and the offline copy (v1.5)", () => {
+  it("says thumbnails come from our own server, so YouTube/Google is only contacted on Play (en)", () => {
+    renderApp(<Privacy />);
+    const youtube = screen.getByRole("heading", { name: "YouTube videos and thumbnails" }).closest("section");
+    expect(youtube).toHaveTextContent("Thumbnails are now served from our own server");
+    expect(youtube).toHaveTextContent("they are only contacted when you press Play.");
+    expect(youtube).not.toHaveTextContent("i.ytimg.com");
+    expect(screen.getByText("Thumbnails come from our own server: nothing from YouTube loads until you press Play.")).toBeInTheDocument();
+    expect(screen.getByText(/^Offline copy \(Cache Storage\)/)).toHaveTextContent("Nothing from your account, your ratings or any personal data is stored there");
+  });
+
+  it("pt-BR", () => {
+    renderApp(<Privacy />, { locale: "pt-BR" });
+    const youtube = screen.getByRole("heading", { name: "Vídeos e miniaturas do YouTube" }).closest("section");
+    expect(youtube).toHaveTextContent("As miniaturas agora são servidas pelo nosso próprio servidor");
+    expect(youtube).toHaveTextContent("eles só são contatados quando você aperta Play.");
+    expect(youtube).not.toHaveTextContent("i.ytimg.com");
+    expect(screen.getByText(/^Cópia offline \(Cache Storage\)/)).toBeInTheDocument();
+  });
+});

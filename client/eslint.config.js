@@ -22,8 +22,14 @@ export default defineConfig([
     },
   },
   {
-    files: ["vite.config.js", "eslint.config.js"],
+    files: ["vite.config.js", "eslint.config.js", "scripts/**/*.js"],
     languageOptions: { globals: { ...globals.node } },
+  },
+  {
+    // The service worker (bundled into dist/sw.js by scripts/vite-plugin-sw.js).
+    files: ["src/sw/**/*.js"],
+    ignores: ["src/sw/**/*.test.js"],
+    languageOptions: { globals: { ...globals.serviceworker } },
   },
   {
     files: ["src/**/*.test.{js,jsx}", "src/test/**"],

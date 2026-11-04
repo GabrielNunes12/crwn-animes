@@ -446,7 +446,8 @@
       "p2": "For an account we keep your email, display name, a scrambled (hashed) password and when you accepted this notice.",
       "p3": "No analytics, no ads, no trackers, no IP addresses. One essential cookie keeps you logged in.",
       "p4": "Your watch progress never leaves your browser.",
-      "p5": "Download your data or delete your account yourself, any time, from “My account”."
+      "p5": "Download your data or delete your account yourself, any time, from “My account”.",
+      "p6": "Thumbnails come from our own server: nothing from YouTube loads until you press Play."
     },
     "keep": {
       "title": "What we keep, why and for how long",
@@ -488,9 +489,10 @@
     "never": "We do not store IP addresses, browser user agents, analytics, advertising IDs or any third-party trackers.",
     "device": {
       "title": "Stored only on your device",
-      "intro": "Some things are saved in your browser's localStorage. They never reach our server:",
+      "intro": "Some things are saved only in your browser (in localStorage and, for offline use, in Cache Storage). They never reach our server:",
       "progress": "Watch progress (key crwn:progress:v1): for up to 200 videos — the position, the length, when you last watched, and the episode's link, title and thumbnail, so we can show “Resume at…”, ✓ marks and “Continue watching”.",
       "prefs": "Preferences: theme (light/dark), language, “Autoplay next” and “Always load YouTube”.",
+      "cache": "Offline copy (Cache Storage): the app itself and the public catalog pages you opened — lists, series, episodes and thumbnails — so the site opens without internet. Nothing from your account, your ratings or any personal data is stored there, and each new version of the site deletes the previous copy. You can delete it in your browser's site data settings.",
       "clear": "You can clear your watch history at any time, even without an account:",
       "clearLink": "My account → On this device"
     },
@@ -501,7 +503,7 @@
     },
     "youtube": {
       "title": "YouTube videos and thumbnails",
-      "p1": "Every episode is a YouTube video. Thumbnails are loaded from YouTube's image server (i.ytimg.com), so Google can see your IP address when they load.",
+      "p1": "Every episode is a YouTube video. Thumbnails are now served from our own server (it fetches them from YouTube and keeps a copy), so opening a page doesn't make your browser contact YouTube or Google: they are only contacted when you press Play.",
       "p2": "The YouTube player is only loaded after you press play (or if you switch on “Always load YouTube”). It uses YouTube's privacy-enhanced domain youtube-nocookie.com, but once it plays, Google's own privacy policy applies to what happens inside the player.",
       "p3": "If you prefer, use “Watch on YouTube” to open a video directly on youtube.com."
     },
@@ -891,5 +893,11 @@
       }
     },
     "privacy": "What data Crwn Animes keeps, why and for how long, and how to export or delete your account (GDPR / LGPD)."
+  },
+  "pwa": {
+    "updateAvailable": "A new version is available",
+    "update": "Update",
+    "updating": "Updating…",
+    "dismiss": "Dismiss"
   }
 }

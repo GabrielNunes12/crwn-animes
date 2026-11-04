@@ -5,7 +5,7 @@ import { useT } from "../../i18n/useT.js";
 import styles from "./Privacy.module.css";
 
 const DATA_ROWS = ["users", "sessions", "tokens", "ratings", "activity"];
-const DEVICE_ROWS = ["progress", "prefs"];
+const DEVICE_ROWS = ["progress", "prefs", "cache"];
 const RIGHTS = ["access", "rectify", "erase", "object", "complain"];
 
 export function Component() {
@@ -34,7 +34,7 @@ export function Component() {
       <Reveal as="section" variant="scroll" id="short" className={styles.highlight} aria-labelledby="short-h">
         <h2 id="short-h">{t("privacy.short.title")}</h2>
         <ul>
-          {[1, 2, 3, 4, 5].map((n) => (
+          {[1, 2, 3, 4, 5, 6].map((n) => (
             <li key={n}>{t(`privacy.short.p${n}`)}</li>
           ))}
         </ul>

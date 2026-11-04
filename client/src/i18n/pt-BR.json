@@ -446,7 +446,8 @@
       "p2": "Para uma conta guardamos seu e-mail, nome de exibição, a senha embaralhada (hash) e quando você aceitou este aviso.",
       "p3": "Sem analytics, sem anúncios, sem rastreadores, sem endereços IP. Um único cookie essencial mantém você conectado.",
       "p4": "Seu progresso nunca sai do seu navegador.",
-      "p5": "Baixe seus dados ou exclua sua conta você mesmo, a qualquer momento, em “Minha conta”."
+      "p5": "Baixe seus dados ou exclua sua conta você mesmo, a qualquer momento, em “Minha conta”.",
+      "p6": "As miniaturas vêm do nosso próprio servidor: nada do YouTube é carregado até você apertar Play."
     },
     "keep": {
       "title": "O que guardamos, por que e por quanto tempo",
@@ -488,9 +489,10 @@
     "never": "Não guardamos endereços IP, user agents do navegador, analytics, IDs de publicidade nem rastreadores de terceiros.",
     "device": {
       "title": "Guardado só no seu dispositivo",
-      "intro": "Algumas coisas ficam no localStorage do seu navegador. Elas nunca chegam ao nosso servidor:",
+      "intro": "Algumas coisas ficam só no seu navegador (no localStorage e, para o modo offline, no Cache Storage). Elas nunca chegam ao nosso servidor:",
       "progress": "Progresso (chave crwn:progress:v1): para até 200 vídeos — a posição, a duração, quando você assistiu pela última vez e o link, título e miniatura do episódio, para mostrar “Continuar em…”, marcas ✓ e “Continuar assistindo”.",
       "prefs": "Preferências: tema (claro/escuro), idioma, “Reprodução automática” e “Sempre carregar o YouTube”.",
+      "cache": "Cópia offline (Cache Storage): o próprio app e as páginas públicas do catálogo que você abriu — listas, séries, episódios e miniaturas —, para o site abrir sem internet. Nada da sua conta, das suas avaliações ou qualquer dado pessoal é guardado ali, e cada nova versão do site apaga a cópia anterior. Você pode apagá-la nas configurações de dados de sites do navegador.",
       "clear": "Você pode limpar seu histórico a qualquer momento, mesmo sem conta:",
       "clearLink": "Minha conta → Neste dispositivo"
     },
@@ -501,7 +503,7 @@
     },
     "youtube": {
       "title": "Vídeos e miniaturas do YouTube",
-      "p1": "Cada episódio é um vídeo do YouTube. As miniaturas são carregadas do servidor de imagens do YouTube (i.ytimg.com), então o Google pode ver seu endereço IP quando elas carregam.",
+      "p1": "Cada episódio é um vídeo do YouTube. As miniaturas agora são servidas pelo nosso próprio servidor (ele as busca no YouTube e guarda uma cópia), então abrir uma página não faz seu navegador contatar o YouTube nem o Google: eles só são contatados quando você aperta Play.",
       "p2": "O player do YouTube só é carregado depois que você aperta play (ou se ativar “Sempre carregar o YouTube”). Ele usa o domínio de privacidade aprimorada youtube-nocookie.com, mas quando o vídeo toca vale a política de privacidade do Google para o que acontece dentro do player.",
       "p3": "Se preferir, use “Assistir no YouTube” para abrir o vídeo direto no youtube.com."
     },
@@ -891,5 +893,11 @@
       }
     },
     "privacy": "Quais dados o Crwn Animes guarda, por quê e por quanto tempo, e como exportar ou apagar sua conta (LGPD / RGPD)."
+  },
+  "pwa": {
+    "updateAvailable": "Nova versão disponível",
+    "update": "Atualizar",
+    "updating": "Atualizando…",
+    "dismiss": "Dispensar"
   }
 }
