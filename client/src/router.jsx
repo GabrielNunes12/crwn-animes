@@ -52,7 +52,12 @@ export const routes = [
           {
             path: "admin",
             Component: RequireAdmin,
-            children: [{ index: true, lazy: page(() => import("./pages/Admin/Admin.jsx")) }],
+            children: [
+              { index: true, lazy: page(() => import("./pages/Admin/Admin.jsx")) },
+              // v1.4: per-series board (order, edit, trash) and draft preview.
+              { path: "series/:id", lazy: page(() => import("./pages/Admin/SeriesBoard.jsx")) },
+              { path: "preview/:id", lazy: page(() => import("./pages/Admin/DraftPreview.jsx")) },
+            ],
           },
           { path: "*", lazy: page(() => import("./pages/NotFound/NotFound.jsx")) },
         ],

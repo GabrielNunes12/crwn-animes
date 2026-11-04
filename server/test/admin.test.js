@@ -120,7 +120,7 @@ describe("admin", () => {
     assert.equal(down.body.error.code, "UPSTREAM_ERROR");
   });
 
-  test("deleting a series deletes its videos and their ratings", async () => {
+  test("deleting a series trashes it with its videos; deleting it forever deletes their ratings (v1.4)", async () => {
     const series = (await admin.post("/api/admin/series", { name: "Sakamoto Days" })).body.series;
     const video = await addVideo(srv, 5, "Sakamoto Days Episode 1");
     assert.equal(video.status, "published");
@@ -128,6 +128,9 @@ describe("admin", () => {
     assert.equal(srv.db.prepare("SELECT COUNT(*) AS n FROM rating_activity WHERE video_id = ?").get(video.id).n, 1);
 
     assert.equal((await admin.del(`/api/admin/series/${series.id}`)).status, 204);
+    assert.equal((await srv.client().get(`/api/videos/${video.id}`)).status, 404, "trashed: gone from the site");
+    assert.equal(srv.db.prepare("SELECT COUNT(*) AS n FROM ratings WHERE video_id = ?").get(video.id).n, 1, "kept in the trash");
+    assert.equal((await admin.del(`/api/admin/trash/series/${series.id}`)).status, 204);
     assert.equal(srv.db.prepare("SELECT COUNT(*) AS n FROM videos WHERE id = ?").get(video.id).n, 0);
     assert.equal(srv.db.prepare("SELECT COUNT(*) AS n FROM ratings WHERE video_id = ?").get(video.id).n, 0);
     assert.equal(srv.db.prepare("SELECT COUNT(*) AS n FROM rating_activity WHERE video_id = ?").get(video.id).n, 0);

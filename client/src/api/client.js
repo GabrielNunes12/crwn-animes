@@ -26,9 +26,11 @@ function buildQuery(params) {
  * apiFetch("/auth/me") / apiFetch("/auth/login", { method: "POST", body: {...} })
  * Resolves with the parsed JSON (null for 204). Throws ApiError otherwise.
  */
-export async function apiFetch(path, { method = "GET", body, query, signal } = {}) {
+export async function apiFetch(path, { method = "GET", body, query, signal, cache } = {}) {
   const headers = { Accept: "application/json" };
   const init = { method, credentials: "include", headers, signal };
+  // e.g. "no-cache": revalidate a public (max-age=60) catalog response the admin just changed.
+  if (cache) init.cache = cache;
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
     init.body = JSON.stringify(body);
@@ -157,5 +159,43 @@ export const adminApi = {
   bulk: (data) => post("/admin/videos/bulk", data),
   healthCheck: () => post("/admin/videos/health-check"),
   updateVideo: (id, data) => apiFetch(`/admin/videos/${enc(id)}`, { method: "PATCH", body: data }),
+  /** v1.4: moves the video to the 7-day trash (204). */
   deleteVideo: (id) => apiFetch(`/admin/videos/${enc(id)}`, { method: "DELETE" }),
+
+  // v1.4 — series board, trash, draft preview
+  /**
+   * One series by id, with `videoCounts` (there is no GET /admin/series/:id: pages through the
+   * list and stops at the page that has it). Rejects with a 404 ApiError when it isn't there
+   * (unknown, or in the trash).
+   */
+  findSeries: async (id, opts) => {
+    const want = Number(id);
+    let seen = 0;
+    for (let offset = 0; ; offset += ADMIN_PAGE_MAX) {
+      const { items, total } = await adminApi.series({ limit: ADMIN_PAGE_MAX, offset }, opts);
+      const hit = items.find((s) => Number(s.id) === want);
+      if (hit) return hit;
+      seen += items.length;
+      if (!items.length || seen >= total || items.length > ADMIN_PAGE_MAX) {
+        throw new ApiError({ status: 404, code: "NOT_FOUND", message: "Series not found" });
+      }
+    }
+  },
+  /** PUT /api/admin/series/:id/order → { videos } (numbers become 1..n in this order). */
+  reorder: (seriesId, { section, season, videoIds }) =>
+    apiFetch(`/admin/series/${enc(seriesId)}/order`, {
+      method: "PUT",
+      body: { section, season: section === "manga" ? 1 : Number(season), videoIds },
+    }),
+  /** GET /api/admin/videos/:id/preview → { video, series } (pending and trashed included). */
+  preview: (videoId, opts) => apiFetch(`/admin/videos/${enc(videoId)}/preview`, opts),
+  /** GET /api/admin/trash → { series: TrashedSeries[], videos: TrashedVideo[] } */
+  trash: (opts) => apiFetch("/admin/trash", opts),
+  /** → { series, published, pending } */
+  restoreSeries: (id) => post(`/admin/trash/series/${enc(id)}/restore`),
+  /** → { video }; 409 CONFLICT while its series is still in the trash. */
+  restoreVideo: (id) => post(`/admin/trash/videos/${enc(id)}/restore`),
+  /** Delete forever (204), ratings included. */
+  purgeSeries: (id) => apiFetch(`/admin/trash/series/${enc(id)}`, { method: "DELETE" }),
+  purgeVideo: (id) => apiFetch(`/admin/trash/videos/${enc(id)}`, { method: "DELETE" }),
 };

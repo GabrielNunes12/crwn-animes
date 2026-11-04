@@ -558,7 +558,8 @@
       "bulk": "Em lote",
       "pending": "Pendentes",
       "published": "Publicados",
-      "broken": "Quebrados"
+      "broken": "Quebrados",
+      "trash": "Lixeira"
     },
     "status": {
       "published": "Publicado",
@@ -567,6 +568,8 @@
     "auto": "Automático",
     "open": "Abrir",
     "refresh": "Atualizar",
+    "moveToTrash": "Mover para a lixeira",
+    "previewLink": "Pré-visualizar",
     "unclassified": "Ainda não classificado",
     "chipsHint": "Pressione Enter ou vírgula para adicionar. Backspace remove o último.",
     "scores": "Pontuação — anime {anime}, mangá {manga}",
@@ -597,14 +600,14 @@
         "one": "{count} vídeo pendente foi publicado.",
         "other": "{count} vídeos pendentes foram publicados."
       },
-      "deleted": "{name} excluída.",
+      "deleted": "{name} foi para a lixeira.",
       "all": {
         "one": "{count} série",
         "other": "{count} séries"
       },
       "none": "Nenhuma série ainda.",
-      "deleteTitle": "Excluir {name}?",
-      "deleteText": "Isso exclui a série, todos os vídeos dela e as avaliações. Não dá para desfazer.",
+      "deleteTitle": "Mover {name} para a lixeira?",
+      "deleteText": "A série, todos os vídeos dela e as avaliações saem do site agora e ficam 7 dias na lixeira — dá para restaurar na aba Lixeira. Depois disso, são apagados para sempre.",
       "episodes": {
         "one": "{count} episódio",
         "other": "{count} episódios"
@@ -613,7 +616,8 @@
         "one": "{count} capítulo",
         "other": "{count} capítulos"
       },
-      "hidden": "Fora do site: ainda sem episódios publicados"
+      "hidden": "Fora do site: ainda sem episódios publicados",
+      "openBoard": "Abrir quadro"
     },
     "add": {
       "title": "Adicionar um vídeo",
@@ -681,9 +685,9 @@
       "saved": "{title} salvo.",
       "nowPublished": "{title} publicado em {route}.",
       "nowPending": "{title} voltou a ficar pendente.",
-      "deleted": "{title} excluído.",
-      "deleteTitle": "Excluir este vídeo?",
-      "deleteText": "“{title}” e suas avaliações serão excluídos."
+      "deleted": "{title} foi para a lixeira.",
+      "deleteTitle": "Mover este vídeo para a lixeira?",
+      "deleteText": "“{title}” sai do site agora e fica 7 dias na lixeira, com as avaliações — dá para restaurar na aba Lixeira. Depois disso, é apagado para sempre."
     },
     "broken": {
       "title": {
@@ -720,6 +724,107 @@
       "next": "Próxima página",
       "pageOf": "Página {page} de {pages}",
       "pageSuffix": ", página {page} de {pages}"
+    },
+    "board": {
+      "kicker": "Quadro da série",
+      "docTitle": "Quadro: {name}",
+      "back": "Voltar ao admin",
+      "publicPage": "Ver página pública",
+      "section": "Seção",
+      "noVideos": "Esta série ainda não tem episódios nem capítulos publicados. Publique vídeos nela (abas Adicionar vídeo, Em lote ou Pendentes) para organizá-los aqui.",
+      "seasons": "Temporadas",
+      "unsaved": "alterações não salvas",
+      "listTitle": {
+        "anime": {
+          "one": "{count} episódio",
+          "other": "{count} episódios"
+        },
+        "manga": {
+          "one": "{count} capítulo",
+          "other": "{count} capítulos"
+        }
+      },
+      "hint": "Arraste pela alça ⠿, use os botões Mover para cima / Mover para baixo ou, com uma linha em foco, Alt+↑ e Alt+↓. Ao salvar, os números passam a ser 1, 2, 3… nesta ordem.",
+      "empty": "Nenhum vídeo publicado aqui.",
+      "position": "Posição {position}",
+      "moveUp": "Mover para cima",
+      "moveDown": "Mover para baixo",
+      "moved": "{label} movido para a posição {position} de {total}",
+      "dragCancelled": "Movimento cancelado. {label} voltou para a posição {position} de {total}",
+      "save": "Salvar ordem",
+      "discard": "Descartar",
+      "dirty": "Ordem alterada e ainda não salva.",
+      "saved": {
+        "one": "Ordem salva: {count} item numerado.",
+        "other": "Ordem salva: numerados de 1 a {count}."
+      },
+      "discarded": "Alterações descartadas.",
+      "stale": "A lista mudou desde que você a abriu (outra edição ou outro admin). Ela foi recarregada mantendo a sua ordem — confira e salve de novo.",
+      "leaveTitle": "Sair sem salvar a ordem?",
+      "leaveText": "A nova ordem ainda não foi salva e será perdida.",
+      "leaveConfirm": "Sair sem salvar",
+      "notFound": "Série não encontrada. Ela pode estar na lixeira.",
+      "editing": "Editar {label}"
+    },
+    "trash": {
+      "title": "Lixeira",
+      "hint": "Itens removidos ficam aqui por 7 dias, com as avaliações, e então são apagados para sempre. Enquanto estão na lixeira, não aparecem no site.",
+      "seriesTitle": {
+        "one": "{count} série",
+        "other": "{count} séries"
+      },
+      "videosTitle": {
+        "one": "{count} vídeo",
+        "other": "{count} vídeos"
+      },
+      "empty": "A lixeira está vazia.",
+      "seriesEmpty": "Nenhuma série na lixeira.",
+      "videosEmpty": "Nenhum vídeo na lixeira.",
+      "removed": "Removido {when}",
+      "purgeIn": {
+        "one": "Apagado em {count} dia",
+        "other": "Apagado em {count} dias"
+      },
+      "purgeSoon": "Será apagado em breve",
+      "restore": "Restaurar",
+      "restoring": "Restaurando…",
+      "deleteForever": "Apagar para sempre",
+      "purgeTitle": "Apagar “{name}” para sempre?",
+      "purgeSeriesText": {
+        "one": "A série, o {count} vídeo dela e todas as avaliações serão apagados agora. Isso não pode ser desfeito.",
+        "other": "A série, os {count} vídeos dela e todas as avaliações serão apagados agora. Isso não pode ser desfeito."
+      },
+      "purgeVideoText": "O vídeo e todas as avaliações dele serão apagados agora. Isso não pode ser desfeito.",
+      "purged": "“{name}” foi apagado para sempre.",
+      "restoredSeries": "Série {name} restaurada.",
+      "restoredSeriesPending": {
+        "one": "{count} vídeo voltou como pendente — confira na aba Pendentes.",
+        "other": "{count} vídeos voltaram como pendentes — confira na aba Pendentes."
+      },
+      "restoredVideo": "“{title}” restaurado.",
+      "restoredVideoPending": "“{title}” voltou como pendente: o lugar dele foi ocupado enquanto estava na lixeira. Corrija na aba Pendentes.",
+      "restoreConflict": "Não dá para restaurar este vídeo enquanto a série “{series}” estiver na lixeira. Restaure a série primeiro.",
+      "restoreConflictNoName": "Não dá para restaurar este vídeo enquanto a série dele estiver na lixeira. Restaure a série primeiro."
+    },
+    "preview": {
+      "banner": "Pré-visualização de rascunho",
+      "docTitle": "Pré-visualização: {title}",
+      "note": "Só administradores veem esta página. Ela não é indexada e não tem avaliações.",
+      "trashed": "Na lixeira",
+      "pendingWhy": "Por que está pendente",
+      "backToBoard": "Voltar ao quadro",
+      "backToPending": "Voltar para Pendentes",
+      "backToTrash": "Ver na Lixeira",
+      "details": "Detalhes",
+      "youtubeId": "ID do YouTube",
+      "channel": "Canal",
+      "route": "Rota",
+      "noRoute": "Sem rota — não está publicado",
+      "added": "Adicionado",
+      "updated": "Atualizado",
+      "availability": "Disponibilidade",
+      "available": "Disponível no YouTube",
+      "none": "—"
     }
   },
   "genre": {

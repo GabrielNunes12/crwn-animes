@@ -12,6 +12,8 @@ const AVAILABILITY = ["ok", "unavailable"];
 const LIST_Q_MAX = 80;
 const LIST_LIMIT_MAX = 100;
 const LIST_OFFSET_MAX = 10_000_000;
+// One season's videos in one reorder (the 20 kB body limit allows ~3,000 ids).
+const ORDER_MAX = 5000;
 
 /** ?q=&limit=&offset= of the admin lists (plus whatever `extra` reads), one 400 for every bad field. */
 function readListQuery(query, extra = () => ({})) {
@@ -94,10 +96,25 @@ export function collectBulkInputs(text, urls) {
   return rows;
 }
 
-export function adminRoutes({ repo, videos }) {
+/** PUT /series/:id/order body: { section, season, videoIds } (manga: season 1). */
+function readOrder(body) {
+  const v = validator(body);
+  const section = v.oneOf("section", SECTIONS);
+  const season = v.int("season", { min: 1, max: 99 });
+  if (section === "manga" && season !== undefined && season !== 1) v.fail("season", "Manga chapters have no seasons: use 1.");
+  const { videoIds } = body;
+  if (!Array.isArray(videoIds)) v.fail("videoIds", "Must be a list of video ids.");
+  else if (videoIds.length > ORDER_MAX) v.fail("videoIds", `At most ${ORDER_MAX} videos.`);
+  else if (!videoIds.every((id) => Number.isSafeInteger(id) && id > 0)) v.fail("videoIds", "Every item must be a video id.");
+  v.done();
+  return { section, season, videoIds };
+}
+
+export function adminRoutes({ repo, videos, trash }) {
   const router = Router();
   router.use(requireAdmin);
 
+  // Normal admin routes only see live series/videos: a trashed one is a 404 there.
   const seriesOr404 = (req) => {
     const id = idParam(req.params.id);
     const series = id && repo.getSeriesById(id);
@@ -109,8 +126,22 @@ export function adminRoutes({ repo, videos }) {
     if (!id) throw notFound("Video not found.");
     return id;
   };
-  const slugConflict = (slug) =>
-    new HttpError(409, `A series with slug "${slug}" already exists.`, { slug: "This slug is already used." });
+  const trashId = (req) => {
+    const id = idParam(req.params.id);
+    if (!id) throw notFound("Not in the trash.");
+    return id;
+  };
+  // A trashed series keeps its slug until it is purged or deleted forever.
+  const checkSlugFree = (slug) => {
+    const holder = repo.seriesHoldingSlug(slug);
+    if (!holder) return;
+    if (holder.deletedAt) {
+      throw new HttpError(409, `The series "${holder.name}" in the trash still uses the slug "${slug}".`, {
+        slug: "A series in the trash still uses this slug: restore it, delete it forever, or pick another.",
+      });
+    }
+    throw new HttpError(409, `A series with slug "${slug}" already exists.`, { slug: "This slug is already used." });
+  };
 
   // ---- series ----
   // { items, total }; q matches name + aliases like /api/search.
@@ -121,7 +152,7 @@ export function adminRoutes({ repo, videos }) {
   router.post("/series", (req, res) => {
     const fields = readSeries(bodyOf(req), { partial: false });
     const slug = fields.slug ?? slugify(fields.name);
-    if (repo.getSeries(slug)) throw slugConflict(slug);
+    checkSlugFree(slug);
     const series = repo.createSeries({ aliases: [], genres: [], ...fields, slug });
     res.status(201).json({ series, published: videos.reclassifyPending({ before: null, after: series }) });
   });
@@ -129,14 +160,22 @@ export function adminRoutes({ repo, videos }) {
   router.patch("/series/:id", (req, res) => {
     const current = seriesOr404(req);
     const fields = readSeries(bodyOf(req), { partial: true });
-    if (fields.slug && fields.slug !== current.slug && repo.getSeries(fields.slug)) throw slugConflict(fields.slug);
+    if (fields.slug && fields.slug !== current.slug) checkSlugFree(fields.slug);
     const series = repo.updateSeries(current.id, { ...current, ...fields });
     res.json({ series, published: videos.reclassifyPending({ before: current, after: series }) });
   });
 
+  // Moves the series and its videos to the trash (v1.4).
   router.delete("/series/:id", (req, res) => {
-    repo.deleteSeries(seriesOr404(req).id);
+    trash.trashSeries(seriesOr404(req).id);
     res.status(204).end();
+  });
+
+  // Renumbers one season's published videos 1..n in the given order.
+  router.put("/series/:id/order", (req, res) => {
+    const series = seriesOr404(req);
+    const order = readOrder(bodyOf(req));
+    res.json({ videos: videos.reorder(series.id, order) });
   });
 
   // ---- videos ----
@@ -201,8 +240,39 @@ export function adminRoutes({ repo, videos }) {
     res.json({ video: await videos.patch(id, { url, changes }) });
   });
 
+  // Any video that is not purged: pending and trashed ones too (draft preview).
+  router.get("/videos/:id/preview", (req, res) => {
+    const video = repo.getAnyVideo(videoId(req));
+    if (!video) throw notFound("Video not found.");
+    res.json({ video, series: video.seriesId != null ? repo.getAnySeriesById(video.seriesId) : null });
+  });
+
+  // Moves the video to the trash (v1.4).
   router.delete("/videos/:id", (req, res) => {
-    videos.remove(videoId(req));
+    trash.trashVideo(videoId(req));
+    res.status(204).end();
+  });
+
+  // ---- trash ----
+  router.get("/trash", (req, res) => {
+    res.json(trash.list());
+  });
+
+  router.post("/trash/series/:id/restore", (req, res) => {
+    res.json(trash.restoreSeries(trashId(req)));
+  });
+
+  router.post("/trash/videos/:id/restore", (req, res) => {
+    res.json({ video: trash.restoreVideo(trashId(req)) });
+  });
+
+  router.delete("/trash/series/:id", (req, res) => {
+    trash.deleteSeriesForever(trashId(req));
+    res.status(204).end();
+  });
+
+  router.delete("/trash/videos/:id", (req, res) => {
+    trash.deleteVideoForever(trashId(req));
     res.status(204).end();
   });
 

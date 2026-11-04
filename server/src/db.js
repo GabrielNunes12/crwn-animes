@@ -337,6 +337,112 @@ const MIGRATIONS = [
     DELETE FROM video_rating_stats WHERE video_id = OLD.video_id AND n <= 0;
   END;
   `,
+
+  // 13: 7-day trash (v1.4). deleted_at (ISO 8601) marks a trashed series or
+  // video; a trashed series takes its live videos with it (same deleted_at,
+  // trashed_with_series = 1), so videos.deleted_at alone says whether a video
+  // is visible. Trashed rows count as "not there" for every aggregate:
+  //   - series_stats only covers live videos of live series; the stats
+  //     triggers skip series that are not live (a series trash/restore
+  //     recomputes its rows once instead of once per video);
+  //   - rating_totals (site-wide mean) only counts ratings of live videos: the
+  //     rating triggers skip trashed videos, trashing/restoring a video moves
+  //     its ratings out of/into the totals, and a hard delete of a live video
+  //     takes them out BEFORE the row goes (FK cascades run after the parent
+  //     row is gone, when the rating triggers can no longer see it);
+  //   - video_rating_stats and rating_activity stay per video (trashed videos
+  //     are filtered out of every list that reads them).
+  // The published-slot index ignores trashed videos (a new video may take the
+  // slot; restoring then re-checks it). The indexes behind the live lists
+  // become partial (WHERE deleted_at IS NULL): trashed rows are never in them.
+  // The two admin-list indexes also carry deleted_at (always NULL there):
+  // SQLite only treats `col = const` terms of a partial index's WHERE as
+  // covered, so without the column the "deleted_at IS NULL" filter would
+  // need the table row and the counts would fall back to a table scan.
+  (db) => {
+    db.exec(`
+      ALTER TABLE series ADD COLUMN deleted_at TEXT;
+      ALTER TABLE videos ADD COLUMN deleted_at TEXT;
+      ALTER TABLE videos ADD COLUMN trashed_with_series INTEGER NOT NULL DEFAULT 0;
+
+      DROP INDEX videos_published_slot;
+      CREATE UNIQUE INDEX videos_published_slot
+        ON videos (series_id, section, season, number) WHERE status = 'published' AND deleted_at IS NULL;
+      DROP INDEX videos_status;
+      CREATE INDEX videos_status ON videos (status, published_at) WHERE deleted_at IS NULL;
+      DROP INDEX videos_created;
+      CREATE INDEX videos_created ON videos (created_at, id, status, availability, series_id, title_search, deleted_at)
+        WHERE deleted_at IS NULL;
+      DROP INDEX videos_status_created;
+      CREATE INDEX videos_status_created ON videos (status, created_at, id, deleted_at) WHERE deleted_at IS NULL;
+      DROP INDEX series_name;
+      CREATE INDEX series_name ON series (name COLLATE NOCASE, id) WHERE deleted_at IS NULL;
+      CREATE INDEX videos_trashed ON videos (deleted_at, id) WHERE deleted_at IS NOT NULL;
+      CREATE INDEX series_trashed ON series (deleted_at, id) WHERE deleted_at IS NOT NULL;
+
+      DROP TRIGGER videos_stats_insert;
+      DROP TRIGGER videos_stats_update;
+      DROP TRIGGER videos_stats_delete;
+      DROP TRIGGER ratings_stats_insert;
+      DROP TRIGGER ratings_stats_update;
+      DROP TRIGGER ratings_stats_delete;
+      DROP TRIGGER videos_version_update;
+
+      CREATE TRIGGER videos_stats_insert AFTER INSERT ON videos WHEN ${liveSeries("NEW")} BEGIN
+        ${recomputeLiveStats("NEW.series_id", "NEW.section")}
+      END;
+      CREATE TRIGGER videos_stats_update_old AFTER UPDATE OF status, section, series_id, published_at, deleted_at ON videos
+        WHEN ${liveSeries("OLD")} BEGIN
+        ${recomputeLiveStats("OLD.series_id", "OLD.section")}
+      END;
+      CREATE TRIGGER videos_stats_update_new AFTER UPDATE OF status, section, series_id, published_at, deleted_at ON videos
+        WHEN ${liveSeries("NEW")} BEGIN
+        ${recomputeLiveStats("NEW.series_id", "NEW.section")}
+      END;
+      CREATE TRIGGER videos_stats_delete AFTER DELETE ON videos WHEN ${liveSeries("OLD")} BEGIN
+        ${recomputeLiveStats("OLD.series_id", "OLD.section")}
+      END;
+      CREATE TRIGGER series_stats_trash AFTER UPDATE OF deleted_at ON series
+        WHEN OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL BEGIN
+        DELETE FROM series_stats WHERE series_id = NEW.id;
+      END;
+      CREATE TRIGGER series_stats_restore AFTER UPDATE OF deleted_at ON series
+        WHEN OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL BEGIN
+        ${recomputeLiveStats("NEW.id", "'anime'")}
+        ${recomputeLiveStats("NEW.id", "'manga'")}
+      END;
+
+      CREATE TRIGGER ratings_stats_insert AFTER INSERT ON ratings BEGIN
+        ${addLiveRating("NEW", "+")}
+      END;
+      CREATE TRIGGER ratings_stats_update AFTER UPDATE OF score, video_id ON ratings BEGIN
+        ${addLiveRating("OLD", "-")}
+        ${addLiveRating("NEW", "+")}
+      END;
+      CREATE TRIGGER ratings_stats_delete AFTER DELETE ON ratings BEGIN
+        ${addLiveRating("OLD", "-")}
+      END;
+      CREATE TRIGGER videos_totals_trash AFTER UPDATE OF deleted_at ON videos
+        WHEN (OLD.deleted_at IS NULL) <> (NEW.deleted_at IS NULL) BEGIN
+        UPDATE rating_totals SET
+          n = n + (CASE WHEN NEW.deleted_at IS NULL THEN 1 ELSE -1 END) * (SELECT COUNT(*) FROM ratings WHERE video_id = NEW.id),
+          total = total + (CASE WHEN NEW.deleted_at IS NULL THEN 1 ELSE -1 END)
+            * (SELECT COALESCE(SUM(score), 0) FROM ratings WHERE video_id = NEW.id);
+      END;
+      CREATE TRIGGER videos_totals_delete BEFORE DELETE ON videos WHEN OLD.deleted_at IS NULL BEGIN
+        UPDATE rating_totals SET
+          n = n - (SELECT COUNT(*) FROM ratings WHERE video_id = OLD.id),
+          total = total - (SELECT COALESCE(SUM(score), 0) FROM ratings WHERE video_id = OLD.id);
+      END;
+
+      CREATE TRIGGER videos_version_update AFTER UPDATE ON videos
+        WHEN OLD.status IS NOT NEW.status OR OLD.section IS NOT NEW.section OR OLD.series_id IS NOT NEW.series_id
+          OR OLD.season IS NOT NEW.season OR OLD.number IS NOT NEW.number OR OLD.availability IS NOT NEW.availability
+          OR OLD.published_at IS NOT NEW.published_at OR OLD.updated_at IS NOT NEW.updated_at
+          OR OLD.youtube_video_id IS NOT NEW.youtube_video_id OR OLD.deleted_at IS NOT NEW.deleted_at
+      BEGIN ${BUMP_VERSION} END;
+    `);
+  },
 ];
 
 function parseList(text) {
@@ -384,6 +490,45 @@ function addRating(ref, sign) {
         UPDATE series_stats SET rating_n = rating_n ${sign} 1, rating_sum = rating_sum ${sign} ${ref}.score
         WHERE (series_id, section) = (SELECT series_id, section FROM videos WHERE id = ${ref}.video_id AND status = 'published');
         UPDATE rating_totals SET n = n ${sign} 1, total = total ${sign} ${ref}.score;`;
+}
+
+// Migration 13 (trash) versions of the two bodies above. Migrations 8's
+// triggers are replaced by these; the functions above stay as migration 8 ran them.
+
+/** Trigger WHEN condition: the series of the video row `ref` exists and is not in the trash. */
+const liveSeries = (ref) => `EXISTS (SELECT 1 FROM series WHERE id = ${ref}.series_id AND deleted_at IS NULL)`;
+
+/**
+ * Rebuilds the series_stats row (series `sid`, section `sec`: SQL expressions)
+ * from the live published videos there and their ratings. Callers only run it
+ * for a live series (trigger WHEN), so a trashed series never has a row.
+ * Served by the partial index videos_published_slot (series_id, section, ...).
+ */
+function recomputeLiveStats(sid, sec) {
+  const live = (v) => `${v}series_id = ${sid} AND ${v}section = ${sec} AND ${v}status = 'published' AND ${v}deleted_at IS NULL`;
+  return `
+        DELETE FROM series_stats WHERE series_id = ${sid} AND section = ${sec};
+        INSERT INTO series_stats (series_id, section, video_count, latest_published_at, rating_n, rating_sum)
+        SELECT ${sid}, ${sec}, agg.c, agg.latest, rt.n, rt.total
+        FROM (SELECT COUNT(*) AS c, MAX(published_at) AS latest FROM videos WHERE ${live("")}) AS agg,
+             (SELECT COUNT(r.score) AS n, COALESCE(SUM(r.score), 0) AS total
+              FROM videos v JOIN ratings r ON r.video_id = v.id WHERE ${live("v.")}) AS rt
+        WHERE agg.c > 0;`;
+}
+
+/**
+ * Adds (+) or removes (-) the rating row `ref`: series stats when its video is
+ * live and published, the site-wide totals when its video is live. A rating
+ * removed by an FK cascade (its video is already gone) changes neither: the
+ * video's own triggers have accounted for it.
+ */
+function addLiveRating(ref, sign) {
+  return `
+        UPDATE series_stats SET rating_n = rating_n ${sign} 1, rating_sum = rating_sum ${sign} ${ref}.score
+        WHERE (series_id, section) = (SELECT series_id, section FROM videos
+          WHERE id = ${ref}.video_id AND status = 'published' AND deleted_at IS NULL);
+        UPDATE rating_totals SET n = n ${sign} 1, total = total ${sign} ${ref}.score
+        WHERE EXISTS (SELECT 1 FROM videos WHERE id = ${ref}.video_id AND deleted_at IS NULL);`;
 }
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

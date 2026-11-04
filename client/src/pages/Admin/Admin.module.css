@@ -251,8 +251,19 @@
     font-size: var(--step--1);
     font-variant-numeric: tabular-nums;
   }
+  /* v1.4 trash */
+  .trashed {
+    background: var(--danger);
+    color: var(--on-danger);
+    vertical-align: middle;
+  }
+  .rowAlert {
+    flex-basis: 100%;
+  }
+
   /* List headings receive focus after a page change. */
-  h2[tabindex="-1"] {
+  h2[tabindex="-1"],
+  h3[tabindex="-1"] {
     scroll-margin-block-start: calc(var(--header-h, 4rem) + 1rem);
   }
 }

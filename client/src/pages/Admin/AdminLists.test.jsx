@@ -166,8 +166,8 @@ describe("admin lists — the list changing under the pager", () => {
     const seen = new Set(titles());
 
     const row = screen.getByText("Video 1").closest("li");
-    await user.click(within(row).getByRole("button", { name: "Delete" }));
-    await user.click(within(screen.getByRole("dialog", { name: "Delete this video?" })).getByRole("button", { name: "Delete" }));
+    await user.click(within(row).getByRole("button", { name: "Move to trash" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Move this video to the trash?" })).getByRole("button", { name: "Move to trash" }));
     // Video 21 slides onto page 1 after the refetch.
     await waitFor(() => expect(titles()).toContain("Video 21"));
     expect(titles()).toHaveLength(20);

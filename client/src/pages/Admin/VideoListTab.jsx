@@ -76,9 +76,14 @@ export function VideoListTab({ status, series }) {
                 </p>
                 {v.route && <Link to={v.route}>{v.route}</Link>}
               </div>
-              <button type="button" className="btn btn-sm btn-danger" onClick={() => setToDelete(v)} style={{ alignSelf: "start" }}>
-                {t("common.delete")}
-              </button>
+              <div className="cluster" style={{ alignSelf: "start", justifyContent: "flex-end" }}>
+                <Link className="btn btn-sm btn-ghost" to={`/admin/preview/${v.id}`}>
+                  {t("admin.previewLink")}
+                </Link>
+                <button type="button" className="btn btn-sm btn-danger" onClick={() => setToDelete(v)}>
+                  {t("admin.moveToTrash")}
+                </button>
+              </div>
             </div>
             {status === "pending" ? (
               <>
@@ -99,6 +104,7 @@ export function VideoListTab({ status, series }) {
       <ConfirmDialog
         open={Boolean(toDelete)}
         title={t("admin.videos.deleteTitle")}
+        confirmLabel={t("admin.moveToTrash")}
         busy={deleteState.busy}
         onConfirm={onDelete}
         onClose={() => {
