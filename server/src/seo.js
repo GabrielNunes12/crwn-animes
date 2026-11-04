@@ -384,7 +384,8 @@ export function createSitemap({ repo, appUrl, maxUrls = SITEMAP_MAX_URLS }) {
 }
 
 export function robotsTxt(appUrl) {
-  return ["User-agent: *", "Disallow: /admin", "Disallow: /account", "Disallow: /api/", "", `Sitemap: ${appUrl}/sitemap.xml`, ""].join(
+  // The same-origin images are what og:image / JSON-LD point at: crawlers may read them (v1.5).
+  return ["User-agent: *", "Disallow: /admin", "Disallow: /account", "Allow: /api/thumbs/", "Allow: /api/covers/", "Disallow: /api/", "", `Sitemap: ${appUrl}/sitemap.xml`, ""].join(
     "\n"
   );
 }

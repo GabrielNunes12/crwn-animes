@@ -35,7 +35,8 @@ function readSeries(body, { partial }) {
   if (v.has("synopsis")) out.synopsis = v.string("synopsis", { max: 2000, nullable: true });
   if (v.has("aliases")) out.aliases = v.stringList("aliases");
   if (v.has("genres")) out.genres = v.stringList("genres", { maxItems: 20, maxLength: 40 });
-  if (v.has("coverUrl")) out.coverUrl = v.httpUrl("coverUrl", { nullable: true });
+  // `coverUrl` in a request is the source URL; responses carry it as coverSourceUrl (v1.5).
+  if (v.has("coverUrl")) out.coverSourceUrl = v.coverSourceUrl("coverUrl", { nullable: true });
   if (!partial && out.name && !out.slug && !slugify(out.name)) {
     v.fail("slug", "Could not build a slug from the name; send one.");
   }

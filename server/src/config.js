@@ -121,6 +121,8 @@ export function loadConfig(env = process.env) {
     // Same-origin YouTube thumbnails (GET /api/thumbs/<id>.jpg): on-disk LRU cache, created on first use.
     thumbCacheDir: path.resolve(SERVER_DIR, env.THUMB_CACHE_DIR || "./data/thumbs"),
     thumbCacheMb: Math.max(0, int(env.THUMB_CACHE_MB, 200)), // 0 = keep nothing on disk
+    // Same-origin thumbnails/covers: upstream fetches (cache misses) per IP per 5 minutes (429 beyond).
+    imageMissRateLimit: { max: Math.max(1, int(env.IMAGE_MISS_RATE_MAX, 300)), windowMs: 5 * 60 * 1000 },
     // Tests only (never honoured in production): a fake i.ytimg.com, see thumbnailUpstream().
     thumbUpstream: env.THUMB_UPSTREAM?.trim() || null,
   };

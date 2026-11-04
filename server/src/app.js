@@ -20,19 +20,23 @@ import { catalogRoutes } from "./routes/catalog.js";
 import { devRoutes } from "./routes/dev.js";
 import { meRoutes } from "./routes/me.js";
 import { ratingRoutes } from "./routes/ratings.js";
-import { thumbRoutes } from "./routes/thumbs.js";
-import { createThumbnailCache, fetchYoutubeThumbnail } from "./thumbnails.js";
+import { coverHash, createCoverSource, fetchCover as fetchCoverImage, parseCoverKey } from "./covers.js";
+import { createImageCache } from "./imageCache.js";
+import { rateLimit } from "./middleware/rateLimit.js";
+import { imageRoutes } from "./routes/images.js";
+import { createThumbnailSource, fetchYoutubeThumbnail } from "./thumbnails.js";
 import { createVideoService } from "./videoService.js";
 import { fetchVideoInfo as youtubeFetchVideoInfo } from "./youtube.js";
 
 // Content-Security-Policy from docs/API.md (v1.1, v1.5). YouTube embeds need the
-// youtube(-nocookie) frames and scripts; video thumbnails are same-origin
-// (/api/thumbs); the service worker and the web manifest come from this origin.
+// youtube(-nocookie) frames and scripts; every image is same-origin (thumbnails
+// and series covers go through /api/thumbs and /api/covers); the service worker
+// and the web manifest come from this origin.
 const CSP_DIRECTIVES = {
   defaultSrc: ["'self'"],
   scriptSrc: ["'self'", "https://www.youtube.com", "https://s.ytimg.com"],
   frameSrc: ["https://www.youtube-nocookie.com", "https://www.youtube.com"],
-  imgSrc: ["'self'", "data:", "https:"], // series covers can live on any https host
+  imgSrc: ["'self'", "data:"],
   styleSrc: ["'self'", "'unsafe-inline'"],
   fontSrc: ["'self'"],
   connectSrc: ["'self'"],
@@ -72,6 +76,48 @@ export function toHttpError(err) {
 }
 
 /**
+ * Same-origin images (v1.5): one disk cache (THUMB_CACHE_DIR / THUMB_CACHE_MB) for
+ * thumbnails and covers, a source for each (single-flight, 4 upstream fetches at
+ * once, failure memory) and one per-IP limit on cache misses.
+ */
+function createImages({ repo, config, fetchThumbnail, fetchCover }) {
+  // A cached file stays only while it belongs to something: a video (live or trashed)
+  // with that YouTube ID, or a series (live or trashed) whose CURRENT cover URL has that hash.
+  const belongs = (key) => {
+    const cover = parseCoverKey(key);
+    if (!cover) return repo.thumbnailState(key) !== null;
+    const source = repo.coverSource(cover.seriesId)?.sourceUrl;
+    return Boolean(source) && coverHash(source) === cover.hash;
+  };
+  const cache = createImageCache({
+    dir: config.thumbCacheDir,
+    maxBytes: Math.floor(config.thumbCacheMb * 1024 * 1024),
+    isKnown: belongs,
+  });
+  const thumbnails = createThumbnailSource({ cache, fetchThumbnail });
+  const covers = createCoverSource({ cache, fetchCover });
+  return {
+    cache,
+    thumbnails,
+    covers,
+    misses: rateLimit({
+      ...config.imageMissRateLimit,
+      name: "images",
+      message: "Too many images requested. Please wait a few minutes.",
+    }),
+    /** Files of videos/series deleted for good (delete-forever, the 7-day purge). */
+    purge({ youtubeIds = [], seriesIds = [] } = {}) {
+      cache.remove(youtubeIds);
+      const gone = new Set(seriesIds);
+      if (gone.size > 0) cache.removeMatching((key) => gone.has(parseCoverKey(key)?.seriesId));
+    },
+    /** Files that belong to nothing any more (swapped uploads, replaced covers, a crash mid-purge). */
+    prune: () => cache.prune(),
+    stats: () => ({ ...cache.stats(), thumbnails: thumbnails.stats(), covers: covers.stats() }),
+  };
+}
+
+/**
  * Builds the Express app without listening, so tests can start it on port 0.
  * @param db              better-sqlite3 database from openDatabase()
  * @param config          settings from loadConfig() (missing keys get defaults)
@@ -80,8 +126,17 @@ export function toHttpError(err) {
  * @param fetchThumbnail  async (youtubeVideoId) => Buffer of a JPEG ≤ 512 KB, throws on failure
  *                        (default: hqdefault.jpg from i.ytimg.com, or from THUMB_UPSTREAM outside
  *                        production; src/thumbnails.js)
+ * @param fetchCover      async (sourceUrl) => { body, type }, throws on failure (default: the
+ *                        SSRF-guarded fetch of src/covers.js)
  */
-export function createApp({ db, config: overrides = {}, mailer, fetchVideoInfo = youtubeFetchVideoInfo, fetchThumbnail } = {}) {
+export function createApp({
+  db,
+  config: overrides = {},
+  mailer,
+  fetchVideoInfo = youtubeFetchVideoInfo,
+  fetchThumbnail,
+  fetchCover = (sourceUrl) => fetchCoverImage(sourceUrl),
+} = {}) {
   const config = { ...loadConfig({}), ...overrides };
   mailer ??= createMailer(config);
   const thumbBaseUrl = thumbnailUpstream(config); // i.ytimg.com in production, whatever THUMB_UPSTREAM says
@@ -90,17 +145,12 @@ export function createApp({ db, config: overrides = {}, mailer, fetchVideoInfo =
   const repo = createRepository(db);
   const videos = createVideoService({ repo, fetchVideoInfo });
   const ratings = createRatingService({ db });
-  const thumbnails = createThumbnailCache({
-    dir: config.thumbCacheDir,
-    maxBytes: Math.floor(config.thumbCacheMb * 1024 * 1024),
-    fetchThumbnail,
-    isKnown: (id) => repo.thumbnailState(id) !== null,
-  });
-  const trash = createTrashService({ db, repo, videos, onPurged: (youtubeIds) => thumbnails.remove(youtubeIds) });
+  const images = createImages({ repo, config, fetchThumbnail, fetchCover });
+  const trash = createTrashService({ db, repo, videos, onPurged: images.purge });
   const auth = createAuthService({ db, config, mailer, beforeDeleteUser: ratings.removeAllForUser });
 
   const app = express();
-  app.locals.services = { repo, videos, trash, auth, ratings, mailer, config, thumbnails };
+  app.locals.services = { repo, videos, trash, auth, ratings, mailer, config, images };
   app.set("trust proxy", parseTrustProxy(config.trustProxy)); // throws on "true"/garbage
   app.set("etag", "weak");
 
@@ -117,8 +167,8 @@ export function createApp({ db, config: overrides = {}, mailer, fetchVideoInfo =
   app.use("/api", noStore); // catalog GETs switch to a public cache in their router
   // Bodies must be JSON (415) and writes must come from the app's own origin (403 CROSS_SITE_REQUEST).
   app.use("/api", requireJsonBody, requireSameOrigin(config), express.json({ limit: "20kb" }));
-  // Same-origin thumbnails (v1.5): anonymous, so before the session lookup (no cookie work per image).
-  app.use("/api/thumbs", thumbRoutes({ repo, thumbnails }));
+  // Same-origin thumbnails and covers (v1.5): anonymous, so before the session lookup (no cookie work per image).
+  app.use("/api", imageRoutes({ repo, thumbnails: images.thumbnails, covers: images.covers, misses: images.misses }));
   app.use("/api", loadSession(auth));
 
   app.use("/api/auth", authRoutes({ auth, config }));

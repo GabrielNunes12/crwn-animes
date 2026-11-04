@@ -39,7 +39,14 @@ export function ipKey(ip) {
  * in this Map, never on disk or in logs, and are dropped when their window
  * ends. The Map is capped at `maxEntries`: past that, the oldest key is evicted.
  */
-export function rateLimit({ max, windowMs, name = "default", key = (req) => ipKey(req.ip), maxEntries = 10_000 }) {
+export function rateLimit({
+  max,
+  windowMs,
+  name = "default",
+  key = (req) => ipKey(req.ip),
+  maxEntries = 10_000,
+  message = "Too many attempts. Please wait a few minutes and try again.",
+}) {
   const hits = new Map();
   let nextSweep = Date.now() + windowMs;
 
@@ -61,7 +68,7 @@ export function rateLimit({ max, windowMs, name = "default", key = (req) => ipKe
     if (entry.count > max) {
       const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
       res.set("Retry-After", String(retryAfter));
-      throw new HttpError(429, "Too many attempts. Please wait a few minutes and try again.", { retryAfter, limiter: name });
+      throw new HttpError(429, message, { retryAfter, limiter: name });
     }
     next();
   };

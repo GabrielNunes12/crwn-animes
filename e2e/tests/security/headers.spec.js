@@ -5,14 +5,13 @@
 import { expect, seedSeries } from "../fixtures.js";
 import { apiClient, closeAdmin, newAdminClient, newUserClient, rawRequest, test, withAdmin } from "./helpers.js";
 
-// docs/API.md v1.1 + v1.5. Thumbnails are same-origin now, so no i.ytimg.com anywhere: script-src
-// keeps s.ytimg.com only for the IFrame API loaded on Play, and img-src keeps `https:` only for
-// admin-chosen series covers.
+// docs/API.md v1.1 + v1.5. Thumbnails (and, after the review fixes, series covers) are same-origin,
+// so no i.ytimg.com anywhere: script-src keeps s.ytimg.com only for the IFrame API loaded on Play.
+// img-src is checked separately (IMG_SRC_*): it drops `https:` once same-origin covers land.
 const CSP = {
   "default-src": ["'self'"],
   "script-src": ["'self'", "https://www.youtube.com", "https://s.ytimg.com"],
   "frame-src": ["https://www.youtube-nocookie.com", "https://www.youtube.com"],
-  "img-src": ["'self'", "data:", "https:"],
   "style-src": ["'self'", "'unsafe-inline'"],
   "font-src": ["'self'"],
   "connect-src": ["'self'"],
@@ -23,6 +22,10 @@ const CSP = {
   "worker-src": ["'self'"],
   "manifest-src": ["'self'"],
 };
+/** img-src as documented now (v1.5 review fixes): no external image at all. */
+const IMG_SRC_FINAL = ["'self'", "data:"];
+/** What the shared baseline tolerates until same-origin covers land: at most `https:` on top. */
+const IMG_SRC_ALLOWED = new Set([...IMG_SRC_FINAL, "https:"]);
 
 function parseCsp(header) {
   const out = {};
@@ -47,8 +50,10 @@ function expectBaseline(headers, where) {
   expect(headers["referrer-policy"], where).toBe("strict-origin-when-cross-origin");
   expect(headers["server"], `${where}: Server header`).toBeUndefined();
   expect(headers["cross-origin-embedder-policy"], `${where}: no COEP (breaks YouTube embeds)`).toBeUndefined();
-  const csp = parseCsp(headers["content-security-policy"]);
+  const { "img-src": imgSrc = [], ...csp } = parseCsp(headers["content-security-policy"]);
   expect(csp, `${where}: CSP matches docs/API.md`).toEqual(CSP);
+  expect(imgSrc, `${where}: img-src`).toEqual(expect.arrayContaining(IMG_SRC_FINAL));
+  for (const source of imgSrc) expect(IMG_SRC_ALLOWED.has(source), `${where}: img-src ${source}`).toBe(true);
   expect(headers["content-security-policy"], `${where}: CSP ends with the v1.5 directives`).toMatch(/worker-src 'self';\s*manifest-src 'self'$/);
   expect(headers["content-security-policy"], `${where}: no i.ytimg.com in the CSP`).not.toMatch(/i\.ytimg\.com/);
   expect(headers["content-security-policy-report-only"], where).toBeUndefined();
@@ -83,6 +88,16 @@ test.describe("security headers", () => {
     expect(missing.status).toBe(404);
     expect(missing.headers["content-type"]).toMatch(/^text\/plain/);
     expect(missing.headers["cache-control"]).not.toMatch(/immutable/);
+  });
+
+  test("CSP img-src is exactly 'self' data: (v1.5 review fix: covers are same-origin, no external image at all)", async () => {
+    // PENDING server patch (docs/API.md v1.5 "Same-origin series covers"): img-src still allows https:.
+    // Remove this test.fail() once server/src/app.js CSP_DIRECTIVES.imgSrc is ['self', data:].
+    test.fail();
+    for (const path of ["/", `/anime/${SERIES.slug}`, "/admin", "/api/latest", "/offline.html"]) {
+      const res = await rawRequest({ path });
+      expect(parseCsp(res.headers["content-security-policy"])["img-src"], path).toEqual(IMG_SRC_FINAL);
+    }
   });
 
   test("PWA files (v1.5): sw.js and the manifest always revalidated, sw.js scoped to /, offline page under the CSP", async () => {

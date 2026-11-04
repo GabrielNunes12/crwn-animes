@@ -12,6 +12,10 @@ import { createMailer } from "../src/mail.js";
 /** 11-char fake YouTube ID: vid(7) -> "vid00000007". */
 export const vid = (n) => `vid${String(n).padStart(8, "0")}`;
 
+/** A small fake PNG (signature + the text): what the fake cover hosts serve. */
+export const fakePng = (text = "cover", padding = 0) =>
+  Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from(`cover:${text}`), Buffer.alloc(padding, 0x20)]);
+
 /** A small fake JPEG (SOI + APP0 marker, the ID, EOI): what the fake i.ytimg.com serves. */
 export const fakeJpeg = (id, padding = 0) =>
   Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from(`thumb:${id}`), Buffer.alloc(padding, 0x20), Buffer.from([0xff, 0xd9])]);
@@ -76,18 +80,26 @@ export class Client {
  * Thumbnails never leave the process: `fetchThumbnail` (default: records the ID in
  * fake.thumbCalls and answers fakeJpeg(id); null = the app's real default, for
  * THUMB_UPSTREAM tests against a local fake) and a fresh temporary THUMB_CACHE_DIR
- * (`thumbDir`, removed by close() unless config.thumbCacheDir was given).
+ * (`thumbDir`, removed by close() unless config.thumbCacheDir was given). Covers
+ * likewise: `fetchCover` (default: records the URL in fake.coverCalls, answers
+ * fakePng(url) as image/png; null = the real SSRF-guarded fetch).
  */
-export async function startServer({ config = {}, mailer: customMailer, fetchThumbnail } = {}) {
+export async function startServer({ config = {}, mailer: customMailer, fetchThumbnail, fetchCover } = {}) {
   const db = openDatabase(":memory:");
   const mailer = customMailer ?? createMailer({ smtp: null }, { log: () => {} });
-  const fake = { titles: {}, gone: new Set(), down: false, calls: [], delayMs: 0, thumbCalls: [] };
+  const fake = { titles: {}, gone: new Set(), down: false, calls: [], delayMs: 0, thumbCalls: [], coverCalls: [] };
   const ownThumbDir = config.thumbCacheDir ? null : fs.mkdtempSync(path.join(os.tmpdir(), "crwn-thumbs-"));
   const thumbDir = config.thumbCacheDir ?? ownThumbDir;
   if (fetchThumbnail === undefined) {
     fetchThumbnail = async (id) => {
       fake.thumbCalls.push(id);
       return fakeJpeg(id);
+    };
+  }
+  if (fetchCover === undefined) {
+    fetchCover = async (url) => {
+      fake.coverCalls.push(url);
+      return { body: fakePng(url), type: "image/png" };
     };
   }
   const fetchVideoInfo = async (id) => {
@@ -102,6 +114,7 @@ export async function startServer({ config = {}, mailer: customMailer, fetchThum
     mailer,
     fetchVideoInfo,
     fetchThumbnail: fetchThumbnail ?? undefined,
+    fetchCover: fetchCover ?? undefined,
     config: {
       nodeEnv: "test",
       isProduction: false,

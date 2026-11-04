@@ -8,8 +8,8 @@ import { checkpoint } from "./retention.js";
 // Trashed rows are invisible everywhere else: the repository's live queries
 // filter on deleted_at, and the triggers of db.js migration 13 keep every
 // aggregate (series_stats, rating_totals) to live videos. Everything below
-// is synchronous and runs in one transaction per call. `onPurged(youtubeIds)`
-// runs after a delete-forever commits (the app removes their cached thumbnails).
+// is synchronous and runs in one transaction per call. `onPurged({ youtubeIds, seriesIds })`
+// runs after a delete-forever commits (the app removes their cached thumbnails and covers).
 export function createTrashService({ db, repo, videos, now = () => new Date(), onPurged = () => {} }) {
   const transaction = (fn) => db.transaction(fn)();
 
@@ -93,7 +93,7 @@ export function createTrashService({ db, repo, videos, now = () => new Date(), o
       });
       if (!purged) throw notFound("There is no series with this id in the trash.");
       checkpoint(db); // ratings are personal data: no copy left in the WAL
-      onPurged(youtubeIds);
+      onPurged({ youtubeIds, seriesIds: [id] });
     },
 
     /** DELETE /api/admin/trash/videos/:id */
@@ -104,7 +104,7 @@ export function createTrashService({ db, repo, videos, now = () => new Date(), o
       });
       if (!video) throw notFound("There is no video with this id in the trash.");
       checkpoint(db);
-      onPurged([video.youtubeVideoId]);
+      onPurged({ youtubeIds: [video.youtubeVideoId], seriesIds: [] });
     },
   };
 }

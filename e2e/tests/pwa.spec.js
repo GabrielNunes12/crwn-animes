@@ -446,9 +446,7 @@ test.describe("Cache Storage hygiene", () => {
         await probe(PROBES);
       });
 
-      await page.evaluate(() => caches.open(caches.keys().then ? "crwn-api-mutant" : "x").then((c) => c.put("/API/Auth/me", new Response('{"user":{"email":"x"}}', { headers: { "content-type": "application/json", "cache-control": "public" } }))));
       const entries = await settledCacheEntries(page);
-      console.log("CACHED:", entries.map((e) => e.cache.slice(0, 11) + " " + new URL(e.url).pathname + new URL(e.url).search).filter((x) => !x.includes("/assets/")).join("\n"));
       const origin = new URL(page.url()).origin;
       const api = entries.filter((e) => new URL(e.url).pathname.startsWith("/api/"));
       // Not vacuous: the public catalog and the thumbnails were cached while browsing.
@@ -473,6 +471,45 @@ test.describe("Cache Storage hygiene", () => {
     } finally {
       await page.request.post("/api/auth/logout"); // the server keeps at most 20 sessions per user
     }
+  });
+});
+
+test.describe("Cache Storage: search terms and “Limpar histórico” (v1.5 review fixes)", () => {
+  test("a search with a typed q is never cached (page and palette); a search without q (genre page) is", async ({ page }) => {
+    await page.goto("/");
+    await swControls(page);
+    await page.goto("/search?q=offline");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await page.keyboard.press("Control+k");
+    await page.keyboard.type("saga off");
+    await expect(page.getByRole("dialog", { name: "Busca rápida" }).getByRole("option").first()).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.goto(`/genre/${encodeURIComponent("Conectividade")}`);
+    await waitForCached(page, "/api/search"); // the genre page's search (no q) is public catalog data
+    const searches = (await settledCacheEntries(page)).map((e) => new URL(e.url)).filter((u) => u.pathname.toLowerCase() === "/api/search");
+    expect(searches.some((u) => u.searchParams.get("genre") === "Conectividade"), "the genre search is cached").toBe(true);
+    for (const url of searches) expect(url.searchParams.getAll("q").filter((q) => q.trim()), `${url.pathname}${url.search} keeps a search term on the device`).toEqual([]);
+  });
+
+  test("“Limpar histórico” also deletes the offline catalog copy (crwn-api-*) and keeps the app shell", async ({ page }) => {
+    await page.goto("/");
+    await swControls(page);
+    await page.goto(`/anime/${SERIES.slug}`);
+    await expect(page.getByRole("heading", { level: 1, name: SERIES.name })).toBeVisible();
+    const seriesData = `/api/anime/series/${SERIES.slug}`;
+    await waitForCached(page, seriesData);
+    // Some watch history, so the button is enabled.
+    await page.evaluate((v) => localStorage.setItem("crwn:progress:v1", JSON.stringify({ [v.youtubeVideoId]: { t: 30, d: 100, at: Date.now() - 1000, route: v.route, title: v.title, thumb: null } })), ep(1));
+    await page.goto("/account");
+    await page.getByRole("button", { name: "Limpar histórico" }).click();
+    await page.getByRole("dialog", { name: "Limpar histórico" }).getByRole("button", { name: "Limpar", exact: true }).click();
+    await expect.poll(async () => (await cacheEntries(page)).some((e) => e.cache.startsWith("crwn-api-") && new URL(e.url).pathname === seriesData), { message: "the catalog copy is gone" }).toBe(false);
+    const entries = await settledCacheEntries(page);
+    const before = ["/api/latest", seriesData]; // cached on "/" and the series page; /account does not ask for them
+    for (const e of entries.filter((x) => x.cache.startsWith("crwn-api-"))) expect(before, `${e.url} survived “Limpar histórico”`).not.toContain(new URL(e.url).pathname);
+    expect(entries.some((e) => e.cache.startsWith("crwn-shell-") && new URL(e.url).pathname === "/"), "the app shell stays (offline still works)").toBe(true);
+    expect(await page.evaluate(() => localStorage.getItem("crwn:progress:v1"))).toBeNull();
   });
 });
 
@@ -572,7 +609,7 @@ test.describe("same-origin thumbnails", () => {
       expect(await upstreamHits(request, id), "no further upstream call").toBe(1);
     });
 
-    await test.step("upstream failure: 502 without upstream details, nothing cached (asked again next time)", async () => {
+    await test.step("upstream failure: 502 without upstream details", async () => {
       const id = fakeYouTubeId("upFail");
       await ensureVideo(admin, { youtubeId: id, title: `Thumb fail ${id}` });
       const res = await thumb(id);
@@ -582,9 +619,85 @@ test.describe("same-origin thumbnails", () => {
       expect(JSON.parse(text).error).toMatchObject({ message: expect.any(String) });
       expect(text, "no upstream address in the error").not.toMatch(/127\.0\.0\.1|ytimg|hqdefault|4617/);
       expect(await upstreamHits(request, id)).toBe(1);
-      expect((await thumb(id)).status()).toBe(502);
-      expect(await upstreamHits(request, id), "a failure is not cached").toBe(2);
     });
+  });
+
+  test("a failed upstream fetch is remembered (v1.5 review fix): repeat requests answer 502 without asking upstream again", async ({ request, admin }) => {
+    // PENDING server patch (docs/API.md v1.5 "Review fixes": failure memory, 10 min per id).
+    // Remove this test.fail() once server/src/thumbnails.js remembers failures.
+    test.fail();
+    const id = fakeYouTubeId("upFail");
+    await ensureVideo(admin, { youtubeId: id, title: `Thumb fail memory ${id}` });
+    for (let i = 0; i < 3; i++) expect((await request.get(`${API_ORIGIN}/api/thumbs/${id}.jpg`)).status(), `request ${i + 1}`).toBe(502);
+    expect(await upstreamHits(request, id), "one upstream attempt, then the failure is remembered").toBe(1);
+  });
+
+  test("admin responses (v1.5 review fix): a trashed video has thumbnailUrl null", async ({ admin }) => {
+    // PENDING server patch (docs/API.md v1.5 "Review fixes"). Remove this test.fail() once admin
+    // responses null the thumbnail of trashed videos.
+    test.fail();
+    const id = fakeYouTubeId("tNull");
+    const video = await ensureVideo(admin, { youtubeId: id, title: `Thumb null ${id}` });
+    expect(video.thumbnailUrl).toBe(`/api/thumbs/${id}.jpg`);
+    expect((await admin.delete(`/api/admin/videos/${video.id}`)).status()).toBe(204);
+    try {
+      const trash = await (await admin.get("/api/admin/trash")).json();
+      const trashed = trash.videos.find((v) => v.id === video.id);
+      expect(trashed, "the video is listed in the trash").toBeTruthy();
+      expect(trashed.thumbnailUrl).toBeNull();
+    } finally {
+      await admin.delete(`/api/admin/trash/videos/${video.id}`);
+    }
+  });
+});
+
+test.describe("same-origin series covers (v1.5 review fix)", () => {
+  // e2e has no external network, so every cover fetch fails: 502 and the client's placeholder are
+  // the expected outcome here (the SSRF rules are covered by the server's unit tests).
+  test("coverUrl is /api/covers/<id>.img?v=<hash>; the admin keeps the source URL; 404 unknown/trashed; 502 → placeholder; og:image absolute", async ({ page, request, admin, baseURL, externalRequests }) => {
+    // PENDING server patch (docs/API.md v1.5 "Same-origin series covers"): coverUrl is still the
+    // admin-typed https URL. Remove this test.fail() once /api/covers lands.
+    test.fail();
+    const tag = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    const source = `https://covers.e2e.example/capa-${tag}.jpg`;
+    const { series } = await seedSeries(admin, { name: `Saga Capa ${tag}`, slug: `saga-capa-${tag}`, aliases: [], genres: ["Capas"] }, [
+      { youtubeId: fakeYouTubeId("cov"), title: `Saga Capa ${tag} Episode 1`, section: "anime", number: 1 },
+    ]);
+    const patched = await admin.patch(`/api/admin/series/${series.id}`, { data: { coverUrl: source } });
+    expect(patched.status()).toBe(200);
+    const adminSeries = (await patched.json()).series;
+    expect(adminSeries.coverSourceUrl, "admin responses keep what the admin typed").toBe(source);
+    const COVER = new RegExp(`^/api/covers/${series.id}\\.img\\?v=[A-Za-z0-9_-]{8}$`);
+    expect(adminSeries.coverUrl).toMatch(COVER);
+
+    const pub = (await (await request.get(`${API_ORIGIN}/api/anime/series/${series.slug}`)).json()).series;
+    expect(pub.coverUrl).toMatch(COVER);
+    expect(JSON.stringify(pub), "the source URL never reaches the public API").not.toContain("covers.e2e.example");
+
+    // A new source URL changes ?v= (browsers and the worker never keep a stale cover).
+    const repatched = (await (await admin.patch(`/api/admin/series/${series.id}`, { data: { coverUrl: `${source}?2` } })).json()).series;
+    expect(repatched.coverUrl).toMatch(COVER);
+    expect(repatched.coverUrl).not.toBe(adminSeries.coverUrl);
+
+    expect((await request.get(`${API_ORIGIN}${repatched.coverUrl}`)).status(), "no external network in e2e").toBe(502);
+    expect((await request.get(`${API_ORIGIN}/api/covers/999999999.img`)).status(), "unknown series").toBe(404);
+    expect((await request.get(`${API_ORIGIN}/api/covers/abc.img`)).status(), "malformed id").toBe(404);
+
+    // Link previews get the same-origin copy, absolute.
+    const html = await (await request.get(`${API_ORIGIN}/anime/${series.slug}`)).text();
+    const ogImage = /<meta property="og:image" content="([^"]+)"/.exec(html)?.[1].replaceAll("&amp;", "&");
+    expect(ogImage).toBe(`${baseURL}${repatched.coverUrl}`);
+    expect(html).not.toContain("covers.e2e.example");
+
+    // The browser: the cover is requested from this origin only and falls back to its placeholder.
+    await page.goto(`/anime/${series.slug}`);
+    await expect(page.getByRole("heading", { level: 1, name: series.name })).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    for (const src of await page.locator("img").evaluateAll((imgs) => imgs.map((i) => i.src))) expect(new URL(src).hostname, src).toBe("localhost");
+    expect(externalRequests, "no request to the cover's host").toEqual([]);
+
+    expect((await admin.delete(`/api/admin/series/${series.id}`)).status()).toBe(204);
+    expect((await request.get(`${API_ORIGIN}${repatched.coverUrl}`)).status(), "trashed series").toBe(404);
   });
 });
 

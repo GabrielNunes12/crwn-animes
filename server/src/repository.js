@@ -1,3 +1,4 @@
+import { coverPath } from "./covers.js";
 import { seriesRoute, videoRoute } from "./routing.js";
 import { canonicalGenres, genreKey, genreSpellings, sortGenres } from "./genres.js";
 import { TRASH_TTL_MS } from "./retention.js";
@@ -30,6 +31,8 @@ const trashFields = (row) =>
     : {};
 
 // Trashed series/videos (only admins ever see them) also carry deletedAt + purgeAt.
+// coverUrl is the same-origin proxy (v1.5; null for a trashed series, which /api/covers
+// answers 404); coverSourceUrl, the URL the admin typed, is admin-only (publicSeries()).
 function toSeries(row) {
   return {
     id: row.id,
@@ -38,9 +41,17 @@ function toSeries(row) {
     synopsis: row.synopsis ?? null,
     aliases: parseJson(row.aliases, []),
     genres: parseJson(row.genres, []),
-    coverUrl: row.cover_url,
+    coverUrl: row.cover_url && !row.deleted_at ? coverPath(row.id, row.cover_url) : null,
+    coverSourceUrl: row.cover_url ?? null,
     ...trashFields(row),
   };
+}
+
+/** Drops the admin-only fields of a series. */
+export function publicSeries(series) {
+  if (!series) return series;
+  const { coverSourceUrl, deletedAt, purgeAt, ...rest } = series;
+  return rest;
 }
 
 const NEW_FOR_MS = 7 * 24 * 60 * 60 * 1000;
@@ -57,7 +68,8 @@ function toVideo(row) {
     title: row.source_title,
     channel: row.channel,
     // Same-origin (v1.5): the server fetches and caches it, the browser never contacts Google before Play.
-    thumbnailUrl: thumbnailPath(row.youtube_video_id),
+    // A trashed video's is null (/api/thumbs answers 404 for it).
+    thumbnailUrl: row.deleted_at ? null : thumbnailPath(row.youtube_video_id),
     section: row.section,
     seriesId: row.series_id,
     seriesSlug: row.series_slug ?? null,
@@ -276,8 +288,9 @@ export function createRepository(db) {
     anyVideoById: db.prepare(`${VIDEO_SELECT} WHERE v.id = ?`),
     // Including the trash: youtube_video_id stays unique.
     videoByYoutubeId: db.prepare(`${VIDEO_SELECT} WHERE v.youtube_video_id = ?`),
-    youtubeIdTrashed: db.prepare("SELECT deleted_at IS NOT NULL FROM videos WHERE youtube_video_id = ?").pluck(),
+    youtubeIdState: db.prepare("SELECT deleted_at IS NOT NULL AS trashed, availability FROM videos WHERE youtube_video_id = ?"),
     youtubeIdsOfSeries: db.prepare("SELECT youtube_video_id FROM videos WHERE series_id = ?").pluck(),
+    coverSource: db.prepare("SELECT cover_url, deleted_at FROM series WHERE id = ?"),
     videosFiltered: db.prepare(`${VIDEO_SELECT}
       WHERE v.deleted_at IS NULL AND (@status IS NULL OR v.status = @status)
         AND (@availability IS NULL OR v.availability = @availability)
@@ -387,7 +400,7 @@ export function createRepository(db) {
     synopsis: s.synopsis ?? null,
     aliases: JSON.stringify(s.aliases ?? []),
     genres: JSON.stringify(canonicalGenres(s.genres ?? [], genreSpellings(genreRows(q.seriesGenres, { excludeId })))),
-    coverUrl: s.coverUrl ?? null,
+    coverUrl: s.coverSourceUrl ?? null, // the URL the admin typed (Series.coverUrl is the proxy path)
     searchText: searchText(s.name, s.aliases ?? []),
   });
 
@@ -443,6 +456,7 @@ export function createRepository(db) {
     getAnySeriesById: (id) => one(q.anySeriesById.get(id), toSeries),
     /** The series holding this slug, trashed ones included (their slug stays reserved), or null. */
     seriesHoldingSlug: (slug) => one(q.anySeriesBySlug.get(slug), toSeries),
+    /** `series.coverSourceUrl` is the cover's source URL (what the admin typed as coverUrl). */
     createSeries: (series) => {
       const { lastInsertRowid } = q.insertSeries.run(seriesParams(series));
       return toSeries(q.seriesById.get(lastInsertRowid));
@@ -576,10 +590,20 @@ export function createRepository(db) {
       const row = q.videoByYoutubeId.get(youtubeVideoId);
       return row ? toVideo(row) : null;
     },
-    /** "live", "trashed" or null (no video has this YouTube ID): what GET /api/thumbs may serve. */
+    /**
+     * What GET /api/thumbs may do for this YouTube ID: "live" (fetch/serve), "unavailable"
+     * (YouTube no longer serves the video: 404, never fetched), "trashed", or null (no video).
+     */
     thumbnailState: (youtubeVideoId) => {
-      const trashed = q.youtubeIdTrashed.get(youtubeVideoId);
-      return trashed === undefined ? null : trashed ? "trashed" : "live";
+      const row = q.youtubeIdState.get(youtubeVideoId);
+      if (!row) return null;
+      if (row.trashed) return "trashed";
+      return row.availability === "ok" ? "live" : "unavailable";
+    },
+    /** { sourceUrl, trashed } of a series (live or trashed), or null once purged / unknown. */
+    coverSource: (seriesId) => {
+      const row = q.coverSource.get(seriesId);
+      return row ? { sourceUrl: row.cover_url ?? null, trashed: row.deleted_at != null } : null;
     },
     /** YouTube IDs of every video of a series, trashed ones included (what its purge deletes). */
     youtubeIdsOfSeries: (seriesId) => q.youtubeIdsOfSeries.all(seriesId),

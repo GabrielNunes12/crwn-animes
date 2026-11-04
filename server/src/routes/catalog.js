@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { SECTIONS } from "../classifier.js";
 import { notFound, validationError } from "../errors.js";
-import { SEARCH_SORTS, publicVideo } from "../repository.js";
+import { SEARCH_SORTS, publicSeries, publicVideo } from "../repository.js";
 import { searchNeedle } from "../search.js";
 import { publicCache } from "../middleware/security.js";
 import { idParam, limitParam, queryReader } from "../validation.js";
@@ -68,7 +68,9 @@ export function catalogRoutes({ repo }) {
   get("/search", (req, res) => {
     const query = readSearchQuery(req.query);
     const filters = resolveFilters(repo, query);
-    res.json(filters ? repo.search({ ...query, ...filters }) : { items: [], total: 0 });
+    if (!filters) return res.json({ items: [], total: 0 });
+    const { items, total } = repo.search({ ...query, ...filters });
+    res.json({ items: items.map(publicSeries), total });
   });
 
   // limit above 50 is clamped (as before v1.3); offset and section are validated.
@@ -108,7 +110,7 @@ export function catalogRoutes({ repo }) {
     const index = siblings.findIndex((v) => v.id === video.id);
     res.json({
       video: publicVideo(video),
-      series: repo.getSeriesById(video.seriesId),
+      series: publicSeries(repo.getSeriesById(video.seriesId)),
       prev: publicVideo(siblings[index - 1] ?? null),
       next: publicVideo(siblings[index + 1] ?? null),
     });
@@ -122,7 +124,7 @@ export function catalogRoutes({ repo }) {
     const genre = r.text("genre", SEARCH_GENRE_MAX);
     r.done();
     const filters = resolveFilters(repo, { needle: searchNeedle(q), genre });
-    res.json(filters ? repo.listSeriesInSection(section, filters.genre, filters.needle) : []);
+    res.json(filters ? repo.listSeriesInSection(section, filters.genre, filters.needle).map(publicSeries) : []);
   });
 
   get("/:section/series/:slug", (req, res) => {
@@ -136,7 +138,7 @@ export function catalogRoutes({ repo }) {
     // seasons: every season with a published video here (manga chapters are all season 1).
     // An unknown season is not an error: it just has no videos.
     res.json({
-      series,
+      series: publicSeries(series),
       videos: list(repo.listPublishedInSeries(series.id, section, season)),
       seasons: repo.publishedSeasons(series.id, section),
     });
