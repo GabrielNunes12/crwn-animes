@@ -57,7 +57,7 @@ export function publicSeries(series) {
 const NEW_FOR_MS = 7 * 24 * 60 * 60 * 1000;
 const NOW_ISO = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 
-/** Video.thumbnailUrl: GET /api/thumbs/<id>.jpg (src/routes/thumbs.js). IDs are [A-Za-z0-9_-]{11}. */
+/** Video.thumbnailUrl: GET /api/thumbs/<id>.jpg (src/routes/images.js). IDs are [A-Za-z0-9_-]{11}. */
 const thumbnailPath = (youtubeVideoId) => `/api/thumbs/${youtubeVideoId}.jpg`;
 
 // Full video, as admins see it. Public responses go through publicVideo().

@@ -24,13 +24,13 @@ const LOCAL = ["localhost", "127.0.0.1", "[::1]"];
 /** Third-party requests of a page, and the same-origin thumbnail requests (to prove thumbnails were shown). */
 function trackThirdParty(page) {
   const seen = [];
-  seen.thumbs = [];
+  const thumbs = [];
   page.on("request", (req) => {
     const url = new URL(req.url());
-    if (LOCAL.includes(url.hostname) && url.pathname.startsWith("/api/thumbs/")) seen.thumbs.push(req.url());
+    if (LOCAL.includes(url.hostname) && url.pathname.startsWith("/api/thumbs/")) thumbs.push(req.url());
     if (!LOCAL.includes(url.hostname) && !req.url().startsWith("data:")) seen.push({ url: req.url(), type: req.resourceType(), page: page.url() });
   });
-  return seen;
+  return { seen, thumbs };
 }
 
 const PAGES = (v) => ["/", "/anime", "/manga", `/anime/${SERIES.slug}`, `/manga/${SERIES.slug}`, v[0].route, v[1].route, "/search?q=sec", "/search", `/genre/${encodeURIComponent("Privacidade")}`, "/privacy", "/login", "/register", "/forgot-password", "/account", "/nao-existe"];
@@ -38,7 +38,7 @@ const PAGES = (v) => ["/", "/anime", "/manga", `/anime/${SERIES.slug}`, `/manga/
 test.describe("privacy", () => {
   test("no third-party request at all (not even i.ytimg.com: thumbnails are same-origin) on any page before Play — anonymous and logged in", async ({ page, externalRequests }) => {
     test.setTimeout(90_000);
-    const seen = trackThirdParty(page);
+    const { seen, thumbs } = trackThirdParty(page);
     const visit = async () => {
       for (const path of PAGES(videos)) {
         await page.goto(path);
@@ -59,8 +59,8 @@ test.describe("privacy", () => {
     expect(seen, "third-party requests before Play").toEqual([]);
     expect(externalRequests, "requests cut off by the network guard").toEqual([]);
     // Not vacuous: the pages did show video thumbnails, from this origin.
-    expect(seen.thumbs.length, "same-origin /api/thumbs/ requests").toBeGreaterThan(0);
-    for (const url of seen.thumbs) expect(url).toMatch(/^http:\/\/localhost:\d+\/api\/thumbs\/[A-Za-z0-9_-]{11}\.jpg$/);
+    expect(thumbs.length, "same-origin /api/thumbs/ requests").toBeGreaterThan(0);
+    for (const url of thumbs) expect(url).toMatch(/^http:\/\/localhost:\d+\/api\/thumbs\/[A-Za-z0-9_-]{11}\.jpg$/);
     // And nothing pointed the browser at YouTube (image, script, frame or fetch).
     expect(seen.filter((r) => YOUTUBE_HOST.test(new URL(r.url).hostname))).toEqual([]);
   });

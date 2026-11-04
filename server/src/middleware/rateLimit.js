@@ -49,6 +49,17 @@ export function rateLimit({
 }) {
   const hits = new Map();
   let nextSweep = Date.now() + windowMs;
+  // One live iterator over the keys (insertion order = age): a fresh keys().next() per eviction
+  // would walk past every slot deleted so far (V8 keeps them until it rehashes), O(n) each time.
+  let byAge = hits.keys();
+  const oldestKey = () => {
+    let next = byAge.next();
+    if (next.done) {
+      byAge = hits.keys();
+      next = byAge.next();
+    }
+    return next.value;
+  };
 
   return function rateLimiter(req, res, next) {
     const now = Date.now();
@@ -62,7 +73,7 @@ export function rateLimit({
       hits.delete(k); // re-insert at the end: Map order = age
       entry = { count: 0, resetAt: now + windowMs };
       hits.set(k, entry);
-      while (hits.size > maxEntries) hits.delete(hits.keys().next().value);
+      while (hits.size > maxEntries) hits.delete(oldestKey());
     }
     entry.count++;
     if (entry.count > max) {

@@ -754,9 +754,12 @@ test.describe("update flow", () => {
         await page.evaluate(() => {
           window.__beforeUpdate = true;
         });
+        const reloaded = page.waitForEvent("load");
         await page.getByRole("button", { name: "Atualizar" }).click();
-        await expect.poll(() => page.evaluate(() => window.__beforeUpdate ?? false).catch(() => true), { message: "the page reloaded" }).toBe(false);
+        await reloaded;
+        expect(await page.evaluate(() => window.__beforeUpdate ?? false), "a new document").toBe(false);
         await swControls(page);
+        await page.waitForLoadState("networkidle");
         expect(loads, "reloaded exactly once").toBe(1);
         await expect(page.getByRole("banner")).toBeVisible();
         await expect(toast).toHaveCount(0);

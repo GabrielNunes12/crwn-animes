@@ -163,6 +163,7 @@ function prodEnv(overrides = {}) {
     THUMB_CACHE_DIR: THUMB_DIR,
     THUMB_CACHE_MB: "200",
     THUMB_UPSTREAM: "",
+    IMAGE_MISS_RATE_MAX: "300",
     APP_URL,
     CLIENT_ORIGIN: APP_URL,
     ADMIN_EMAILS: "",

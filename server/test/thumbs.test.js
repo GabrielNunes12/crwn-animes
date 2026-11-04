@@ -1,5 +1,5 @@
 // v1.5 same-origin thumbnails: GET /api/thumbs/<id>.jpg (src/thumbnails.js,
-// src/routes/thumbs.js). The real upstream check (fetchYoutubeThumbnail) runs
+// src/routes/images.js). The real upstream check (fetchYoutubeThumbnail) runs
 // against a fake i.ytimg.com (its fetchImpl): youtube.com / ytimg.com are never contacted.
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -770,6 +770,131 @@ describe("THUMB_UPSTREAM: a fake i.ytimg.com for end-to-end tests, never in prod
       globalThis.fetch = realFetch;
       await srv?.close();
       await fake.close();
+    }
+  });
+});
+
+// =================================================================== review fixes (cycle 5)
+describe("cycle 5 review fixes", () => {
+  const dirs = [];
+  const tempDir = () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "crwn-thumb-review-"));
+    dirs.push(dir);
+    return dir;
+  };
+  after(() => {
+    for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true });
+  });
+  const A = "AAAAAAAAAAA";
+  const B = "BBBBBBBBBBB";
+  const C = "CCCCCCCCCCC";
+
+  test("a failed ID answers 502 without upstream for 10 minutes, then is tried again (bounded memory)", async () => {
+    let clock = 1_000_000;
+    let fails = true;
+    const calls = [];
+    const cache = createThumbnailCache({
+      dir: tempDir(),
+      maxBytes: 10 * JPEG_SIZE,
+      now: () => clock,
+      fetchThumbnail: async (id) => {
+        calls.push(id);
+        if (fails) throw new Error("upstream down");
+        return fakeJpeg(id);
+      },
+    });
+    await assert.rejects(cache.get(A), (error) => error.status === 502);
+    fails = false;
+    clock += 9 * 60_000;
+    await assert.rejects(cache.get(A), (error) => error.status === 502, "still remembered after 9 minutes");
+    assert.deepEqual(calls, [A]);
+    assert.deepEqual(await cache.get(B), fakeJpeg(B), "other IDs are not affected");
+    clock += 60_001;
+    assert.deepEqual(await cache.get(A), fakeJpeg(A), "after 10 minutes: one new attempt");
+    assert.deepEqual(calls, [A, B, A]);
+    assert.equal(cache.stats().failures, 0);
+
+    // Bounded: past `maxFailures` the oldest failure is forgotten first.
+    const seen = [];
+    const small = createThumbnailCache({
+      dir: tempDir(),
+      maxBytes: 10 * JPEG_SIZE,
+      maxFailures: 2,
+      fetchThumbnail: async (id) => {
+        seen.push(id);
+        throw new Error("down");
+      },
+    });
+    for (const id of [A, B, C]) await assert.rejects(small.get(id));
+    assert.equal(small.stats().failures, 2);
+    for (const id of [B, C]) await assert.rejects(small.get(id));
+    assert.deepEqual(seen, [A, B, C], "B and C still remembered");
+    await assert.rejects(small.get(A));
+    assert.deepEqual(seen, [A, B, C, A], "A (the oldest) was forgotten");
+  });
+
+  test("a video YouTube no longer serves (availability unavailable): 404 with ZERO upstream calls, cached file or not", async () => {
+    const srv = await startServer();
+    try {
+      const video = await addVideo(srv, 1, "One Piece Episode 1");
+      await addVideo(srv, 2, "One Piece Episode 2");
+      assert.equal((await get(srv, thumb(vid(1)))).status, 200);
+      srv.services.repo.setAvailability(video.id, "unavailable");
+      srv.services.repo.setAvailability(srv.services.repo.getVideoByYoutubeId(vid(2)).id, "unavailable");
+      srv.fake.thumbCalls.length = 0;
+      for (const id of [vid(1), vid(2)]) {
+        const res = await get(srv, thumb(id));
+        assert.equal(res.status, 404, id);
+        assert.equal(res.json?.error?.code, "NOT_FOUND");
+      }
+      assert.deepEqual(srv.fake.thumbCalls, []);
+      srv.services.repo.setAvailability(video.id, "ok");
+      assert.equal((await get(srv, thumb(vid(1)))).status, 200, "available again: served (from the cache)");
+      assert.deepEqual(srv.fake.thumbCalls, []);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  test("a cache hit refreshes the file's mtime (at most once a minute), so the LRU order survives a restart", async () => {
+    const dir = tempDir();
+    let clock = Date.now();
+    const cache = createThumbnailCache({ dir, maxBytes: 10 * JPEG_SIZE, now: () => clock, fetchThumbnail: async (id) => fakeJpeg(id) });
+    for (const id of [A, B, C]) await cache.get(id);
+    const old = clock / 1000 - 3600;
+    [A, B, C].forEach((id, i) => fs.utimesSync(path.join(dir, `${id}.jpg`), old + i, old + i)); // written an hour ago, A first
+    const mtime = (id) => fs.statSync(path.join(dir, `${id}.jpg`)).mtimeMs;
+    clock += 61_000;
+    await cache.get(A); // a hit: A is now the most recently used, on disk too
+    assert.ok(mtime(A) > mtime(C), "A's mtime was refreshed");
+    const touched = mtime(A);
+    fs.utimesSync(path.join(dir, `${A}.jpg`), touched / 1000 - 10, touched / 1000 - 10);
+    clock += 30_000;
+    await cache.get(A);
+    assert.ok(Math.abs(mtime(A) - (touched - 10_000)) < 1, "not again within a minute");
+
+    // A restart with room for two: the least recently USED (B), not the oldest written (A), goes.
+    const restarted = createThumbnailCache({ dir, maxBytes: 2 * JPEG_SIZE, fetchThumbnail: async () => assert.fail("no fetch") });
+    assert.equal(restarted.stats().files, 2);
+    assert.deepEqual(cacheFiles(dir), [`${A}.jpg`, `${C}.jpg`]);
+  });
+
+  test("trashed videos have thumbnailUrl null in admin responses; restored, the proxy path again", async () => {
+    const srv = await startServer();
+    try {
+      const admin = quickUser(srv, "admin@example.com", "admin").client;
+      const video = await addVideo(srv, 1, "One Piece Episode 1");
+      assert.equal((await admin.del(`/api/admin/videos/${video.id}`)).status, 204);
+      const trash = await admin.get("/api/admin/trash");
+      assert.equal(trash.body.videos.find((v) => v.id === video.id).thumbnailUrl, null);
+      assert.equal((await admin.get(`/api/admin/videos/${video.id}/preview`)).body.video.thumbnailUrl, null);
+      const again = await admin.post("/api/admin/videos", { url: vid(1) });
+      assert.equal(again.status, 409);
+      assert.equal(again.body.error.details.video.thumbnailUrl, null, "the 409 for a trashed video too");
+      const restored = await admin.post(`/api/admin/trash/videos/${video.id}/restore`);
+      assert.equal(restored.body.video.thumbnailUrl, `/api/thumbs/${vid(1)}.jpg`);
+    } finally {
+      await srv.close();
     }
   });
 });

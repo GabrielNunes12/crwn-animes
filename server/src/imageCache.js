@@ -304,6 +304,7 @@ export function createImageSource({
 }) {
   const inflight = new Map(); // key -> Promise<{ body, type }>
   const failures = new Map(); // key -> time the memory ends; insertion order = oldest first
+  let byAge = failures.keys(); // one live iterator: see the rate limiter (src/middleware/rateLimit.js)
   const limiter = createLimiter(maxInFlight, maxQueued);
 
   function failedRecently(key) {
@@ -317,7 +318,14 @@ export function createImageSource({
   function rememberFailure(key) {
     failures.delete(key);
     failures.set(key, now() + failureTtlMs);
-    while (failures.size > maxFailures) failures.delete(failures.keys().next().value);
+    while (failures.size > maxFailures) {
+      let next = byAge.next();
+      if (next.done) {
+        byAge = failures.keys();
+        next = byAge.next();
+      }
+      failures.delete(next.value);
+    }
   }
 
   function fetchShared(key, context) {
