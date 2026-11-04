@@ -96,18 +96,23 @@ export function collectBulkInputs(text, urls) {
   return rows;
 }
 
-/** PUT /series/:id/order body: { section, season, videoIds } (manga: season 1). */
+/**
+ * PUT /series/:id/order body: { section, season, videoIds, expected } (manga: season 1).
+ * `expected` is the order the client loaded (optimistic concurrency, checked by videos.reorder).
+ */
 function readOrder(body) {
   const v = validator(body);
   const section = v.oneOf("section", SECTIONS);
   const season = v.int("season", { min: 1, max: 99 });
   if (section === "manga" && season !== undefined && season !== 1) v.fail("season", "Manga chapters have no seasons: use 1.");
-  const { videoIds } = body;
-  if (!Array.isArray(videoIds)) v.fail("videoIds", "Must be a list of video ids.");
-  else if (videoIds.length > ORDER_MAX) v.fail("videoIds", `At most ${ORDER_MAX} videos.`);
-  else if (!videoIds.every((id) => Number.isSafeInteger(id) && id > 0)) v.fail("videoIds", "Every item must be a video id.");
+  for (const field of ["videoIds", "expected"]) {
+    const ids = body[field];
+    if (!Array.isArray(ids)) v.fail(field, "Must be a list of video ids.");
+    else if (ids.length > ORDER_MAX) v.fail(field, `At most ${ORDER_MAX} videos.`);
+    else if (!ids.every((id) => Number.isSafeInteger(id) && id > 0)) v.fail(field, "Every item must be a video id.");
+  }
   v.done();
-  return { section, season, videoIds };
+  return { section, season, videoIds: body.videoIds, expected: body.expected };
 }
 
 export function adminRoutes({ repo, videos, trash }) {

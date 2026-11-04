@@ -87,15 +87,17 @@ See [`.env.example`](.env.example) — each variable is documented there.
   `video_rating_stats`/`rating_activity` stay per video and are filtered by the lists. The published-slot unique
   index ignores trashed videos; restoring a video re-checks its slot (taken → `pending` + reason) and refuses
   (409) while its series is trashed; restoring a series restores the videos trashed with it, then re-classifies
-  pending videos. A trashed slug stays reserved (409). Purge: `purgeTrash()` in the hourly retention job deletes
+  pending videos. A trashed slug stays reserved (409). `GET /api/admin/trash`: a series' `videoCount` is every video
+  its delete-forever removes (videos trashed on their own before it are counted there and also listed). Purge: `purgeTrash()` in the hourly retention job deletes
   what was trashed ≥ 7 days ago (ratings cascade) and checkpoints the WAL, like delete-forever.
   Partial indexes `WHERE deleted_at IS NULL` replace the list indexes; the two admin-list indexes also carry
   `deleted_at` because SQLite only treats `col = const` partial-index terms as covered (without it the counts
   scan the table). The unfiltered admin count is `COUNT(*) − trashed` (btree count, no row visits).
 - Admin board (v1.4): `GET /api/admin/series/:id` (per section: seasons + live published videos by season, number);
-  `PUT /api/admin/series/:id/order` checks `videoIds` is exactly that season's set, then renumbers 1..n in one
-  transaction (changing videos go through `-n` first so the unique slot index never collides) and pins each number
-  as `overrides.number`; `GET /api/admin/videos/:id/preview` returns any non-purged video (pending/trashed too).
+  `PUT /api/admin/series/:id/order`, in one synchronous transaction: `expected` (the order the client loaded) must
+  equal the season's current order, else 409 with `details.current` (two saves from one board: one 200, one 409);
+  `videoIds` must be exactly that season's set (400); then it renumbers 1..n (changing videos go through `-n`
+  first so the unique slot index never collides) and pins each number as `overrides.number`; `GET /api/admin/videos/:id/preview` returns any non-purged video (pending/trashed too).
 
 ## Data we store and why
 

@@ -202,14 +202,23 @@ export function createVideoService({ repo, fetchVideoInfo }) {
     },
 
     /**
-     * PUT /api/admin/series/:id/order: `videoIds` must be exactly the live
-     * published videos of that series/section/season (else 400, nothing
-     * changes); they get the numbers 1..n in that order, in one transaction
-     * (see repo.renumber). Returns the season's videos in their new order.
+     * PUT /api/admin/series/:id/order. Optimistic concurrency: `expected` is the
+     * order the client loaded; if the season's current order (ids by number)
+     * differs, 409 with details.current. Then `videoIds` must be exactly the
+     * live published videos of that series/section/season (else 400). They get
+     * the numbers 1..n in that order. Check and renumber share one transaction
+     * (and run synchronously), so of two saves made from the same `expected`
+     * only the first wins. Returns the season's videos in their new order.
      */
-    reorder(seriesId, { section, season, videoIds }) {
+    reorder(seriesId, { section, season, videoIds, expected }) {
       return repo.transaction(() => {
         const current = repo.listPublishedInSeries(seriesId, section, season);
+        const currentIds = current.map((video) => video.id);
+        if (expected.length !== currentIds.length || expected.some((id, i) => id !== currentIds[i])) {
+          throw new HttpError(409, "This season's order changed since you loaded it. Reload and try again.", {
+            current: currentIds,
+          });
+        }
         const byId = new Map(current.map((video) => [video.id, video]));
         const seen = new Set();
         const duplicate = [];

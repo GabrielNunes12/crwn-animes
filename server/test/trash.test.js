@@ -51,7 +51,7 @@ describe("v1.4 admin endpoints: 401 when logged out, 403 for non-admins", () => 
     ["POST", "/api/admin/trash/videos/1/restore"],
     ["DELETE", "/api/admin/trash/series/1"],
     ["DELETE", "/api/admin/trash/videos/1"],
-    ["PUT", "/api/admin/series/1/order", { section: "anime", season: 1, videoIds: [] }],
+    ["PUT", "/api/admin/series/1/order", { section: "anime", season: 1, videoIds: [], expected: [] }],
     ["GET", "/api/admin/videos/1/preview"],
     ["DELETE", "/api/admin/series/1"],
     ["DELETE", "/api/admin/videos/1"],
@@ -341,7 +341,7 @@ describe("restore", () => {
     }
     const trash = (await admin.get("/api/admin/trash")).body;
     assert.deepEqual(trash.videos.map((v) => v.id).filter((id) => id === lone.id || id === withSeries.id), [lone.id], "only the lone one is listed apart");
-    assert.equal(trash.series.find((s) => s.id === seriesId).videoCount, 3, "episodes 1 (pending), 1 (reupload) and 11 went with the series");
+    assert.equal(trash.series.find((s) => s.id === seriesId).videoCount, 4, "episodes 1 (pending), 1 (reupload), 11 and the lone 10");
 
     const res = await admin.post(`/api/admin/trash/series/${seriesId}/restore`);
     assert.equal(res.status, 200);
@@ -412,7 +412,7 @@ describe("trash list, delete forever, reserved slugs", () => {
     assert.deepEqual(res.body.videos.map((v) => v.id), [two.id, one.id], "newest first; episode 2 is under its series");
     const [series] = res.body.series;
     assert.equal(series.slug, "bleach");
-    assert.equal(series.videoCount, 1, "episode 1 was trashed on its own before");
+    assert.equal(series.videoCount, 2, "every video its delete-forever removes, episode 1 (trashed on its own before) included");
     for (const item of [series, ...res.body.videos]) {
       assert.equal(Date.parse(item.purgeAt) - Date.parse(item.deletedAt), 7 * DAY);
       assert.ok(Math.abs(Date.parse(item.deletedAt) - Date.now()) < 60_000);
@@ -426,7 +426,7 @@ describe("trash list, delete forever, reserved slugs", () => {
     assert.equal((await admin.patch(`/api/admin/videos/${one.id}`, { number: 9 })).status, 404);
     assert.equal((await admin.del(`/api/admin/series/${series.id}`)).status, 404);
     assert.equal((await admin.patch(`/api/admin/series/${series.id}`, { synopsis: "x" })).status, 404);
-    assert.equal((await admin.put(`/api/admin/series/${series.id}/order`, { section: "anime", season: 1, videoIds: [] })).status, 404);
+    assert.equal((await admin.put(`/api/admin/series/${series.id}/order`, { section: "anime", season: 1, videoIds: [], expected: [] })).status, 404);
   });
 
   test("adding a YouTube video that is in the trash: 409, restore it instead", async () => {
@@ -467,6 +467,44 @@ describe("trash list, delete forever, reserved slugs", () => {
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM ratings WHERE video_id = ?").get(live.id).n, 0);
     assert.equal((await admin.get("/api/admin/trash")).body.videos.some((v) => v.seriesId === series.id), false);
     assertFresh(db, "deleted forever");
+  });
+
+  test("TrashedSeries.videoCount is every video delete-forever removes, videos trashed on their own included", async () => {
+    const { db, services } = srv;
+    const added = [];
+    for (let i = 1; i <= 6; i++) added.push(await addVideo(srv, 60 + i, `Jujutsu Kaisen Episode ${i}`));
+    const pending = await addVideo(srv, 70, "x", { section: "anime", seriesSlug: "jujutsu-kaisen", number: 1 });
+    assert.equal(pending.status, "pending", "slot 1 taken: pending inside the series");
+    const seriesId = added[0].seriesId;
+    assert.equal((await admin.del(`/api/admin/videos/${added[0].id}`)).status, 204);
+    assert.equal((await admin.del(`/api/admin/videos/${added[1].id}`)).status, 204);
+    assert.equal((await admin.del(`/api/admin/series/${seriesId}`)).status, 204);
+    const listed = (await admin.get("/api/admin/trash")).body;
+    const entry = listed.series.find((x) => x.id === seriesId);
+    assert.equal(entry.videoCount, 7, "6 episodes (2 trashed on their own before) + the pending one");
+    assert.deepEqual(
+      listed.videos.filter((v) => v.seriesId === seriesId).map((v) => v.id).sort(),
+      [added[0].id, added[1].id].sort(),
+      "the two trashed on their own are also listed"
+    );
+    const count = () => db.prepare("SELECT COUNT(*) AS n FROM videos WHERE series_id = ?").get(seriesId).n;
+    const before = db.prepare("SELECT COUNT(*) AS n FROM videos").get().n;
+    assert.equal(count(), entry.videoCount);
+    assert.equal((await admin.del(`/api/admin/trash/series/${seriesId}`)).status, 204);
+    assert.equal(before - db.prepare("SELECT COUNT(*) AS n FROM videos").get().n, entry.videoCount, "removed = videoCount");
+    assert.equal(services.repo.listTrash().videos.some((v) => v.seriesId === seriesId), false);
+
+    // The retention purge removes the same number.
+    const again = [];
+    for (let i = 1; i <= 3; i++) again.push(await addVideo(srv, 80 + i, `Chainsaw Man Episode ${i}`));
+    services.trash.trashVideo(again[0].id);
+    services.trash.trashSeries(again[0].seriesId);
+    const shown = services.repo.listTrash().series.find((x) => x.id === again[0].seriesId).videoCount;
+    assert.equal(shown, 3);
+    const ofSeries = () => db.prepare("SELECT COUNT(*) AS n FROM videos WHERE series_id = ?").get(again[0].seriesId).n;
+    assert.equal(ofSeries(), shown);
+    purgeTrash(db, new Date(Date.now() + 8 * DAY));
+    assert.equal(ofSeries(), 0, "the purge removed exactly those");
   });
 
   test("a trashed series keeps its slug reserved until deleted forever", async () => {

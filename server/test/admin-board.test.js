@@ -89,11 +89,14 @@ describe("GET /api/admin/series/:id (board data)", () => {
     for (const section of ["anime", "manga"]) {
       for (const season of res.body.sections[section].seasons) {
         const videoIds = res.body.sections[section].videos.filter((x) => x.season === season).map((x) => x.id);
-        const order = await admin.put(`/api/admin/series/${board.seriesId}/order`, { section, season, videoIds });
+        // The board's order is also what `expected` must say.
+        const order = await admin.put(`/api/admin/series/${board.seriesId}/order`, { section, season, videoIds, expected: videoIds });
         assert.equal(order.status, 200, `${section} ${season}: ${order.text}`);
         assert.deepEqual(order.body.videos.map((x) => x.id), videoIds);
         // One fewer is refused.
-        const short = await admin.put(`/api/admin/series/${board.seriesId}/order`, { section, season, videoIds: videoIds.slice(1) });
+        const short = await admin.put(`/api/admin/series/${board.seriesId}/order`, {
+          section, season, videoIds: videoIds.slice(1), expected: videoIds,
+        });
         assert.equal(short.status, 400);
       }
     }
@@ -119,12 +122,25 @@ describe("PUT /api/admin/series/:id/order", () => {
 
   const url = () => `/api/admin/series/${board.seriesId}/order`;
   const season1 = () => [board.v.A, board.v.B, board.v.C, board.v.U];
+  /** The season's current order (ids by number): what a client that just loaded the board sends as `expected`. */
+  const currentOrder = (section, season) =>
+    srv.services.repo.listPublishedInSeries(board.seriesId, section, season).map((video) => video.id);
+  /** PUT .../order as a client that loaded the board just now. */
+  const save = (section, season, videoIds) => admin.put(url(), { section, season, videoIds, expected: currentOrder(section, season) });
 
   test("strict validation: every bad body is a 400 and changes nothing", async () => {
     const { A, B, C, U, D, P, T, X, M1 } = board.v;
     const all = [A.id, B.id, C.id, U.id];
+    // `expected` (the current order) is added to every body that does not set it itself.
     const cases = [
-      [{}, ["section", "season", "videoIds"]],
+      [{}, ["expected", "section", "season", "videoIds"]],
+      [{ section: "anime", season: 1, videoIds: all, expected: undefined }, ["expected"]],
+      [{ section: "anime", season: 1, videoIds: all, expected: null }, ["expected"]],
+      [{ section: "anime", season: 1, videoIds: all, expected: String(all) }, ["expected"]],
+      [{ section: "anime", season: 1, videoIds: all, expected: [A.id, 0] }, ["expected"]],
+      [{ section: "anime", season: 1, videoIds: all, expected: [A.id, B.id + 0.5] }, ["expected"]],
+      [{ section: "anime", season: 1, videoIds: all, expected: Array.from({ length: 2501 }, (_, i) => i + 1) }, ["expected"]],
+      [{ section: "anime", season: 1, videoIds: "x", expected: "x" }, ["expected", "videoIds"]],
       [{ section: "movie", season: 1, videoIds: all }, ["section"]],
       [{ section: "anime", season: 0, videoIds: all }, ["season"]],
       [{ section: "anime", season: 100, videoIds: all }, ["season"]],
@@ -156,7 +172,10 @@ describe("PUT /api/admin/series/:id/order", () => {
     ];
     const before = numbersOf(srv, season1());
     const version = srv.services.repo.catalogVersion();
-    for (const [body, fields, message] of cases) {
+    for (const [given, fields, message] of cases) {
+      const sectionSeason = ["anime", "manga"].includes(given.section) && Number.isInteger(given.season) && given.season > 0;
+      const expected = sectionSeason ? currentOrder(given.section, given.season) : all;
+      const body = Object.keys(given).length === 0 || "expected" in given ? given : { ...given, expected };
       const res = await admin.put(url(), body);
       assert.equal(res.status, 400, JSON.stringify(body).slice(0, 120));
       assert.equal(res.body.error.code, "VALIDATION_ERROR");
@@ -173,7 +192,7 @@ describe("PUT /api/admin/series/:id/order", () => {
   });
 
   test("unknown, malformed and trashed series are 404", async () => {
-    const body = { section: "anime", season: 1, videoIds: [] };
+    const body = { section: "anime", season: 1, videoIds: [], expected: [] };
     assert.equal((await admin.put("/api/admin/series/999999/order", body)).status, 404);
     assert.equal((await admin.put("/api/admin/series/abc/order", body)).status, 404);
   });
@@ -186,7 +205,7 @@ describe("PUT /api/admin/series/:id/order", () => {
     assert.match(sitemapBefore, /\/anime\/order-show\/episode\/10</);
     const version = repo.catalogVersion();
 
-    const res = await admin.put(url(), { section: "anime", season: 1, videoIds: [C.id, U.id, A.id, B.id] });
+    const res = await save("anime", 1, [C.id, U.id, A.id, B.id]);
     assert.equal(res.status, 200, res.text);
     assert.equal(res.headers.get("cache-control"), "private, no-store");
     assert.deepEqual(res.body.videos.map((x) => [x.id, x.number, x.route]), [
@@ -213,7 +232,7 @@ describe("PUT /api/admin/series/:id/order", () => {
     assert.match(sitemap, /\/anime\/order-show\/episode\/4</);
 
     // A swap (A 3 <-> C 1) needs the temporary negative numbers: no unique-slot conflict.
-    const swap = await admin.put(url(), { section: "anime", season: 1, videoIds: [A.id, U.id, C.id, B.id] });
+    const swap = await save("anime", 1, [A.id, U.id, C.id, B.id]);
     assert.equal(swap.status, 200, swap.text);
     assert.deepEqual(numbersOf(srv, [A, U, C, B]), [1, 2, 3, 4]);
     assert.equal(srv.db.prepare("SELECT COUNT(*) AS n FROM videos WHERE number < 0").get().n, 0);
@@ -232,16 +251,16 @@ describe("PUT /api/admin/series/:id/order", () => {
     assert.equal(restored.body.video.status, "published", "slot 7 is free");
     assert.equal(restored.body.video.route, "/anime/order-show/episode/7");
 
-    const manga = await admin.put(url(), { section: "manga", season: 1, videoIds: [M2.id, M1.id] });
+    const manga = await save("manga", 1, [M2.id, M1.id]);
     assert.deepEqual(manga.body.videos.map((x) => [x.id, x.route]), [
       [M2.id, "/manga/order-show/chapter/1"],
       [M1.id, "/manga/order-show/chapter/2"],
     ]);
-    const single = await admin.put(url(), { section: "anime", season: 2, videoIds: [D.id] });
+    const single = await save("anime", 2, [D.id]);
     assert.equal(single.status, 200);
     assert.equal(single.body.videos[0].route, "/anime/order-show/season/2/episode/1");
     assert.equal(single.body.videos[0].overrides.number, 1);
-    assert.deepEqual((await admin.put(url(), { section: "anime", season: 3, videoIds: [] })).body, { videos: [] }, "an empty season");
+    assert.deepEqual((await save("anime", 3, [])).body, { videos: [] }, "an empty season");
   });
 
   test("a failure mid-way rolls everything back", async () => {
@@ -257,7 +276,13 @@ describe("PUT /api/admin/series/:id/order", () => {
     };
     try {
       assert.throws(
-        () => videos.reorder(board.seriesId, { section: "anime", season: 1, videoIds: [...list].reverse().map((x) => x.id) }),
+        () =>
+          videos.reorder(board.seriesId, {
+            section: "anime",
+            season: 1,
+            videoIds: [...list].reverse().map((x) => x.id),
+            expected: list.map((x) => x.id),
+          }),
         /disk full/
       );
     } finally {
@@ -265,6 +290,56 @@ describe("PUT /api/admin/series/:id/order", () => {
     }
     assert.deepEqual(numbersOf(srv, list), before);
     assert.equal(repo.catalogVersion(), version);
+  });
+
+  test("optimistic concurrency: a stale `expected` is a 409 with details.current, and changes nothing", async () => {
+    const { repo } = srv.services;
+    const current = currentOrder("anime", 1);
+    assert.equal(current.length, 5);
+    const reversed = [...current].reverse();
+    const stale = [
+      reversed, // another admin saved a different order
+      current.slice(1), // one video less (it was trashed/added meanwhile)
+      [...current, board.v.D.id], // one more
+      [current[1], current[0], ...current.slice(2)], // two swapped
+      [], // an empty board
+    ];
+    const before = numbersOf(srv, repo.listPublishedInSeries(board.seriesId, "anime", 1));
+    const version = repo.catalogVersion();
+    for (const expected of stale) {
+      const res = await admin.put(url(), { section: "anime", season: 1, videoIds: reversed, expected });
+      assert.equal(res.status, 409, JSON.stringify(expected));
+      assert.equal(res.body.error.code, "CONFLICT");
+      assert.deepEqual(res.body.error.details.current, current);
+    }
+    // A stale client is told to reload even when its videoIds no longer match the season either.
+    const both = await admin.put(url(), { section: "anime", season: 1, videoIds: current.slice(1), expected: reversed });
+    assert.equal(both.status, 409);
+    // Shape errors are still 400, before the order is looked at.
+    assert.equal((await admin.put(url(), { section: "anime", season: 1, videoIds: reversed, expected: "stale" })).status, 400);
+    assert.deepEqual(numbersOf(srv, repo.listPublishedInSeries(board.seriesId, "anime", 1)), before, "nothing renumbered");
+    assert.equal(repo.catalogVersion(), version, "nothing written");
+  });
+
+  test("two concurrent saves made from the same board: exactly one 200, the other 409 with the winner's order", async () => {
+    for (let round = 0; round < 5; round++) {
+      const expected = currentOrder("anime", 1);
+      const first = [...expected].reverse();
+      const second = [...expected.slice(1), expected[0]];
+      const results = await Promise.all([
+        admin.put(url(), { section: "anime", season: 1, videoIds: first, expected }),
+        admin.put(url(), { section: "anime", season: 1, videoIds: second, expected }),
+      ]);
+      assert.deepEqual(results.map((r) => r.status).sort(), [200, 409], `round ${round}`);
+      const won = results.find((r) => r.status === 200);
+      const lost = results.find((r) => r.status === 409);
+      const winner = won.body.videos.map((x) => x.id);
+      assert.ok([first, second].some((order) => JSON.stringify(order) === JSON.stringify(winner)));
+      assert.deepEqual(lost.body.error.details.current, winner, "the loser learns the order that won");
+      assert.deepEqual(currentOrder("anime", 1), winner, "the stored order is the winner's");
+      assert.deepEqual(numbersOf(srv, winner.map((id) => ({ id }))), [1, 2, 3, 4, 5]);
+    }
+    assertFresh(srv.db, "after concurrent saves");
   });
 });
 

@@ -311,9 +311,10 @@ export function createRepository(db) {
     trashVideo: db.prepare(`
       UPDATE videos SET deleted_at = @at, trashed_with_series = 0 WHERE id = @id AND deleted_at IS NULL`),
     // Served by the partial indexes series_trashed / videos_trashed (deleted_at, id).
+    // video_count: every video of the series, i.e. what deleting it forever removes (FK
+    // cascade), including videos trashed on their own before it (also listed under videos).
     trashedSeries: db.prepare(`
-      SELECT s.*, (SELECT COUNT(*) FROM videos v
-          WHERE v.series_id = s.id AND v.deleted_at IS NOT NULL AND v.trashed_with_series = 1) AS video_count
+      SELECT s.*, (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id) AS video_count
       FROM series s WHERE s.deleted_at IS NOT NULL ORDER BY s.deleted_at DESC, s.id DESC`),
     trashedVideos: db.prepare(`${VIDEO_SELECT}
       WHERE v.deleted_at IS NOT NULL AND v.trashed_with_series = 0 ORDER BY v.deleted_at DESC, v.id DESC`),
@@ -605,7 +606,11 @@ export function createRepository(db) {
     },
     /** false when the video is not live. */
     trashVideo: (id, at) => q.trashVideo.run({ id, at }).changes > 0,
-    /** { series: TrashedSeries[], videos: TrashedVideo[] }, newest first; videos trashed with their series are counted there. */
+    /**
+     * { series: TrashedSeries[], videos: TrashedVideo[] }, newest first. Videos trashed with their series
+     * are only counted under it (videoCount = every video its delete-forever removes); videos trashed on
+     * their own are listed, and counted under their series too when it is trashed later.
+     */
     listTrash: () => ({
       series: q.trashedSeries.all().map((row) => ({ ...toSeries(row), videoCount: row.video_count })),
       videos: q.trashedVideos.all().map(toVideo),
