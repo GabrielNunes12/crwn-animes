@@ -345,7 +345,7 @@ included). Personal data kept in the trash is the same ratings data, for at most
 | `DELETE /api/admin/trash/series/:id` · `DELETE /api/admin/trash/videos/:id` | `204` — delete forever now (cascades ratings) |
 
 ```ts
-type TrashedSeries = Series & { deletedAt: string; purgeAt: string; videoCount: number };
+type TrashedSeries = Series & { deletedAt: string; purgeAt: string; videoCount: number }; // videoCount = every trashed video of the series (what delete-forever removes)
 type TrashedVideo  = Video  & { deletedAt: string; purgeAt: string };
 ```
 A series slug in the trash stays reserved (creating the same slug → `409`) until it is purged or
@@ -356,7 +356,10 @@ YouTube video that is in the trash → `409` ("restore it instead"). Trashed ite
 carry `deletedAt`/`purgeAt` and `route: null`; public responses never include those fields.
 
 ## Reorder / renumber episodes
-`PUT /api/admin/series/:id/order` body `{ section, season, videoIds: number[] }` → `200 { videos: Video[] }`
+`PUT /api/admin/series/:id/order` body `{ section, season, videoIds: number[], expected: number[] }` → `200 { videos: Video[] }`
+- `expected` is the order the client last loaded (ids in current number order). If the season's current
+  order differs (another admin saved meanwhile), → `409 CONFLICT` with `details.current: number[]`
+  and nothing changes.
 - `videoIds` must be exactly the published, non-trashed videos of that series/section/season
   (any missing, extra, duplicate or foreign id → `400 VALIDATION_ERROR`).
 - Numbers become `1..n` in that order, atomically (no unique-slot conflict mid-way). Routes change
