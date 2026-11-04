@@ -1,6 +1,6 @@
 // Security: authorisation / IDOR. Anonymous visitors and normal users attack
 // every /api/admin/* route, other users' ratings and other users' data.
-import { expect, seedSeries, createUser, uniqueEmail, loginViaApi } from "../fixtures.js";
+import { expect, seedSeries, createUser, uniqueEmail, loginViaApi, fakeYouTubeId } from "../fixtures.js";
 import { apiClient, newUserClient, test, withAdmin } from "./helpers.js";
 
 const SERIES = { name: "Sec Authz Saga", slug: "sec-authz-saga", aliases: [], genres: ["Segurança"] };
@@ -42,11 +42,18 @@ function adminRoutes() {
     ["POST", `/api/admin/trash/videos/${vid}/restore`, null],
     ["DELETE", `/api/admin/trash/series/${sid}`, null],
     ["DELETE", `/api/admin/trash/videos/${vid}`, null],
+    // v1.6: anonymous aggregates are still admin-only.
+    ["GET", "/api/admin/metrics", null],
+    ["GET", "/api/admin/metrics?days=7", null],
+    ["GET", "/api/admin/metrics?days=90", null],
+    ["GET", "/api/admin/metrics?days=999", null],
     ["GET", "/api/admin/does-not-exist", null],
     // Express routing tricks: case, trailing slash, double slash, encoded slash.
     ["GET", "/api/ADMIN/series", null],
     ["GET", "/api/admin/series/", null],
     ["GET", "/api/admin//series", null],
+    ["GET", "/api/ADMIN/metrics", null],
+    ["GET", "/api/admin/metrics/", null],
   ];
 }
 
@@ -284,5 +291,89 @@ test.describe("authorisation", () => {
       expect(text, `${path}: user data`).not.toMatch(/@e2e\.test|password|"email"/);
     }
     await anon.dispose();
+  });
+});
+
+// v1.6: GET /api/admin/metrics is built only from anonymous aggregates and catalog tables.
+// Even the admin must not learn who rated what from it: no e-mail, display name or user id.
+const METRICS_PATHS = new Set([
+  "generatedAt",
+  "catalog", "catalog.series", "catalog.anime", "catalog.anime.series", "catalog.anime.videos", "catalog.manga", "catalog.manga.series",
+  "catalog.manga.videos", "catalog.pending", "catalog.unavailable", "catalog.trashed", "catalog.trashed.series", "catalog.trashed.videos",
+  "pendingQueue", "pendingQueue.count", "pendingQueue.oldestAt", "pendingQueue.medianAgeHours", "pendingQueue.byReason",
+  "pendingQueue.byReason[].key", "pendingQueue.byReason[].reason", "pendingQueue.byReason[].count",
+  "ratings", "ratings.total", "ratings.average", "ratings.daily", "ratings.daily[].day", "ratings.daily[].count", "ratings.daily[].average",
+  "topSeries", "topSeries[].id", "topSeries[].name", "topSeries[].slug", "topSeries[].section", "topSeries[].ratingCount", "topSeries[].average",
+  "thumbnails", "thumbnails.cachedFiles", "thumbnails.cachedBytes", "thumbnails.failuresRemembered",
+]);
+
+/** Every key path of a JSON value ("a.b", "a.list[].c"). */
+function keyPaths(value, prefix = "", out = new Set()) {
+  if (Array.isArray(value)) {
+    for (const item of value) keyPaths(item, `${prefix}[]`, out);
+  } else if (value && typeof value === "object") {
+    for (const [key, child] of Object.entries(value)) {
+      const p = prefix ? `${prefix}.${key}` : key;
+      out.add(p);
+      keyPaths(child, p, out);
+    }
+  }
+  return out;
+}
+
+test.describe("admin metrics (v1.6): anonymous aggregates only", () => {
+  test("the response has no e-mail, display name or user id of the people who rated, only the documented fields; private, no-store", async ({ admin }) => {
+    const tag = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    const S = { name: `Sec Metrics ${tag}`, slug: `sec-metrics-${tag}`, aliases: [], genres: [] };
+    const { series, videos } = await seedSeries(
+      admin,
+      S,
+      [1, 2, 3].map((number) => ({ youtubeId: fakeYouTubeId("secMt"), title: `${S.name} Episode ${number}`, section: "anime", number }))
+    );
+    // Distinctive names and addresses, so any leak is found by a plain text search.
+    const raters = await Promise.all(
+      [1, 2, 3].map(async (i) => {
+        const r = await newUserClient({ displayName: `Sigilo ${tag} ${i}` });
+        for (const v of videos) expect((await r.ctx.put(`/api/videos/${v.id}/rating`, { data: { score: 5 } })).status()).toBe(200);
+        return r;
+      })
+    );
+
+    for (const days of [7, 30, 90]) {
+      const res = await admin.get(`/api/admin/metrics?days=${days}`);
+      expect(res.status(), `days=${days}`).toBe(200);
+      expect(res.headers()["cache-control"]).toBe("private, no-store");
+      expect(res.headers()["set-cookie"]).toBeUndefined();
+      const text = await res.text();
+      const data = JSON.parse(text);
+      // The ratings did reach the aggregates (the test would prove nothing otherwise) …
+      expect(data.ratings.daily.at(-1).count).toBeGreaterThanOrEqual(9);
+      expect(data.topSeries.map((s) => s.id), "the rated series is a top series").toContain(series.id);
+
+      // … but nobody's identity did.
+      for (const { me, user } of raters) {
+        expect(text, `days=${days}: e-mail`).not.toContain(user.email);
+        expect(text, `days=${days}: e-mail local part`).not.toContain(user.email.split("@")[0]);
+        expect(text, `days=${days}: display name`).not.toContain(user.displayName);
+        expect(text, `days=${days}: display name`).not.toContain(`Sigilo ${tag}`);
+      }
+      expect(text, `days=${days}: user-ish keys`).not.toMatch(/"(user|users|userId|user_id|userCount|email|emails|displayName|display_name|sessions?|ip|ips|role|password\w*)"\s*:/i);
+      expect(text).not.toMatch(/@e2e\.test/);
+
+      // Only the documented fields (no per-user counts, not even a user count) …
+      const unexpected = [...keyPaths(data)].filter((p) => !METRICS_PATHS.has(p));
+      expect(unexpected, `days=${days}: undocumented fields`).toEqual([]);
+      // … and the only ids are series ids (each one checked against the series it names).
+      const seriesIds = data.topSeries.map((s) => s.id);
+      for (const s of data.topSeries) {
+        const board = await admin.get(`/api/admin/series/${s.id}`);
+        expect(board.status(), `topSeries id ${s.id} is a series`).toBe(200);
+        expect((await board.json()).series).toMatchObject({ id: s.id, name: s.name, slug: s.slug });
+      }
+      for (const { me } of raters) {
+        if (!seriesIds.includes(me.id)) expect(text, `days=${days}: user id ${me.id}`).not.toMatch(new RegExp(`"id"\\s*:\\s*${me.id}\\b`));
+      }
+    }
+    await Promise.all(raters.map((r) => r.ctx.dispose()));
   });
 });

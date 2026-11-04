@@ -152,6 +152,13 @@ test.describe("security headers", () => {
       [admin, "GET", "/api/admin/videos"],
       [anon, "GET", "/api/admin/series"],
       [user, "GET", "/api/admin/videos"],
+      // v1.6: the metrics are admin data, whatever the answer (200, 400, 401, 403).
+      [admin, "GET", "/api/admin/metrics"],
+      [admin, "GET", "/api/admin/metrics?days=7"],
+      [admin, "GET", "/api/admin/metrics?days=90"],
+      [admin, "GET", "/api/admin/metrics?days=91"],
+      [anon, "GET", "/api/admin/metrics"],
+      [user, "GET", "/api/admin/metrics?days=30"],
       [anon, "GET", rating],
       [user, "GET", rating],
       [user, "PUT", rating, { score: 4 }],
