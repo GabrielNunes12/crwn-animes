@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useState } from "react";
 import { Link, Navigate, useLoaderData, useLocation, useNavigate } from "react-router";
 import { AsyncView } from "../../components/Await/AsyncView.jsx";
 import { Skeleton } from "../../components/Skeleton/Skeleton.jsx";
@@ -37,6 +37,9 @@ function WatchView({ section, video, series, prev, next, videos }) {
   const [theatre, setTheatre] = useState(false);
   const [autoplay, setAutoplay] = useState(() => getBool(AUTOPLAY_KEY, true));
   const [showAutoNext, setShowAutoNext] = useState(false);
+  // The player (its poster is the page's largest paint) and the titles commit first; the rating
+  // panel and the episode list follow in a second, interruptible pass (docs/API.md v1.7).
+  const restReady = useDeferredValue(true, false);
   const isManga = section === "manga";
   const label = videoLabel(t, video);
   useTitle(...watchMeta(t, video, series));
@@ -130,7 +133,7 @@ function WatchView({ section, video, series, prev, next, videos }) {
           </nav>
           <p className="hint">{t("watch.shortcutsHint")}</p>
 
-          <RatingPanel videoId={video.id} />
+          {restReady && <RatingPanel videoId={video.id} />}
         </div>
 
         <aside className={styles.side} aria-labelledby="more-title">
@@ -138,7 +141,7 @@ function WatchView({ section, video, series, prev, next, videos }) {
             {t(isManga ? "series.chapters" : "series.episodes")}
           </h2>
           <ol className={styles.sideList} role="list">
-            {videos.map((v) => {
+            {(restReady ? videos : []).map((v) => {
               const current = v.id === video.id;
               const done = entryCompleted(progress[v.youtubeVideoId]);
               const unavailable = v.availability === "unavailable";

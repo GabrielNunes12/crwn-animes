@@ -22,8 +22,7 @@ if (savedTheme) document.documentElement.dataset.theme = savedTheme;
 // first, then creating the router starts the first page's module download and its data
 // requests. Vite issues a dynamic import() one microtask after the call, so the router is
 // created one microtask later — on HTTP/1.1 the dictionary is not queued behind the page's
-// ~10 requests. The app renders once the dictionary has arrived; if it cannot be fetched
-// (offline, not cached yet), pt-BR is tried instead.
+// ~10 requests. If the dictionary cannot be fetched (offline, not cached yet), pt-BR is tried.
 const locale = initialLocale();
 const ready = loadMessages(locale)
   .then(
@@ -32,9 +31,26 @@ const ready = loadMessages(locale)
   )
   .catch(() => locale);
 
+/** Resolves once the router has loaded the landing page's module (or failed to: its error boundary renders). */
+function initialized(router) {
+  if (router.state.initialized) return Promise.resolve();
+  return new Promise((resolve) => {
+    const unsubscribe = router.subscribe((state) => {
+      if (!state.initialized) return;
+      unsubscribe();
+      resolve();
+    });
+  });
+}
+
 queueMicrotask(() => {
   const router = createRouter();
-  ready.then((startLocale) => {
+  // The first render waits for the dictionary AND the landing page's module (both downloading
+  // in parallel). Rendering earlier would show the HydrateFallback and then render the page in
+  // a router transition, where nothing can be deferred: the page's largest paint would wait for
+  // all of its below-the-fold content. Rendered now, the page's own first pass (hero, player)
+  // commits at once and the rest follows (useDeferredValue in Home and Watch).
+  Promise.all([ready, initialized(router)]).then(([startLocale]) => {
     createRoot(document.getElementById("root")).render(
       <StrictMode>
         <I18nProvider locale={startLocale}>

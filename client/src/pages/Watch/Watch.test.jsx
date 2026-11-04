@@ -78,6 +78,8 @@ describe("Watch page after a reorder", () => {
     // A is finished: no "Resume at 5:00" (that is B's position, B used to be episode 2).
     expect(screen.getByRole("button", { name: "Play: A" })).not.toHaveTextContent(/Resume at/);
     const side = screen.getByRole("complementary");
+    // The episode list renders in the page's second (deferred) pass, right after the player.
+    await within(side).findAllByRole("listitem");
     const item = (title) => within(side).getAllByRole("listitem").find((li) => li.textContent.includes(title));
     expect(within(item("A")).getByText("Watched")).toBeInTheDocument();
     expect(within(item("B")).queryByText("Watched")).not.toBeInTheDocument();

@@ -65,4 +65,16 @@ describe("i18n", () => {
     expect(msg).toContain("Digite um e-mail válido.");
     expect(msg).not.toMatch(/Enter a valid|invalid/);
   });
+
+  it("its plural and number fast paths answer exactly like Intl (en, pt-BR)", () => {
+    const samples = [0, 1, 2, 3, 5, 11, 21, 101, 999, 999.5, 1000, 1200, 1e6, 2e6, 0.5, 1.5, 1.0, 2.5, -1, -2, -0.5, -999];
+    for (const locale of ["en", "pt-BR"]) {
+      const msgs = { [locale]: { n: { one: "one {count}", many: "many {count}", other: "other {count}" } } };
+      const t = createTranslator(locale, msgs);
+      const pr = new Intl.PluralRules(locale);
+      const nf = new Intl.NumberFormat(locale);
+      for (const n of samples) expect(t("n", { count: n }), `${locale} ${n}`).toBe(`${pr.select(n)} ${nf.format(n)}`);
+    }
+  });
 });
+

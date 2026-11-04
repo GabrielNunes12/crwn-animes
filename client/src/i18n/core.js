@@ -44,14 +44,37 @@ function lookup(dict, key) {
 }
 
 /**
+ * `make()` on first call, the same value after. Intl constructors are slow the first time
+ * (locale data): created only when a message or a formatter needs them, not on every render
+ * of the provider or at start-up (docs/API.md v1.7).
+ */
+function lazy(make) {
+  let value;
+  return () => (value ??= make());
+}
+
+/**
  * Builds t(key, vars). Missing keys fall back: current locale → pt-BR → en → key.
  * Plural messages are objects keyed by Intl.PluralRules categories ({ one, other }).
  * `{name}` placeholders are interpolated; numbers are formatted for the locale.
  */
+// CLDR cardinal plural rules of the supported locales for |n| < 1000 (every count the UI shows
+// in practice): the same answers as Intl.PluralRules (i18n.test.js checks it), without
+// constructing one during the first render. Larger numbers go to Intl (pt has "many" for
+// exact millions, and CLDR may grow).
+//   en: one → n = 1                pt: one → i = 0..1 (integer part)
+const PLURALS = {
+  en: (n) => (Math.abs(n) === 1 ? "one" : "other"),
+  "pt-BR": (n) => (Math.trunc(Math.abs(n)) <= 1 ? "one" : "other"),
+};
+
 export function createTranslator(locale, messages = MESSAGES) {
   const chain = [locale, DEFAULT_LOCALE, "en"].filter((l, i, a) => a.indexOf(l) === i);
-  const plural = new Intl.PluralRules(locale);
-  const numberFormat = new Intl.NumberFormat(locale);
+  const intlPlural = lazy(() => new Intl.PluralRules(locale));
+  const pluralOf = (n) => (Math.abs(n) < 1000 && PLURALS[locale] ? PLURALS[locale](n) : intlPlural().select(n));
+  const numberFormat = lazy(() => new Intl.NumberFormat(locale));
+  // Integers below 1000 need no grouping separator: no Intl.NumberFormat for them either.
+  const formatNumber = (v) => (Number.isInteger(v) && Math.abs(v) < 1000 ? String(v) : numberFormat().format(v));
 
   return function t(key, vars) {
     let value;
@@ -64,14 +87,14 @@ export function createTranslator(locale, messages = MESSAGES) {
     if (value === undefined || value === null) return key;
     if (typeof value === "object") {
       const n = Number(vars?.count ?? 0);
-      value = value[plural.select(n)] ?? value.other;
+      value = value[pluralOf(n)] ?? value.other;
       if (typeof value !== "string") return key;
     }
     if (!vars) return value;
     return value.replace(/\{(\w+)\}/g, (match, name) => {
       if (!(name in vars)) return match;
       const v = vars[name];
-      return typeof v === "number" ? numberFormat.format(v) : String(v);
+      return typeof v === "number" ? formatNumber(v) : String(v);
     });
   };
 }
@@ -79,9 +102,9 @@ export function createTranslator(locale, messages = MESSAGES) {
 /** Everything components get from useT(). */
 export function createI18n(locale, setLocale = () => {}) {
   const t = createTranslator(locale);
-  const nf = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 });
-  const df = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  const nf = lazy(() => new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }));
+  const df = lazy(() => new Intl.DateTimeFormat(locale, { dateStyle: "medium" }));
+  const rtf = lazy(() => new Intl.RelativeTimeFormat(locale, { numeric: "auto" }));
   /** Translated message for one invalid field (server `details` key). */
   const fieldError = (field) => {
     const key = `errors.fields.${field}`;
@@ -97,16 +120,16 @@ export function createI18n(locale, setLocale = () => {}) {
     locale,
     setLocale,
     t,
-    formatNumber: (n) => nf.format(n),
-    formatDate: (d) => (d ? df.format(new Date(d)) : ""),
+    formatNumber: (n) => nf().format(n),
+    formatDate: (d) => (d ? df().format(new Date(d)) : ""),
     formatRelative: (d) => {
       if (!d) return "";
       const diff = (new Date(d).getTime() - Date.now()) / 1000;
       const abs = Math.abs(diff);
-      if (abs < 3600) return rtf.format(Math.round(diff / 60), "minute");
-      if (abs < 86400) return rtf.format(Math.round(diff / 3600), "hour");
-      if (abs < 86400 * 30) return rtf.format(Math.round(diff / 86400), "day");
-      return df.format(new Date(d));
+      if (abs < 3600) return rtf().format(Math.round(diff / 60), "minute");
+      if (abs < 86400) return rtf().format(Math.round(diff / 3600), "hour");
+      if (abs < 86400 * 30) return rtf().format(Math.round(diff / 86400), "day");
+      return df().format(new Date(d));
     },
     fieldError,
     fieldErrors,

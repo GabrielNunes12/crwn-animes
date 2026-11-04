@@ -15,12 +15,16 @@ const ROWS = [
 export function ShortcutsDialog({ open, onClose }) {
   const { t } = useT();
   const ref = useRef(null);
+  const closeRef = useRef(null);
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
     if (open && !d.open) {
       if (typeof d.showModal === "function") d.showModal();
       else d.setAttribute("open", "");
+      // Focus "Close" when the dialog opens. (React's autoFocus would call focus() when the
+      // closed dialog mounts with the page, forcing a style recalculation before first paint.)
+      closeRef.current?.focus();
     } else if (!open && d.open) {
       if (typeof d.close === "function") d.close();
       else d.removeAttribute("open");
@@ -46,7 +50,7 @@ export function ShortcutsDialog({ open, onClose }) {
         <p className="hint">{t("shortcuts.note")}</p>
         <SingleKeyToggle />
         <div className="cluster" style={{ justifyContent: "flex-end" }}>
-          <button type="button" className="btn" onClick={onClose} autoFocus>
+          <button ref={closeRef} type="button" className="btn" onClick={onClose}>
             {t("common.close")}
           </button>
         </div>
