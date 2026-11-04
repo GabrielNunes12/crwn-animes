@@ -148,6 +148,7 @@ for local development (the verification link is also printed to the server conso
 | `email_tokens` | SHA-256 of the token, user id, expiry | verify email | used or expired (24 h) — purged automatically |
 | `ratings` | user id, video id, score, reaction | the rating feature | account deleted |
 | `rating_activity` | none — per-video daily counts with no user id (not personal data) | trending row, admin metrics | 90 days |
+| `rating_days` | none — site-wide daily rating counts/sums (not personal data), kept by triggers from `rating_activity` | admin metrics | 90 days |
 
 Deleted rows are overwritten in the database file (`PRAGMA secure_delete`), and the write-ahead log is
 truncated after an account is deleted or purged, so erased accounts leave no readable copy behind.
@@ -470,7 +471,7 @@ service worker, CDN) can ever show a different video under an old id.
   catalog: { series: number, anime: { series, videos }, manga: { series, videos },
              pending: number, unavailable: number, trashed: { series, videos } },
   pendingQueue: { count: number, oldestAt: string | null, medianAgeHours: number | null,
-                  byReason: { key: string, reason: string, count: number }[] },  // top 10; `key` is a stable code the client translates
+                  byReason: { key: string, reason: string, count: number }[] },  // top 10; key ∈ no-section | no-series | series-trashed | no-number | guessed-number | slot-taken | ready
   ratings: { total: number, average: number | null,
              daily: { day: string, count: number, average: number | null }[] },  // from rating_activity, last `days`
   topSeries: { id, name, slug, section, ratingCount, average }[],       // top 10 by Bayesian average, n ≥ 3
