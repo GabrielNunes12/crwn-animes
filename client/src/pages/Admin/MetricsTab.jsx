@@ -65,7 +65,13 @@ function Tiles({ data }) {
       <Tile
         label={t("admin.metrics.tiles.ratings")}
         value={n(r.total)}
-        detail={r.average != null ? t("admin.metrics.tiles.average", { avg: fmt.average(r.average) }) : t("common.noRatings")}
+        detail={
+          r.average != null
+            ? t("admin.metrics.tiles.average", { avg: fmt.average(r.average) })
+            : Number(r.total) > 0
+              ? t("admin.metrics.tiles.fewForAverage")
+              : t("common.noRatings")
+        }
       />
       <Tile
         label={t("admin.metrics.tiles.thumbs")}
@@ -159,7 +165,8 @@ function TopSeries({ items }) {
       ) : (
         <ol className={styles.top} aria-labelledby={`${id}-title`}>
           {list.map((s) => (
-            <li key={s.id}>
+            // One row per (series, section): a series with anime and manga appears twice.
+            <li key={`${s.id}-${s.section}`}>
               <Link className={styles.topName} to={`/admin/series/${s.id}`}>
                 {s.name}
               </Link>
@@ -203,14 +210,20 @@ function MetricsSkeleton() {
 
 /**
  * Admin "Métricas" (docs/API.md v1.6): anonymous aggregates only. The period lives in
- * `?days=` (7/30/90). A refetch (period or refresh) keeps the last render dimmed instead
- * of flashing skeletons, and a polite live region says when new numbers arrived.
+ * `?days=` (7/30/90). A refetch (period or refresh) keeps the last render (only the chart
+ * marks dimmed) instead of flashing skeletons, and a polite live region says when new
+ * numbers arrived.
  */
 export function MetricsTab() {
   const { t } = useT();
   const fmt = useMetricFormats();
   const [params, setParams] = useSearchParams();
-  const days = readPeriod(params.get("days"));
+  // The chosen period is local state so the radio is checked on the very click (the URL
+  // update lands a frame or two later); back/forward or a pasted link still win.
+  const urlDays = readPeriod(params.get("days"));
+  const [period, setPeriod] = useState({ days: urlDays, url: urlDays });
+  if (period.url !== urlDays) setPeriod({ days: urlDays, url: urlDays });
+  const days = period.days;
   const [version, setVersion] = useState(0);
   const [state, setState] = useState({ key: null, days, data: null, error: null });
   const [live, setLive] = useState({ n: 0, at: null, days });
@@ -245,6 +258,7 @@ export function MetricsTab() {
     if (!loading) setVersion((v) => v + 1);
   }
   function setDays(d) {
+    setPeriod((p) => ({ ...p, days: d }));
     setParams(
       (prev) => {
         const next = new URLSearchParams(prev);
@@ -270,9 +284,15 @@ export function MetricsTab() {
               <time dateTime={generatedAt}>{t("admin.metrics.updatedAt", { time: fmt.time(generatedAt) })}</time>
             </p>
           )}
-          {/* aria-disabled (not disabled) keeps focus on the button while it reloads. */}
+          {/* Visual only: the live region below announces the new numbers once they arrive. */}
+          {loading && data && (
+            <span className={styles.busy} aria-hidden="true" data-testid="metrics-busy">
+              <span className={styles.spinner} /> {t("admin.metrics.refreshing")}
+            </span>
+          )}
+          {/* aria-disabled (not disabled) keeps focus on the button while it reloads; its name never changes. */}
           <button type="button" className="btn btn-sm" onClick={refresh} aria-disabled={loading || undefined}>
-            <span aria-hidden="true">↻</span> {loading && data ? t("admin.metrics.refreshing") : t("admin.refresh")}
+            <span aria-hidden="true">↻</span> {t("admin.refresh")}
           </button>
         </div>
       </div>

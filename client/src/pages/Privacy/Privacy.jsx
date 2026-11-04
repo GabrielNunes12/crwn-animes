@@ -4,7 +4,8 @@ import { useTitle } from "../../hooks/useTitle.js";
 import { useT } from "../../i18n/useT.js";
 import styles from "./Privacy.module.css";
 
-const DATA_ROWS = ["users", "sessions", "tokens", "ratings", "activity"];
+// "ratingDays" is the rating_days table (v1.6): site-wide daily totals for the admin metrics.
+const DATA_ROWS = ["users", "sessions", "tokens", "ratings", "activity", "ratingDays"];
 const DEVICE_ROWS = ["progress", "prefs", "cache"];
 const RIGHTS = ["access", "rectify", "erase", "object", "complain"];
 

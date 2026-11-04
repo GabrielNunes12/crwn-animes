@@ -1,6 +1,6 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useT } from "../../i18n/useT.js";
-import { columnPath, labelIndices, niceTicks, summarize } from "../../lib/metrics.js";
+import { columnPath, labelIndices, niceTicks, summarize, tooltipLeft } from "../../lib/metrics.js";
 import { useMetricFormats } from "./useMetricFormats.js";
 import styles from "./Metrics.module.css";
 
@@ -40,6 +40,8 @@ export function RatingsChart({ series, days }) {
   const fmt = useMetricFormats();
   const base = useId();
   const wrapRef = useRef(null);
+  const svgRef = useRef(null);
+  const tipRef = useRef(null);
   const width = useWidth(wrapRef, 640);
   const [active, setActive] = useState(null);
   const [showTable, setShowTable] = useState(false);
@@ -70,7 +72,7 @@ export function RatingsChart({ series, days }) {
   function indexAt(e) {
     const box = e.currentTarget.getBoundingClientRect();
     const i = Math.floor((e.clientX - box.left - left) / slot);
-    return Math.min(n - 1, Math.max(0, i));
+    return Number.isFinite(i) ? Math.min(n - 1, Math.max(0, i)) : n - 1;
   }
   function onKeyDown(e) {
     const from = current ?? n - 1;
@@ -85,10 +87,27 @@ export function RatingsChart({ series, days }) {
   }
 
   // The tooltip sits beside the active column (never over it): right of it in the
-  // first half of the chart, left of it in the second.
+  // first half of the chart, left of it in the second; measured, then clamped inside.
   const tip = current != null ? series[current] : null;
   const tipAlign = current != null && current >= n / 2 ? "before" : "after";
-  const tipX = current == null ? 0 : tipAlign === "after" ? left + (current + 1) * slot : left + current * slot;
+  const colStart = current == null ? 0 : left + current * slot;
+  useLayoutEffect(() => {
+    const el = tipRef.current;
+    if (!el) return;
+    const x = tooltipLeft({ colStart, colEnd: colStart + slot, align: tipAlign, tipWidth: el.offsetWidth, width });
+    el.style.translate = `${Math.round(x)}px 0`;
+  }, [tip, colStart, slot, tipAlign, width]);
+
+  // A tap elsewhere closes it (touch has no pointerleave to rely on; blur covers keyboard).
+  const open = current != null;
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => {
+      if (!svgRef.current?.contains(e.target)) setActive(null);
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [open]);
   const peakX = peak ? left + (series.indexOf(peak) + 0.5) * slot : 0;
   const anchorAt = (x) => (x - left < 18 ? "start" : left + plotW - x < 18 ? "end" : "middle");
 
@@ -103,6 +122,7 @@ export function RatingsChart({ series, days }) {
 
       <div ref={wrapRef} className={styles.plot}>
         <svg
+          ref={svgRef}
           className={styles.svg}
           role="img"
           aria-label={summary}
@@ -152,10 +172,14 @@ export function RatingsChart({ series, days }) {
         </svg>
         {total === 0 && <p className={styles.emptyNote}>{t("admin.metrics.chart.empty")}</p>}
         {tip && (
-          <div className={styles.tooltip} data-align={tipAlign} style={{ insetInlineStart: `${tipX}px` }} aria-hidden="true">
+          <div ref={tipRef} className={styles.tooltip} data-align={tipAlign} aria-hidden="true">
             <strong>{tip.count > 0 ? t("common.ratingCount", { count: tip.count }) : t("admin.metrics.chart.zero")}</strong>
             <span>{fmt.longDay(tip.day)}</span>
-            {tip.average != null && <span>{t("admin.metrics.chart.avg", { avg: fmt.average(tip.average) })}</span>}
+            {tip.average != null ? (
+              <span>{t("admin.metrics.chart.avg", { avg: fmt.average(tip.average) })}</span>
+            ) : (
+              tip.count > 0 && <span>{t("admin.metrics.chart.avgFew")}</span>
+            )}
           </div>
         )}
       </div>
@@ -186,6 +210,9 @@ export function RatingsChart({ series, days }) {
                 <td>
                   {d.average != null ? (
                     fmt.average(d.average)
+                  ) : d.count > 0 ? (
+                    // The server leaves out the average of a day with fewer than 3 ratings.
+                    t("admin.metrics.chart.fewShort")
                   ) : (
                     <>
                       <span aria-hidden="true">—</span>

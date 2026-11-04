@@ -482,8 +482,14 @@
       "activity": {
         "name": "Atividade de avaliações (não é dado pessoal)",
         "what": "Totais diários anônimos por vídeo (número de avaliações, soma das notas) — sem id de usuário",
-        "why": "Para mostrar o que está em alta",
-        "until": "30 dias"
+        "why": "Tendências (o que está em alta) e métricas do administrador",
+        "until": "90 dias"
+      },
+      "ratingDays": {
+        "name": "Totais diários de avaliações (não é dado pessoal)",
+        "what": "Totais diários do site, sem identificação: número de avaliações e soma das notas do dia — sem id de usuário e sem vídeo",
+        "why": "Para as métricas do administrador",
+        "until": "90 dias"
       }
     },
     "never": "Não guardamos endereços IP, user agents do navegador, analytics, IDs de publicidade nem rastreadores de terceiros.",
@@ -867,6 +873,7 @@
         },
         "ratings": "Avaliações",
         "average": "média {avg} de 5",
+        "fewForAverage": "poucos dados para a média",
         "thumbs": "Miniaturas em cache",
         "thumbsDetail": {
           "one": "{size} · {count} falha lembrada",
@@ -895,7 +902,9 @@
         "count": "Avaliações",
         "average": "Média",
         "noAverage": "sem média",
-        "avg": "média {avg}"
+        "fewShort": "poucos dados",
+        "avg": "média {avg}",
+        "avgFew": "média: poucos dados (menos de 3 avaliações)"
       },
       "pending": {
         "title": "Fila de pendentes",

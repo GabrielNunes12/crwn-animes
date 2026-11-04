@@ -90,3 +90,14 @@ export function columnPath(x, y, w, h) {
   const b = y + h;
   return `M${x},${b}V${y + r}A${r},${r} 0 0 1 ${x + r},${y}H${x + w - r}A${r},${r} 0 0 1 ${x + w},${y + r}V${b}Z`;
 }
+
+/**
+ * The tooltip's x (px from the plot's left edge). It sits beside the active column —
+ * after it (to the right) or before it (to the left) — and is then clamped to
+ * [0, width − tipWidth] so it never overflows the chart, even on a 320px phone with
+ * a long localized date. Wider than the chart: it starts at 0 (and wraps, in CSS).
+ */
+export function tooltipLeft({ colStart, colEnd, align, tipWidth, width, gap = 8 }) {
+  const want = align === "before" ? colStart - gap - tipWidth : colEnd + gap;
+  return Math.max(0, Math.min(want, width - tipWidth));
+}

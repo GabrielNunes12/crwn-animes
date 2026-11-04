@@ -482,8 +482,14 @@
       "activity": {
         "name": "Rating activity (not personal data)",
         "what": "Anonymous daily totals per video (number of ratings, sum of scores) — no user id",
-        "why": "To show what's trending",
-        "until": "30 days"
+        "why": "Trending (what's popular) and the admin's metrics",
+        "until": "90 days"
+      },
+      "ratingDays": {
+        "name": "Daily rating totals (not personal data)",
+        "what": "Site-wide daily totals with nothing identifying: the day's number of ratings and sum of scores — no user id, no video",
+        "why": "For the admin's metrics",
+        "until": "90 days"
       }
     },
     "never": "We do not store IP addresses, browser user agents, analytics, advertising IDs or any third-party trackers.",
@@ -867,6 +873,7 @@
         },
         "ratings": "Ratings",
         "average": "average {avg} of 5",
+        "fewForAverage": "too few for an average",
         "thumbs": "Cached thumbnails",
         "thumbsDetail": {
           "one": "{size} · {count} failure remembered",
@@ -895,7 +902,9 @@
         "count": "Ratings",
         "average": "Average",
         "noAverage": "no average",
-        "avg": "average {avg}"
+        "fewShort": "too few",
+        "avg": "average {avg}",
+        "avgFew": "average: too few ratings (fewer than 3)"
       },
       "pending": {
         "title": "Pending queue",

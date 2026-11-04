@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { columnPath, fillDays, labelIndices, niceTicks, readPeriod, summarize } from "./metrics.js";
+import { columnPath, fillDays, labelIndices, niceTicks, readPeriod, summarize, tooltipLeft } from "./metrics.js";
 
 describe("metrics helpers", () => {
   it("reads the period from ?days= (7, 30 or 90; anything else is 30)", () => {
@@ -59,6 +59,20 @@ describe("metrics helpers", () => {
     expect(labelIndices(30, 13).slice(-3)).toEqual([21, 24, 29]);
     // 30 days at phone width (3 labels): the middle one stays.
     expect(labelIndices(30, 3)).toEqual([0, 15, 29]);
+  });
+
+  it("puts the tooltip beside the active column and clamps it inside the chart", () => {
+    const col = { colStart: 100, colEnd: 120, width: 360 };
+    // Room on the side it prefers: 8px off the column.
+    expect(tooltipLeft({ ...col, align: "after", tipWidth: 150 })).toBe(128);
+    expect(tooltipLeft({ ...col, colStart: 300, colEnd: 320, align: "before", tipWidth: 150 })).toBe(142);
+    // No room: pushed back inside [0, width − tipWidth] instead of overflowing (the 360px bug).
+    expect(tooltipLeft({ ...col, colStart: 290, colEnd: 300, align: "after", tipWidth: 150 })).toBe(210);
+    expect(tooltipLeft({ ...col, colStart: 40, colEnd: 50, align: "before", tipWidth: 150 })).toBe(0);
+    // A long pt-BR date at 320px: never past the right edge…
+    expect(tooltipLeft({ colStart: 200, colEnd: 210, width: 320, align: "after", tipWidth: 220 })).toBe(100);
+    // …and a tooltip wider than the chart starts at 0 (CSS caps it at 100% and wraps).
+    expect(tooltipLeft({ colStart: 200, colEnd: 210, width: 320, align: "before", tipWidth: 400 })).toBe(0);
   });
 
   it("draws columns square at the baseline with at most a 4px rounded data end", () => {

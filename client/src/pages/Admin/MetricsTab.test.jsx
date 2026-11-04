@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it, vi } from "vitest";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MetricsTab } from "./MetricsTab.jsx";
 import { Component as Admin } from "./Admin.jsx";
@@ -283,5 +286,150 @@ describe("admin Métricas tab", () => {
     renderApp(<Admin />, { path: "/admin?tab=metrics&days=90" });
     expect(await screen.findByRole("tab", { name: "Metrics" })).toHaveAttribute("aria-selected", "true");
     expect(await screen.findByRole("img", { name: /last 90 days/ })).toBeInTheDocument();
+  });
+});
+
+describe("admin Métricas tab — cycle 6 review fixes", () => {
+  it("1. a series ranked in both sections gets one row per section, and a refresh that drops one leaves no stale row", async () => {
+    const both = [
+      { id: 10, name: "Naruto", slug: "naruto", section: "anime", ratingCount: 120, average: 4.71 },
+      { id: 10, name: "Naruto", slug: "naruto", section: "manga", ratingCount: 30, average: 4.5 },
+      { id: 22, name: "Berserk", slug: "berserk", section: "manga", ratingCount: 3, average: 4.4 },
+    ];
+    server((url, n) => [200, { ...metrics(), topSeries: n === 1 ? both : [both[0], both[2]] }]);
+    const errors = vi.spyOn(console, "error");
+    const user = userEvent.setup();
+    renderApp(<MetricsTab />);
+    const top = await screen.findByRole("list", { name: "Top-rated series" });
+    const rows = () => within(top).getAllByRole("listitem").map((li) => li.textContent);
+    expect(rows()).toEqual(["NarutoAnime★ average 4.7 · 120 ratings", "NarutoManga★ average 4.5 · 30 ratings", "BerserkManga★ average 4.4 · 3 ratings"]);
+
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    expect(rows()).toEqual(["NarutoAnime★ average 4.7 · 120 ratings", "BerserkManga★ average 4.4 · 3 ratings"]);
+    expect(within(top).getAllByRole("link", { name: "Naruto" })).toHaveLength(1);
+    expect(errors.mock.calls.flat().join(" ")).not.toMatch(/same key/);
+  });
+
+  it("3. the tooltip is measured and clamped inside the chart, and a tap elsewhere closes it", async () => {
+    server(() => [200, metrics()]);
+    // jsdom has no layout: give the tooltip a width (the chart falls back to 640px).
+    const offsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetWidth");
+    Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
+      configurable: true,
+      get() {
+        return this.dataset?.align ? 300 : 0;
+      },
+    });
+    try {
+      const { container } = renderApp(<MetricsTab />, { path: "/?days=7" });
+      const chart = await screen.findByRole("img", { name: /last 7 days/ });
+      const tip = () => container.querySelector("[data-align]");
+      // Day 4 of 7 opens to the right: 24 (axis) + 4 × 87.1 + 8 = 381 wanted, but 640 − 300 = 340 is the limit.
+      fireEvent.focus(chart);
+      fireEvent.keyDown(chart, { key: "Home" });
+      for (let i = 0; i < 3; i++) fireEvent.keyDown(chart, { key: "ArrowRight" });
+      expect(tip()).toHaveAttribute("data-align", "after");
+      expect(tip().style.translate).toBe("340px 0");
+      // The first day: right beside its column (24 + 87.1 + 8), well inside.
+      fireEvent.keyDown(chart, { key: "Home" });
+      expect(tip().style.translate).toBe("119px 0");
+      fireEvent.blur(chart);
+      expect(tip()).toBeNull();
+
+      // Touch: a tap on the chart opens it, a tap anywhere else closes it.
+      fireEvent.pointerDown(chart, { clientX: 600, pointerType: "touch" });
+      expect(tip()).toHaveTextContent(longDay("en", "2026-11-04"));
+      fireEvent.pointerLeave(chart, { pointerType: "touch" });
+      expect(tip()).not.toBeNull();
+      fireEvent.pointerDown(document.body, { pointerType: "touch" });
+      expect(tip()).toBeNull();
+    } finally {
+      if (offsetWidth) Object.defineProperty(HTMLElement.prototype, "offsetWidth", offsetWidth);
+      else delete HTMLElement.prototype.offsetWidth;
+    }
+  });
+
+  it("4. a refresh dims only the chart marks and shows a small aria-hidden “Refreshing…”; the button keeps its name", async () => {
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    server(async (url, n) => {
+      if (n === 2) await gate;
+      return [200, metrics({ generatedAt: n === 1 ? "2026-11-04T14:32:00Z" : "2026-11-04T15:07:00Z" })];
+    });
+    const user = userEvent.setup();
+    const { container } = renderApp(<MetricsTab />);
+    await screen.findByText("Anime videos", { selector: "dt" });
+    expect(screen.queryByTestId("metrics-busy")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    const busy = screen.getByTestId("metrics-busy");
+    expect(busy).toHaveTextContent("Refreshing…");
+    expect(busy).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getByRole("button", { name: "Refresh" })).toHaveAttribute("aria-disabled", "true");
+    expect(container.querySelector("[data-stale]")).not.toBeNull();
+    await act(async () => release());
+    await waitFor(() => expect(screen.queryByTestId("metrics-busy")).toBeNull());
+    expect(screen.getByRole("status")).toHaveTextContent(/^Metrics updated at/);
+
+    // Only marks are dimmed while stale: no rule fades the text (WCAG 1.4.3 during a refresh).
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "Metrics.module.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const staleSelectors = [...css.matchAll(/([^{}]*\[data-stale\][^{}]*)\{/g)].flatMap((m) => m[1].split(",").map((x) => x.trim()));
+    expect(staleSelectors).toEqual([".body[data-stale] .bar", ".body[data-stale] .meter > span"]);
+  });
+
+  it("5. the clicked period is checked at once, and back/forward (the URL) still drives it", async () => {
+    const { calls } = server((url) => [200, metrics({ daily: DAILY.slice(-Number(daysOf(url))) })]);
+    const { router } = renderApp(<MetricsTab />, { path: "/admin?tab=metrics" });
+    await screen.findByRole("img", { name: /last 30 days/ });
+    const seven = screen.getByRole("radio", { name: "7 days" });
+    fireEvent.click(seven);
+    // Checked in the same tick as the click (no unchecked frame while the URL catches up).
+    expect(seven).toBeChecked();
+    expect(screen.getByRole("radio", { name: "30 days" })).not.toBeChecked();
+    await screen.findByRole("img", { name: /last 7 days/ });
+    expect(router.state.location.search).toBe("?tab=metrics&days=7");
+
+    await act(() => router.navigate("/admin?tab=metrics&days=90"));
+    expect(screen.getByRole("radio", { name: "90 days" })).toBeChecked();
+    await screen.findByRole("img", { name: /last 90 days/ });
+    expect(calls.map(daysOf)).toEqual(["30", "7", "90"]);
+  });
+
+  it("6. a day with ratings but no average (fewer than 3) reads “too few”, never a number or “no ratings”", async () => {
+    const daily = [
+      { day: "2026-11-02", count: 0, average: null },
+      { day: "2026-11-03", count: 2, average: null },
+      { day: "2026-11-04", count: 5, average: 4.2 },
+    ];
+    server(() => [200, { ...metrics({ daily }), ratings: { total: 2, average: null, daily } }]);
+    const { container } = renderApp(<MetricsTab />, { path: "/?days=7" });
+    const chart = await screen.findByRole("img", { name: /last 7 days/ });
+    expect(tile("Ratings")).toHaveTextContent("too few for an average");
+
+    const rows = within(screen.getByRole("table")).getAllByRole("row").slice(1);
+    const cells = (row) => within(row).getAllByRole("cell").map((c) => c.textContent);
+    expect(cells(rows[4])).toEqual(["0", "—no average"]);
+    expect(cells(rows[5])).toEqual(["2", "too few"]);
+    expect(cells(rows[6])).toEqual(["5", "4.2"]);
+
+    fireEvent.focus(chart);
+    fireEvent.keyDown(chart, { key: "ArrowLeft" });
+    expect(container.querySelector("[data-align]")).toHaveTextContent(`2 ratings${longDay("en", "2026-11-03")}average: too few ratings (fewer than 3)`);
+    fireEvent.keyDown(chart, { key: "ArrowLeft" });
+    expect(container.querySelector("[data-align]")).toHaveTextContent(`No ratings${longDay("en", "2026-11-02")}`);
+    expect(container.querySelector("[data-align]")).not.toHaveTextContent("average");
+  });
+
+  it("6. pt-BR wording", async () => {
+    const daily = [{ day: "2026-11-04", count: 2, average: null }];
+    server(() => [200, { ...metrics({ daily }), ratings: { total: 2, average: null, daily } }]);
+    renderApp(<MetricsTab />, { locale: "pt-BR", path: "/?days=7" });
+    await screen.findByRole("img", { name: /últimos 7 dias/ });
+    expect(tile("Avaliações")).toHaveTextContent("poucos dados para a média");
+    const last = within(screen.getByRole("table")).getAllByRole("row").at(-1);
+    expect(within(last).getAllByRole("cell").map((c) => c.textContent)).toEqual(["2", "poucos dados"]);
   });
 });
