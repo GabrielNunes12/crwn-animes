@@ -49,7 +49,9 @@ test.describe("server-rendered SEO head", () => {
     const headline = "Saga do SEO — Episódio 1";
     const description = `Assista ao episódio 1 de Saga do SEO no Crwn Animes. ${SEO.synopsis}`;
     const canonical = `${baseURL}${EPISODE}`;
-    const thumbnail = `https://i.ytimg.com/vi/${SEO_YT}/hqdefault.jpg`;
+    // v1.5: the same-origin thumbnail, made absolute with APP_URL (link previews need an absolute
+    // URL). Never i.ytimg.com: even crawlers are pointed at our own copy.
+    const thumbnail = `${baseURL}/api/thumbs/${SEO_YT}.jpg`;
 
     await expect(page).toHaveTitle(`${headline} · Crwn Animes`);
     await expect(page.locator("title")).toHaveCount(1); // the static <title> was replaced, not duplicated
@@ -90,6 +92,11 @@ test.describe("server-rendered SEO head", () => {
       isPartOf: { "@type": "TVSeries", name: SEO.name, url: `${baseURL}/anime/saga-do-seo` },
     });
     expect(new URL(ld.embedUrl).hostname).toBe("www.youtube-nocookie.com");
+    expect(await page.content(), "no i.ytimg.com link anywhere in the head").not.toContain("ytimg.com");
+    // The absolute thumbnail URL really serves the image (asked from the API origin, which serves APP_URL's /api).
+    const image = await page.request.get(`${API_ORIGIN}${new URL(thumbnail).pathname}`);
+    expect(image.status()).toBe(200);
+    expect(image.headers()["content-type"]).toBe("image/jpeg");
   });
 
   test("series page: TVSeries JSON-LD with genre; manga route of the same series is a 404 (nothing published there)", async ({ page, baseURL, request }) => {

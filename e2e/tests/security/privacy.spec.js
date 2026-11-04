@@ -17,14 +17,18 @@ test.beforeAll(async () => {
   });
 });
 
-/** Thumbnails from i.ytimg.com are the documented exception (docs/API.md: thumbnailUrl). */
-const allowedBeforePlay = (url) => new URL(url).hostname === "i.ytimg.com";
+// v1.5: thumbnails are same-origin (/api/thumbs/<id>.jpg, fetched by the server), so there is
+// no exception any more: not even i.ytimg.com may be contacted before Play.
+const LOCAL = ["localhost", "127.0.0.1", "[::1]"];
 
+/** Third-party requests of a page, and the same-origin thumbnail requests (to prove thumbnails were shown). */
 function trackThirdParty(page) {
   const seen = [];
+  seen.thumbs = [];
   page.on("request", (req) => {
-    const host = new URL(req.url()).hostname;
-    if (!["localhost", "127.0.0.1", "[::1]"].includes(host) && !req.url().startsWith("data:")) seen.push({ url: req.url(), type: req.resourceType(), page: page.url() });
+    const url = new URL(req.url());
+    if (LOCAL.includes(url.hostname) && url.pathname.startsWith("/api/thumbs/")) seen.thumbs.push(req.url());
+    if (!LOCAL.includes(url.hostname) && !req.url().startsWith("data:")) seen.push({ url: req.url(), type: req.resourceType(), page: page.url() });
   });
   return seen;
 }
@@ -32,7 +36,7 @@ function trackThirdParty(page) {
 const PAGES = (v) => ["/", "/anime", "/manga", `/anime/${SERIES.slug}`, `/manga/${SERIES.slug}`, v[0].route, v[1].route, "/search?q=sec", "/search", `/genre/${encodeURIComponent("Privacidade")}`, "/privacy", "/login", "/register", "/forgot-password", "/account", "/nao-existe"];
 
 test.describe("privacy", () => {
-  test("no third-party request (other than i.ytimg.com thumbnails) on any page before Play — anonymous and logged in", async ({ page, externalRequests }) => {
+  test("no third-party request at all (not even i.ytimg.com: thumbnails are same-origin) on any page before Play — anonymous and logged in", async ({ page, externalRequests }) => {
     test.setTimeout(90_000);
     const seen = trackThirdParty(page);
     const visit = async () => {
@@ -50,12 +54,13 @@ test.describe("privacy", () => {
     await page.keyboard.type("sec");
     await page.waitForLoadState("networkidle");
 
-    const offending = seen.filter((r) => !allowedBeforePlay(r.url));
-    expect(offending, "third-party requests before Play").toEqual([]);
-    expect(externalRequests.filter((u) => !allowedBeforePlay(u))).toEqual([]);
-    expect(seen.filter((r) => /fonts\.(googleapis|gstatic)\.com|google-analytics|googletagmanager|doubleclick|facebook|hotjar|sentry/.test(r.url))).toEqual([]);
-    // Thumbnails are images only: no script/frame/xhr ever goes to YouTube before Play.
-    expect(seen.filter((r) => YOUTUBE_HOST.test(new URL(r.url).hostname) && r.type !== "image")).toEqual([]);
+    expect(seen, "third-party requests before Play").toEqual([]);
+    expect(externalRequests, "requests cut off by the network guard").toEqual([]);
+    // Not vacuous: the pages did show video thumbnails, from this origin.
+    expect(seen.thumbs.length, "same-origin /api/thumbs/ requests").toBeGreaterThan(0);
+    for (const url of seen.thumbs) expect(url).toMatch(/^http:\/\/localhost:\d+\/api\/thumbs\/[A-Za-z0-9_-]{11}\.jpg$/);
+    // And none of them pointed the browser at YouTube (image, script, frame or fetch).
+    expect(seen.filter((r) => YOUTUBE_HOST.test(new URL(r.url).hostname))).toEqual([]);
   });
 
   test("only the `sid` cookie is ever set (anonymous browsing, login, preferences, logout)", async ({ page, context }) => {
@@ -103,6 +108,8 @@ test.describe("privacy", () => {
       expect(text, `web storage contains ${secret}`).not.toContain(secret);
     }
     expect(dump.dbs, "no IndexedDB").toEqual([]);
+    // Service workers are blocked here (playwright.config.js), so nothing else writes Cache Storage;
+    // what the worker caches when it runs is checked in tests/pwa.spec.js.
     expect(dump.caches, "no Cache Storage").toEqual([]);
     for (const key of Object.keys(dump.local)) expect(key, "only the app's own namespaced keys").toMatch(/^crwn[:-]/);
   });
