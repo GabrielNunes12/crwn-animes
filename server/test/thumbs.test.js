@@ -729,7 +729,6 @@ describe("THUMB_UPSTREAM: a fake i.ytimg.com for end-to-end tests, never in prod
       assert.ok(elapsed >= THUMB_TIMEOUT_MS - 100 && elapsed < THUMB_TIMEOUT_MS + 2000, `timed out after ${elapsed} ms`);
 
       assert.deepEqual(cacheFiles(srv.thumbDir), [`${vid(1)}.jpg`], "only the good answer was cached");
-      assert.equal(fake.paths.includes(`/vi/${vid(1)}/hqdefault.jpg`), true);
       assert.equal(fake.paths.filter((p) => p === `/vi/${vid(1)}/hqdefault.jpg`).length, 1, "the redirect was not followed");
       assert.equal((await get(srv, thumb(vid(99)))).status, 404);
       assert.equal(fake.paths.some((p) => p.includes(vid(99))), false, "unknown IDs never reach the fake either");

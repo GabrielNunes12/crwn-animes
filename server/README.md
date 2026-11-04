@@ -125,7 +125,10 @@ the JSON-LD `thumbnailUrl`), so a visitor's browser never contacts Google before
 5. Headers: `Cache-Control: public, max-age=604800, immutable`, `Content-Type: image/jpeg`,
    `X-Content-Type-Options: nosniff`, `Cross-Origin-Resource-Policy: same-origin`. The route sits before the
    session loader (no cookie lookup, never a `Set-Cookie`). Errors are `private, no-store` JSON.
-6. Removal: delete-forever (a video, or a series with all its videos) and the 7-day trash purge delete the
+6. Tests only: `THUMB_UPSTREAM` (a base URL) replaces `https://i.ytimg.com` outside production, e.g. a local
+   fake for end-to-end runs; same checks. With `NODE_ENV=production` the server refuses to start while it
+   is set (`assertSafeConfig`), and `createApp` ignores it there anyway (`thumbnailUpstream()` in `src/config.js`).
+7. Removal: delete-forever (a video, or a series with all its videos) and the 7-day trash purge delete the
    files of those videos; the hourly retention run then also deletes cached files no video uses any more
    (an upload an admin swapped out, a crash between purge and delete). A video in the trash keeps its file
    (restoring it brings it back) but is 404 while trashed.
