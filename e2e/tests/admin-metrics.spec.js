@@ -7,7 +7,10 @@
 //     other value falls back to 30); KPI tiles; a column chart (svg role="img" whose aria-label
 //     summarises the period) backed by a visually hidden table that "Ver tabela" shows; "Fila de
 //     pendentes" with Portuguese labels from the reason keys; "Séries mais bem avaliadas" linking to
-//     the series board; "Atualizado às HH:MM" + "Atualizar", announced once in a polite live region.
+//     the series board; "Atualizado às HH:MM" + "Atualizar" (its name never changes; a visual-only
+//     "Atualizando…" shows while busy), the new numbers announced once in a polite live region.
+//   - A day's average is left out (null) below 3 ratings, so no single score can be singled out:
+//     the table says "poucos dados" for such a day (docs/API.md v1.6).
 //
 // Other specs write to the same server in parallel, so the absolute numbers move while a test
 // runs. The UI is checked against the exact response it rendered (page.waitForResponse), and the
@@ -113,7 +116,9 @@ function ui(page) {
     tableRegion: (days) => panel.getByRole("region", { name: `Avaliações por dia, últimos ${days} dias` }),
     showTable: panel.getByRole("button", { name: "Ver tabela" }),
     updated: panel.locator("time").filter({ hasText: /^Atualizado às / }),
-    refresh: panel.getByRole("button", { name: /^(Atualizar|Atualizando…)$/ }),
+    refresh: panel.getByRole("button", { name: "Atualizar", exact: true }),
+    busy: panel.getByTestId("metrics-busy"),
+    tooltip: panel.getByRole("region", { name: "Avaliações por dia", exact: true }).locator('div[aria-hidden="true"]'),
     live: panel.locator('p.visually-hidden[role="status"]'),
     pending: panel.getByRole("region", { name: "Fila de pendentes" }),
     top: panel.getByRole("region", { name: "Séries mais bem avaliadas" }),
@@ -171,13 +176,14 @@ function expectedTexts(page, data, days) {
           ["Pendentes", num(c.pending), q.oldestAt ? "prefix:o mais antigo " : "Fila vazia"],
           ["Indisponíveis", num(c.unavailable), "Veja a aba Quebrados"],
           ["Vídeos na lixeira", num(c.trashed.videos), plural(c.trashed.series, "e # série", "e # séries")],
-          ["Avaliações", num(r.total), r.average != null ? `média ${avg(r.average)} de 5` : "Sem avaliações ainda"],
+          ["Avaliações", num(r.total), r.average != null ? `média ${avg(r.average)} de 5` : r.total > 0 ? "poucos dados para a média" : "Sem avaliações ainda"],
           ["Miniaturas em cache", num(th.cachedFiles), `suffix: · ${plural(th.failuresRemembered, "# falha lembrada", "# falhas lembradas")}`],
         ],
         summary: total > 0 ? `${lead}: ${facts.filter(Boolean).join("; ")}.` : `${lead}: nenhuma avaliação.`,
         updated: `Atualizado às ${time(data.generatedAt)}`,
         live: `Métricas atualizadas às ${time(data.generatedAt)} — últimos ${num(days)} dias.`,
-        rows: r.daily.map((d) => ({ day: longDay(d.day), count: num(d.count), average: d.average != null ? avg(d.average) : "—sem média" })),
+        // A day's average: shown from 3 ratings on; "poucos dados" below (the server sends null); "—" with no rating.
+        rows: r.daily.map((d) => ({ day: longDay(d.day), count: num(d.count), average: d.average != null ? avg(d.average) : d.count > 0 ? "poucos dados" : "—sem média" })),
         queue: { count: num(q.count), reasons: q.byReason.map((x) => plural(x.count, "# vídeo", "# vídeos")) },
         top: data.topSeries.map((s) => ({ avg: s.average != null ? `média ${avg(s.average)}` : null, count: plural(s.ratingCount, "# avaliação", "# avaliações") })),
         today: { day: longDay(r.daily.at(-1).day), count: num(r.daily.at(-1).count) },
@@ -265,14 +271,15 @@ test.describe("admin metrics (Métricas)", () => {
       expect(byReason.find((r) => r.key === "no-number"), "the seeded pending video's reason").toMatchObject({ reason: "no episode or chapter number", count: expect.any(Number) });
     });
 
-    await test.step("ratings.daily: 30 consecutive UTC days ending today, zero days included; today counts the seeded ratings", async () => {
+    await test.step("ratings.daily: 30 consecutive UTC days ending today, zero days included, no average below 3 ratings; today counts the seeded ratings", async () => {
       const { daily } = data.ratings;
       expect(daily).toHaveLength(30);
       const today = data.generatedAt.slice(0, 10);
       const expectedDays = Array.from({ length: 30 }, (_, i) => new Date(Date.parse(`${today}T00:00:00Z`) - (29 - i) * 86_400_000).toISOString().slice(0, 10));
       expect(daily.map((d) => d.day)).toEqual(expectedDays);
       for (const d of daily) {
-        expect(d).toEqual({ day: d.day, count: expect.any(Number), average: d.count > 0 ? expect.any(Number) : null });
+        // No average below 3 ratings (one or two scores of a day could be told apart).
+        expect(d).toEqual({ day: d.day, count: expect.any(Number), average: d.count >= 3 ? expect.any(Number) : null });
       }
       expect(daily.at(-1).count, "today ≥ the ratings this test added").toBeGreaterThanOrEqual(seed.ratings);
       expect(data.ratings.total).toBeGreaterThanOrEqual(seed.ratings);
@@ -353,7 +360,7 @@ test.describe("admin metrics (Métricas)", () => {
     });
 
     await test.step("keyboard tooltip: focusing the chart shows today, ← the day before (aria-hidden, repeats the table)", async () => {
-      const tooltip = u.chartRegion.locator('div[aria-hidden="true"]');
+      const tooltip = u.tooltip;
       await u.chart.focus();
       await expect(tooltip).toContainText(exp.rows.at(-1).day);
       await expect(tooltip).toContainText(`${exp.today.count} avaliaç`);
@@ -493,7 +500,7 @@ test.describe("admin metrics (Métricas)", () => {
     });
   });
 
-  test("“Atualizar”: refetches, keeps focus, “Atualizando…” + aria-busy while waiting, ignores clicks meanwhile, announces the new time once per refresh (polite)", async ({
+  test("“Atualizar”: refetches, keeps its name and focus, a visual-only “Atualizando…” + aria-busy while waiting, ignores clicks meanwhile, announces the new time once per refresh (polite)", async ({
     page,
     admin,
     baseURL,
@@ -520,10 +527,15 @@ test.describe("admin metrics (Métricas)", () => {
       await route.continue();
     });
 
-    await test.step("while the request is held: “Atualizando…”, aria-disabled, focus kept, old numbers dimmed (aria-busy), no skeleton", async () => {
+    await expect(u.busy).toHaveCount(0);
+
+    await test.step("while the request is held: “Atualizando…” (aria-hidden), the button aria-disabled with the same name and focus, old numbers kept (aria-busy), no skeleton", async () => {
       const response = nextMetrics(page, 30);
       await u.refresh.click();
-      await expect(u.refresh).toHaveAccessibleName("Atualizando…");
+      await expect(u.busy).toBeVisible();
+      await expect(u.busy).toHaveText("Atualizando…");
+      await expect(u.busy, "visual only: the live region speaks when the numbers arrive").toHaveAttribute("aria-hidden", "true");
+      await expect(u.refresh).toHaveAccessibleName("Atualizar");
       await expect(u.refresh).toHaveAttribute("aria-disabled", "true");
       await expect(u.refresh).toBeFocused();
       await expect(u.panel.locator('[aria-busy="true"]')).toHaveCount(1);
@@ -542,7 +554,7 @@ test.describe("admin metrics (Métricas)", () => {
       const exp = await expectedTexts(page, fresh, 30);
       await expect(u.live).toHaveText(exp.live);
       await expect(u.updated).toHaveText(exp.updated);
-      await expect(u.refresh).toHaveAccessibleName("Atualizar");
+      await expect(u.busy).toHaveCount(0);
       await expect(u.refresh).not.toHaveAttribute("aria-disabled", /.*/);
       await expect(u.refresh).toBeFocused();
       await expect(u.panel.locator("[aria-busy]")).toHaveCount(0);
@@ -566,6 +578,53 @@ test.describe("admin metrics (Métricas)", () => {
     });
   });
 
+  // The shared e2e server has ratings today and none before, so these two states only come from a
+  // doctored copy of the real response (route.fetch + fulfill): the rendering is what is tested here;
+  // the server's side of the 3-rating rule is tested on a private instance (security/authz.spec.js).
+  test("edge cases (doctored response): a day with 1–2 ratings shows its count and “poucos dados”, never an average; a quiet period says so", async ({ page }) => {
+    const u = ui(page);
+    let doctor = (body) => body;
+    await page.route((url) => isMetrics(url.href), async (route) => {
+      const res = await route.fetch();
+      await route.fulfill({ response: res, json: doctor(await res.json()) });
+    });
+
+    await test.step("yesterday with 2 ratings and a null average (as the server sends it below 3)", async () => {
+      doctor = (body) => {
+        Object.assign(body.ratings.daily.at(-2), { count: 2, average: null });
+        return body;
+      };
+      const data = await openMetrics(page);
+      const exp = await expectedTexts(page, data, 30);
+      expect(exp.rows.at(-2)).toMatchObject({ count: "2", average: "poucos dados" });
+      await expectTable(page, exp, 30);
+      await expect(u.chart).toHaveAttribute("aria-label", exp.summary);
+      await u.chart.focus();
+      await page.keyboard.press("ArrowLeft");
+      await expect(u.tooltip).toContainText(exp.rows.at(-2).day);
+      await expect(u.tooltip).toContainText("2 avaliações");
+      await expect(u.tooltip).toContainText("média: poucos dados (menos de 3 avaliações)");
+      await expect(u.tooltip).not.toContainText(/média \d/);
+    });
+
+    await test.step("a period without any rating: “nenhuma avaliação”, the empty note, “Sem avaliações ainda”, every average “—”", async () => {
+      doctor = (body) => {
+        for (const d of body.ratings.daily) Object.assign(d, { count: 0, average: null });
+        Object.assign(body.ratings, { total: 0, average: null });
+        return body;
+      };
+      const data = await openMetrics(page, "/admin?tab=metrics&days=7", 7);
+      const exp = await expectedTexts(page, data, 7);
+      expect(exp.summary).toBe("Avaliações por dia nos últimos 7 dias: nenhuma avaliação.");
+      await expect(u.chart).toHaveAttribute("aria-label", exp.summary);
+      await expect(u.chartRegion).toContainText("Nenhuma avaliação neste período.");
+      await expect(u.chart.locator("path")).toHaveCount(0); // no column drawn
+      await expectTiles(page, exp);
+      await expectTable(page, exp, 7);
+      expect(new Set(exp.rows.map((r) => r.average))).toEqual(new Set(["—sem média"]));
+    });
+  });
+
   test("axe: no serious/critical violations in light and dark (table hidden and shown, chart focused)", async ({ page, admin, baseURL }) => {
     await seedMetrics(admin, baseURL);
     const u = ui(page);
@@ -584,7 +643,7 @@ test.describe("admin metrics (Métricas)", () => {
         await u.showTable.click();
         await expect(u.tableRegion(days)).toBeVisible();
         await u.chart.focus();
-        await expect(u.chartRegion.locator('div[aria-hidden="true"]')).toBeVisible();
+        await expect(u.tooltip).toBeVisible();
         await expectNoSeriousViolations(page, `Métricas (${scheme}, table shown, chart focused)`);
       });
     }
@@ -594,7 +653,7 @@ test.describe("admin metrics (Métricas)", () => {
   test.describe("phone 360×740", () => {
     test.use({ viewport: { width: 360, height: 740 }, isMobile: true, hasTouch: true });
 
-    test("no horizontal scroll (tiles, chart, pending reasons, top series, table shown); the chart fits the screen", async ({ page, admin, baseURL }) => {
+    test("no horizontal scroll (tiles, chart, tooltip, pending reasons, top series, table shown); the chart and its tooltip fit the screen", async ({ page, admin, baseURL }) => {
       await seedMetrics(admin, baseURL);
       const u = ui(page);
       await openMetrics(page, "/admin?tab=metrics&days=90", 90);
@@ -604,6 +663,28 @@ test.describe("admin metrics (Métricas)", () => {
       const box = await u.chart.boundingBox();
       expect(box.x, "the chart starts on screen").toBeGreaterThanOrEqual(0);
       expect(box.x + box.width, "the chart ends on screen").toBeLessThanOrEqual(360);
+
+      await test.step("the tooltip stays inside the screen (first and last day, by keyboard and by tap); a tap elsewhere closes it", async () => {
+        const insideScreen = async (where) => {
+          await expect(u.tooltip).toBeVisible();
+          const tip = await u.tooltip.boundingBox();
+          expect(tip.x, `${where}: tooltip left edge`).toBeGreaterThanOrEqual(0);
+          expect(tip.x + tip.width, `${where}: tooltip right edge`).toBeLessThanOrEqual(360);
+          await noHorizontalScroll(page, where);
+        };
+        await u.chart.focus();
+        for (const key of ["End", "Home"]) {
+          await page.keyboard.press(key);
+          await insideScreen(`tooltip (${key})`);
+        }
+        const chartBox = await u.chart.boundingBox();
+        for (const x of [chartBox.width - 4, 40]) {
+          await u.chart.tap({ position: { x, y: chartBox.height / 2 } });
+          await insideScreen(`tooltip (tap at x=${Math.round(x)})`);
+        }
+        await u.heading.tap();
+        await expect(u.tooltip).toHaveCount(0);
+      });
 
       await u.showTable.click();
       await expect(u.tableRegion(90)).toBeVisible();

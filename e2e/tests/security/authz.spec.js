@@ -1,7 +1,7 @@
 // Security: authorisation / IDOR. Anonymous visitors and normal users attack
 // every /api/admin/* route, other users' ratings and other users' data.
 import { expect, seedSeries, createUser, uniqueEmail, loginViaApi, fakeYouTubeId } from "../fixtures.js";
-import { apiClient, newUserClient, test, withAdmin } from "./helpers.js";
+import { apiClient, newUserClient, startPrivateApi, test, withAdmin } from "./helpers.js";
 
 const SERIES = { name: "Sec Authz Saga", slug: "sec-authz-saga", aliases: [], genres: ["Segurança"] };
 let seed; // { series, videos }
@@ -375,5 +375,52 @@ test.describe("admin metrics (v1.6): anonymous aggregates only", () => {
       }
     }
     await Promise.all(raters.map((r) => r.ctx.dispose()));
+  });
+
+  // On the shared server today always has many ratings, so the rule is checked on a private
+  // instance where this test makes every rating of the day itself.
+  test("a day's average stays hidden until it has 3 ratings (one or two scores could be told apart); the count is always shown", async () => {
+    const boss = "boss@metrics-private.test";
+    const api = await startPrivateApi({ ADMIN_EMAILS: boss, RATE_LIMIT_MAX: "100000" });
+    const clients = [];
+    const client = async () => {
+      const ctx = await apiClient({ baseURL: api.origin });
+      clients.push(ctx);
+      return ctx;
+    };
+    try {
+      const admin = await client();
+      await createUser(admin, { email: boss, displayName: "Chefe" });
+      const { videos } = await seedSeries(admin, { name: "Media Privada", slug: "media-privada", aliases: [], genres: [] }, [
+        { youtubeId: fakeYouTubeId("pvt"), title: "Media Privada episódio 1", section: "anime", number: 1 },
+      ]);
+      const today = async () => {
+        const res = await admin.get("/api/admin/metrics?days=7");
+        expect(res.status()).toBe(200);
+        const body = await res.json();
+        return { day: body.ratings.daily.at(-1), body };
+      };
+      expect((await today()).day).toMatchObject({ count: 0, average: null });
+
+      const scores = [4, 1, 5]; // averages 4, 2.5, 3.3 — the first two would give the scores away
+      for (const [i, score] of scores.entries()) {
+        const fan = await client();
+        await createUser(fan, { email: uniqueEmail(`pvt${i}`), displayName: `Fã ${i + 1}` });
+        expect((await fan.put(`/api/videos/${videos[0].id}/rating`, { data: { score } })).status()).toBe(200);
+        const { day, body } = await today();
+        const n = i + 1;
+        if (n < 3) {
+          expect(day, `${n} rating(s): count only`).toEqual({ day: day.day, count: n, average: null });
+        } else {
+          const avg = Math.round((scores.reduce((a, b) => a + b, 0) / 3) * 10) / 10;
+          expect(day, "3 ratings: the average appears").toEqual({ day: day.day, count: 3, average: avg });
+        }
+        expect(body.ratings.total).toBe(n);
+        expect(body.ratings.daily.slice(0, -1).every((d) => d.count === 0 && d.average === null)).toBe(true);
+      }
+    } finally {
+      await Promise.all(clients.map((c) => c.dispose()));
+      await api.stop();
+    }
   });
 });
