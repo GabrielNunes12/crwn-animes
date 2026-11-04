@@ -1,5 +1,6 @@
 // Shared test helpers: an in-memory app on a random port, a fetch client with
 // a cookie jar, and shortcuts to create users and videos.
+import assert from "node:assert/strict";
 import { createApp } from "../src/app.js";
 import { openDatabase } from "../src/db.js";
 import { HttpError } from "../src/errors.js";
@@ -137,4 +138,70 @@ export async function signUp(srv, { email, displayName = "Tester", password = PA
 /** Adds a video straight through the service (title given, no lookup). */
 export function addVideo(srv, n, title, overrides = {}) {
   return srv.services.videos.add({ url: vid(n), title, overrides });
+}
+
+/** A verified account with a live session, without scrypt (fast). */
+export function quickUser(srv, email, role = "user") {
+  const { users, rotateSession } = srv.services.auth;
+  const at = new Date().toISOString();
+  const id = users.createUser({ email, displayName: "Quick", passwordHash: "x", now: at });
+  users.markVerified(id, at);
+  if (role !== "user") users.setRole(id, role);
+  const client = srv.client();
+  client.cookie = `sid=${rotateSession(id, null)}`;
+  return { id, client };
+}
+
+/**
+ * Every derived table equals a fresh aggregation in which trashed rows count as
+ * "not there": series_stats (live published videos of live series, their
+ * ratings), rating_totals (ratings of live videos). video_rating_stats and
+ * rating_activity are per video and keep a trashed video's ratings until purge.
+ */
+export function assertFresh(db, step) {
+  assert.deepEqual(
+    db.prepare("SELECT * FROM series_stats ORDER BY series_id, section").all(),
+    db
+      .prepare(`
+        SELECT v.series_id, v.section, COUNT(*) AS video_count, MAX(v.published_at) AS latest_published_at,
+          (SELECT COUNT(*) FROM ratings r JOIN videos v2 ON v2.id = r.video_id
+            WHERE v2.series_id = v.series_id AND v2.section = v.section AND v2.status = 'published'
+              AND v2.deleted_at IS NULL) AS rating_n,
+          (SELECT COALESCE(SUM(r.score), 0) FROM ratings r JOIN videos v2 ON v2.id = r.video_id
+            WHERE v2.series_id = v.series_id AND v2.section = v.section AND v2.status = 'published'
+              AND v2.deleted_at IS NULL) AS rating_sum
+        FROM videos v JOIN series s ON s.id = v.series_id
+        WHERE v.status = 'published' AND v.deleted_at IS NULL AND s.deleted_at IS NULL AND v.section IS NOT NULL
+        GROUP BY v.series_id, v.section ORDER BY v.series_id, v.section`)
+      .all(),
+    `${step}: series_stats`
+  );
+  assert.deepEqual(
+    db.prepare("SELECT n, total FROM rating_totals").get(),
+    db
+      .prepare(`
+        SELECT COUNT(*) AS n, COALESCE(SUM(r.score), 0) AS total
+        FROM ratings r JOIN videos v ON v.id = r.video_id WHERE v.deleted_at IS NULL`)
+      .get(),
+    `${step}: rating_totals (live videos only)`
+  );
+  assert.deepEqual(
+    db.prepare("SELECT video_id, n, total FROM video_rating_stats ORDER BY video_id").all(),
+    db.prepare("SELECT video_id, COUNT(*) AS n, SUM(score) AS total FROM ratings GROUP BY video_id ORDER BY video_id").all(),
+    `${step}: video_rating_stats`
+  );
+  assert.deepEqual(
+    db.prepare("SELECT video_id, day, count, score_sum FROM rating_activity WHERE count > 0 ORDER BY video_id, day").all(),
+    db
+      .prepare(`
+        SELECT video_id, substr(updated_at, 1, 10) AS day, COUNT(*) AS count, SUM(score) AS score_sum
+        FROM ratings GROUP BY video_id, day ORDER BY video_id, day`)
+      .all(),
+    `${step}: rating_activity`
+  );
+  assert.equal(
+    db.prepare("SELECT COUNT(*) AS n FROM videos v JOIN series s ON s.id = v.series_id WHERE v.deleted_at IS NULL AND s.deleted_at IS NOT NULL").get().n,
+    0,
+    `${step}: no live video in a trashed series`
+  );
 }

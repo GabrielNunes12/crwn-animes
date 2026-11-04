@@ -165,6 +165,20 @@ export function adminRoutes({ repo, videos, trash }) {
     res.json({ series, published: videos.reclassifyPending({ before: current, after: series }) });
   });
 
+  // Board data (v1.4): per section, the live published videos (available or
+  // not) by season, number — per season exactly the set PUT .../order expects.
+  router.get("/series/:id", (req, res) => {
+    const series = seriesOr404(req);
+    const sections = {};
+    for (const section of SECTIONS) {
+      sections[section] = {
+        seasons: repo.publishedSeasons(series.id, section),
+        videos: repo.listPublishedInSeries(series.id, section),
+      };
+    }
+    res.json({ series: { ...series, videoCounts: repo.seriesVideoCounts(series.id) }, sections });
+  });
+
   // Moves the series and its videos to the trash (v1.4).
   router.delete("/series/:id", (req, res) => {
     trash.trashSeries(seriesOr404(req).id);

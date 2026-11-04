@@ -155,6 +155,7 @@ export function createRepository(db) {
       ORDER BY s.name COLLATE NOCASE, s.id LIMIT @limit OFFSET @offset`),
     adminSeriesCount: db.prepare(`SELECT COUNT(*) AS n FROM series s WHERE s.deleted_at IS NULL AND ${NEEDLE_MATCH}`),
     seriesBySlug: db.prepare("SELECT * FROM series WHERE slug = ? AND deleted_at IS NULL"),
+    seriesVideoCounts: db.prepare("SELECT section, video_count FROM series_stats WHERE series_id = ?"),
     seriesById: db.prepare("SELECT * FROM series WHERE id = ? AND deleted_at IS NULL"),
     // Including the trash: a trashed series keeps its slug reserved.
     anySeriesBySlug: db.prepare("SELECT * FROM series WHERE slug = ?"),
@@ -424,6 +425,12 @@ export function createRepository(db) {
     getSeriesById: (id) => {
       const row = q.seriesById.get(id);
       return row ? toSeries(row) : null;
+    },
+    /** { anime, manga }: live published videos per section (series_stats), as in the admin series list. */
+    seriesVideoCounts: (id) => {
+      const counts = { anime: 0, manga: 0 };
+      for (const row of q.seriesVideoCounts.all(id)) counts[row.section] = row.video_count;
+      return counts;
     },
     /** Live or trashed (then with deletedAt/purgeAt); null once purged. */
     getAnySeriesById: (id) => one(q.anySeriesById.get(id), toSeries),

@@ -140,7 +140,7 @@ export function SeriesTab({ genres, reloadSeries, reloadKey }) {
                 <SeriesCounts counts={s.videoCounts} />
               </div>
               <div className="cluster">
-                <Link className="btn btn-sm btn-primary" to={`/admin/series/${s.id}`} state={{ series: s }}>
+                <Link className="btn btn-sm btn-primary" to={`/admin/series/${s.id}`}>
                   {t("admin.series.openBoard")}
                 </Link>
                 <button type="button" className="btn btn-sm" onClick={() => startEdit(s)}>

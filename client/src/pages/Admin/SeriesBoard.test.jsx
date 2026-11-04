@@ -14,18 +14,27 @@ const ep = (id, number, season = 1) => ({
   route: season > 1 ? `/anime/op/season/${season}/episode/${number}` : `/anime/op/episode/${number}`, rating: { average: null, count: 0 },
 });
 
-/** In-memory server: one series, season 1 has episodes 1..6 (ids 1..6), season 2 has ids 7..8. */
-function server({ counts = SERIES.videoCounts } = {}) {
-  const db = { videos: [...[1, 2, 3, 4, 5, 6].map((n) => ep(n, n)), ep(7, 1, 2), ep(8, 2, 2)], puts: [] };
+/** In-memory admin API: one series; season 1 has episodes 1..6 (ids 1..6), season 2 has ids 7..8. */
+function server({ empty = false } = {}) {
+  const db = { videos: empty ? [] : [...[1, 2, 3, 4, 5, 6].map((n) => ep(n, n)), ep(7, 1, 2), ep(8, 2, 2)], puts: [], failNextPut: false };
   const fetchFn = mockFetch((url, init) => {
-    if (url.startsWith("/api/admin/series?")) return [200, { items: [{ ...SERIES, videoCounts: counts }], total: 1 }];
-    if (url === "/api/anime/series/op") {
+    if (url === "/api/admin/series/1" && (init.method ?? "GET") === "GET") {
       const seasons = [...new Set(db.videos.map((v) => v.season))].sort();
-      return [200, { series: SERIES, videos: db.videos, seasons }];
+      return [
+        200,
+        {
+          series: { ...SERIES, videoCounts: { anime: db.videos.length, manga: 0 } },
+          sections: { anime: { seasons, videos: db.videos }, manga: { seasons: [], videos: [] } },
+        },
+      ];
     }
     if (url === "/api/admin/series/1/order" && init.method === "PUT") {
       const body = JSON.parse(init.body);
       db.puts.push(body);
+      if (db.failNextPut) {
+        db.failNextPut = false;
+        return [400, { error: { code: "VALIDATION_ERROR", message: "videoIds must be exactly the published videos", details: {} } }];
+      }
       const updated = body.videoIds.map((id, i) => {
         const v = db.videos.find((x) => x.id === id);
         return { ...v, number: i + 1, route: `/anime/op/episode/${i + 1}` };
@@ -74,11 +83,25 @@ describe("admin series board — layout", () => {
   });
 
   it("disables both sections with a hint when the series has no published videos", async () => {
-    server({ counts: { anime: 0, manga: 0 } });
+    server({ empty: true });
     renderApp(null, { routes, path: "/admin/series/1" });
     expect(await screen.findByText(/This series has no published episodes or chapters yet/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Anime" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Manga" })).toBeDisabled();
+    expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
+  });
+
+  it("loads everything from GET /api/admin/series/:id (no public catalog request)", async () => {
+    const { fetchFn } = server();
+    await openBoard();
+    expect(fetchFn.mock.calls.map(([u]) => u)).toEqual(["/api/admin/series/1"]);
+  });
+
+  it("shows a 'not found or in the trash' state with a link back to the Series tab", async () => {
+    mockFetch(() => [404, { error: { code: "NOT_FOUND" } }]);
+    renderApp(null, { routes, path: "/admin/series/42", locale: "pt-BR" });
+    expect(await screen.findByRole("heading", { level: 1, name: "Série não encontrada ou na lixeira" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Voltar para Séries" })).toHaveAttribute("href", "/admin?tab=series");
     expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
   });
 
@@ -154,6 +177,28 @@ describe("admin series board — keyboard reordering", () => {
     expect(shownIds()).toEqual([2, 1, 3, 4, 6, 5]);
     expect(rowOf("Episode 1")).toHaveAttribute("data-id", "2");
     expect(screen.getByRole("button", { name: "Save order" })).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("a 400 on save reloads the board, keeps the local order (new videos at the end) and lets you save again", async () => {
+    const { db, fetchFn } = server();
+    const { user } = await openBoard();
+    await user.click(within(rowOf("Episode 3")).getByRole("button", { name: "Move up" }));
+    expect(shownIds()).toEqual([1, 3, 2, 4, 5, 6]);
+    // Meanwhile another admin published episode 7 of season 1 and our save is rejected.
+    db.videos = [...db.videos.filter((v) => v.season === 1), ep(9, 7), ...db.videos.filter((v) => v.season === 2)];
+    db.failNextPut = true;
+    await user.click(screen.getByRole("button", { name: "Save order" }));
+    expect(await screen.findByText(/The list changed since you opened it/)).toBeInTheDocument();
+    await waitFor(() => expect(shownIds()).toEqual([1, 3, 2, 4, 5, 6, 9]));
+    expect(fetchFn.mock.calls.filter(([u, i]) => u === "/api/admin/series/1" && i.method === "GET")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Save order" })).not.toHaveAttribute("aria-disabled");
+
+    await user.click(screen.getByRole("button", { name: "Save order" }));
+    expect(await screen.findByText("Order saved: numbered 1 to 7.")).toBeInTheDocument();
+    expect(db.puts.map((b) => b.videoIds)).toEqual([
+      [1, 3, 2, 4, 5, 6],
+      [1, 3, 2, 4, 5, 6, 9],
+    ]);
   });
 
   it("Discard puts the saved order back", async () => {

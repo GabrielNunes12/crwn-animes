@@ -763,7 +763,9 @@
       "leaveTitle": "Sair sem salvar a ordem?",
       "leaveText": "A nova ordem ainda não foi salva e será perdida.",
       "leaveConfirm": "Sair sem salvar",
-      "notFound": "Série não encontrada. Ela pode estar na lixeira.",
+      "notFound": "Série não encontrada ou na lixeira",
+      "notFoundHint": "Ela pode ter sido apagada ou movida para a lixeira — séries na lixeira podem ser restauradas na aba Lixeira.",
+      "backToSeries": "Voltar para Séries",
       "editing": "Editar {label}"
     },
     "trash": {

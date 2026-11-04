@@ -26,11 +26,9 @@ function buildQuery(params) {
  * apiFetch("/auth/me") / apiFetch("/auth/login", { method: "POST", body: {...} })
  * Resolves with the parsed JSON (null for 204). Throws ApiError otherwise.
  */
-export async function apiFetch(path, { method = "GET", body, query, signal, cache } = {}) {
+export async function apiFetch(path, { method = "GET", body, query, signal } = {}) {
   const headers = { Accept: "application/json" };
   const init = { method, credentials: "include", headers, signal };
-  // e.g. "no-cache": revalidate a public (max-age=60) catalog response the admin just changed.
-  if (cache) init.cache = cache;
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
     init.body = JSON.stringify(body);
@@ -164,23 +162,10 @@ export const adminApi = {
 
   // v1.4 — series board, trash, draft preview
   /**
-   * One series by id, with `videoCounts` (there is no GET /admin/series/:id: pages through the
-   * list and stops at the page that has it). Rejects with a 404 ApiError when it isn't there
-   * (unknown, or in the trash).
+   * GET /api/admin/series/:id → { series (with videoCounts), sections: { anime, manga } }, each
+   * section `{ seasons, videos }` = exactly the set PUT …/order expects. 404 when unknown or trashed.
    */
-  findSeries: async (id, opts) => {
-    const want = Number(id);
-    let seen = 0;
-    for (let offset = 0; ; offset += ADMIN_PAGE_MAX) {
-      const { items, total } = await adminApi.series({ limit: ADMIN_PAGE_MAX, offset }, opts);
-      const hit = items.find((s) => Number(s.id) === want);
-      if (hit) return hit;
-      seen += items.length;
-      if (!items.length || seen >= total || items.length > ADMIN_PAGE_MAX) {
-        throw new ApiError({ status: 404, code: "NOT_FOUND", message: "Series not found" });
-      }
-    }
-  },
+  board: (id, opts) => apiFetch(`/admin/series/${enc(id)}`, opts),
   /** PUT /api/admin/series/:id/order → { videos } (numbers become 1..n in this order). */
   reorder: (seriesId, { section, season, videoIds }) =>
     apiFetch(`/admin/series/${enc(seriesId)}/order`, {

@@ -763,7 +763,9 @@
       "leaveTitle": "Leave without saving the order?",
       "leaveText": "The new order hasn't been saved and will be lost.",
       "leaveConfirm": "Leave without saving",
-      "notFound": "Series not found. It may be in the trash.",
+      "notFound": "Series not found or in the trash",
+      "notFoundHint": "It may have been deleted or moved to the trash — trashed series can be restored from the Trash tab.",
+      "backToSeries": "Back to Series",
       "editing": "Edit {label}"
     },
     "trash": {

@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
-import { Link, useBlocker, useLocation, useParams, useSearchParams } from "react-router";
-import { adminApi, catalogApi } from "../../api/client.js";
+import { Link, useBlocker, useParams, useSearchParams } from "react-router";
+import { adminApi } from "../../api/client.js";
 import { ConfirmDialog } from "../../components/ConfirmDialog/ConfirmDialog.jsx";
 import { Skeleton } from "../../components/Skeleton/Skeleton.jsx";
 import { Tabs } from "../../components/Tabs/Tabs.jsx";
@@ -27,20 +27,27 @@ function itemLabel(t, video, section) {
 const seasonOf = (v) => v.season ?? 1;
 const draftKey = (section, season) => `${section}:${season}`;
 
-/** Drafts of `section` re-checked against freshly loaded videos (dropped once they match). */
-function pruneDrafts(drafts, section, videos) {
+/** GET /api/admin/series/:id → { series, sections } with both sections always present. */
+function normalizeBoard(res) {
+  const sections = {};
+  for (const s of SECTIONS) {
+    const raw = res?.sections?.[s];
+    const videos = Array.isArray(raw?.videos) ? raw.videos : [];
+    sections[s] = { videos, seasons: seasonsOf(raw?.seasons, videos) };
+  }
+  return { series: res?.series ?? null, sections };
+}
+
+/** Drafts re-checked against the board's videos: reconciled, and dropped once they match. */
+function pruneDrafts(drafts, sections) {
   let changed = false;
   const next = {};
   for (const [key, ids] of Object.entries(drafts)) {
     const [s, n] = key.split(":");
-    if (s !== section) {
-      next[key] = ids;
-      continue;
-    }
-    const server = videos.filter((v) => String(seasonOf(v)) === n).map((v) => v.id);
+    const server = (sections[s]?.videos ?? []).filter((v) => String(seasonOf(v)) === n).map((v) => v.id);
     const reconciled = reconcileOrder(ids, server);
     if (server.length && !sameOrder(reconciled, server)) next[key] = reconciled;
-    if (!sameOrder(reconciled, ids) || !next[key]) changed = true;
+    if (!next[key] || !sameOrder(reconciled, ids)) changed = true;
   }
   return changed ? next : drafts;
 }
@@ -62,31 +69,34 @@ function UnsavedMark() {
 export function Component() {
   const { id } = useParams();
   // A fresh board per series (drafts never leak from one series to another).
-  return <SeriesBoardPage key={id} seriesId={Number(id)} />;
+  return <SeriesBoardPage key={id} seriesId={id} />;
 }
 
 function SeriesBoardPage({ seriesId }) {
   const { t } = useT();
-  const location = useLocation();
   useNoIndex();
-  // The Series tab passes the row it was opened from, so the board can draw at once.
-  const fromState = location.state?.series;
-  const [state, setState] = useState(() => ({ series: fromState && Number(fromState.id) === seriesId ? fromState : null, error: null }));
+  const [state, setState] = useState({ key: null, board: null, error: null });
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
     const ctrl = new AbortController();
     adminApi
-      .findSeries(seriesId, { signal: ctrl.signal })
-      .then((series) => !ctrl.signal.aborted && setState({ series, error: null }))
+      .board(seriesId, { signal: ctrl.signal })
+      .then((res) => !ctrl.signal.aborted && setState({ key: tick, board: normalizeBoard(res), error: null }))
       .catch((error) => {
         if (ctrl.signal.aborted || error?.name === "AbortError") return;
-        setState((s) => ({ series: error?.status === 404 ? null : s.series, error }));
+        // 404: unknown or trashed (also when another admin trashed it while it was open).
+        setState((s) => ({ key: tick, board: error?.status === 404 ? null : s.board, error }));
       });
     return () => ctrl.abort();
   }, [seriesId, tick]);
 
-  useTitle(state.series ? t("admin.board.docTitle", { name: state.series.name }) : t("admin.title"));
+  const series = state.board?.series;
+  useTitle(series ? t("admin.board.docTitle", { name: series.name }) : t("admin.title"));
+  const reload = () => setTick((n) => n + 1);
+  /** Local change to one section's videos (saved order, edit, trash) before the next reload. */
+  const updateVideos = (section, fn) =>
+    setState((s) => (s.board ? { ...s, board: { ...s.board, sections: { ...s.board.sections, [section]: { ...s.board.sections[section], videos: fn(s.board.sections[section].videos) } } } } : s));
 
   const back = (
     <Link to="/admin?tab=series" className={styles.back}>
@@ -94,14 +104,17 @@ function SeriesBoardPage({ seriesId }) {
     </Link>
   );
 
-  if (!state.series) {
+  if (!series) {
     return (
       <div className="container stack" style={{ paddingBlock: "var(--space-6)" }}>
         {back}
         {state.error?.status === 404 ? (
-          <div className="card stack">
-            <h1>{t("notFound.title")}</h1>
-            <p className="muted">{t("admin.board.notFound")}</p>
+          <div className="card stack" style={{ maxInlineSize: "36rem" }}>
+            <h1>{t("admin.board.notFound")}</h1>
+            <p className="muted">{t("admin.board.notFoundHint")}</p>
+            <Link className="btn btn-primary" to="/admin?tab=series" style={{ justifySelf: "start" }}>
+              {t("admin.board.backToSeries")}
+            </Link>
           </div>
         ) : state.error ? (
           <ErrorText error={state.error} />
@@ -109,6 +122,9 @@ function SeriesBoardPage({ seriesId }) {
           <div role="status" aria-label={t("common.loading")} className="stack">
             <Skeleton style={{ blockSize: "2.6rem", inlineSize: "50%" }} />
             <Skeleton style={{ blockSize: "1rem", inlineSize: "30%" }} />
+            {Array.from({ length: 4 }, (_, i) => (
+              <Skeleton key={i} style={{ blockSize: "4.5rem", borderRadius: "var(--radius)" }} />
+            ))}
           </div>
         )}
       </div>
@@ -118,54 +134,33 @@ function SeriesBoardPage({ seriesId }) {
   return (
     <div className="container" style={{ paddingBlock: "var(--space-6)" }}>
       {back}
-      <Board series={state.series} seriesError={state.error} reloadSeries={() => setTick((n) => n + 1)} />
+      <Board board={state.board} error={state.error} loading={state.key !== tick} reload={reload} updateVideos={updateVideos} />
     </div>
   );
 }
 
-function Board({ series, seriesError, reloadSeries }) {
+function Board({ board, error, loading, reload, updateVideos }) {
   const { t } = useT();
   const base = useId();
   const [params, setParams] = useSearchParams();
   const headingRef = useRef(null);
   const listRef = useRef(null);
+  const { series, sections } = board;
 
   // ---- sections: only the ones with published videos can be picked
-  const [loadedCounts, setLoadedCounts] = useState({});
-  const counts = { anime: 0, manga: 0, ...(series.videoCounts ?? {}), ...loadedCounts };
+  const counts = { anime: sections.anime.videos.length, manga: sections.manga.videos.length };
   const available = SECTIONS.filter((s) => counts[s] > 0);
   const section = available.includes(params.get("section")) ? params.get("section") : (available[0] ?? null);
 
-  // ---- the section's published videos (every season at once)
-  const [data, setData] = useState({ key: null, section: null, videos: [], seasons: [], error: null });
-  const [tick, setTick] = useState(0);
-  const dataKey = `${section}\u0000${tick}`;
+  // ---- unsaved orders, per section + season; re-checked whenever the board data changes
   const [drafts, setDrafts] = useState({});
+  const [checkedFor, setCheckedFor] = useState(sections);
+  if (checkedFor !== sections) {
+    setCheckedFor(sections);
+    setDrafts((d) => pruneDrafts(d, sections));
+  }
 
-  useEffect(() => {
-    if (!section) return undefined;
-    const ctrl = new AbortController();
-    const key = `${section}\u0000${tick}`;
-    // no-cache: these are public (max-age=60) responses and the admin just changed them.
-    catalogApi
-      .series(section, series.slug, { signal: ctrl.signal, cache: "no-cache" })
-      .then((res) => {
-        if (ctrl.signal.aborted) return;
-        const videos = Array.isArray(res?.videos) ? res.videos : [];
-        setData({ key, section, videos, seasons: seasonsOf(res?.seasons, videos), error: null });
-        setLoadedCounts((c) => (c[section] === videos.length ? c : { ...c, [section]: videos.length }));
-        setDrafts((d) => pruneDrafts(d, section, videos));
-      })
-      .catch((error) => {
-        if (ctrl.signal.aborted || error?.name === "AbortError") return;
-        setData((d) => (d.section === section ? { ...d, key, error } : { key, section, videos: [], seasons: [], error }));
-      });
-    return () => ctrl.abort();
-  }, [section, series.slug, tick]);
-
-  const loading = Boolean(section) && data.key !== dataKey;
-  // While reloading the same section, keep showing what we have (marked busy).
-  const shown = data.section === section ? data : null;
+  const shown = section ? sections[section] : null;
   const seasons = shown?.seasons ?? [];
   const season = section === "manga" ? 1 : pickSeason(seasons, params.get("season"));
   const key = draftKey(section, season);
@@ -324,15 +319,8 @@ function Board({ series, seriesError, reloadSeries }) {
       const updated = new Map((Array.isArray(res?.videos) ? res.videos : []).map((v) => [v.id, v]));
       // Older/odd responses without videos: number them 1..n locally (the server did the same).
       const local = new Map(videoIds.map((id, i) => [id, i + 1]));
-      setData((d) =>
-        d.section !== section
-          ? d
-          : {
-              ...d,
-              videos: d.videos
-                .map((v) => updated.get(v.id) ?? (updated.size === 0 && local.has(v.id) ? { ...v, number: local.get(v.id) } : v))
-                .sort(byPlace),
-            },
+      updateVideos(section, (videos) =>
+        videos.map((v) => updated.get(v.id) ?? (updated.size === 0 && local.has(v.id) ? { ...v, number: local.get(v.id) } : v)).sort(byPlace),
       );
       setDrafts((d) => {
         const copy = { ...d };
@@ -346,7 +334,7 @@ function Board({ series, seriesError, reloadSeries }) {
         // The set of videos changed under us: reload, keeping the local order for the ones still there.
         setSaveState({ busy: false, error: null });
         setMessage({ text: t("admin.board.stale"), tone: "info" });
-        setTick((n) => n + 1);
+        reload();
       } else {
         setSaveState({ busy: false, error: err });
       }
@@ -401,18 +389,16 @@ function Board({ series, seriesError, reloadSeries }) {
   function onSaved(updated) {
     const stays =
       updated.status === "published" && updated.seriesId === series.id && updated.section === section && seasonOf(updated) === season;
-    setData((d) => ({
-      ...d,
-      videos: stays ? d.videos.map((v) => (v.id === updated.id ? { ...v, ...updated } : v)).sort(byPlace) : d.videos.filter((v) => v.id !== updated.id),
-    }));
+    updateVideos(section, (videos) =>
+      stays ? videos.map((v) => (v.id === updated.id ? { ...v, ...updated } : v)).sort(byPlace) : videos.filter((v) => v.id !== updated.id),
+    );
     setEditingId(null);
     pendingFocus.current = stays ? { id: updated.id, focus: "edit" } : { id: neighbourOf(updated.id), focus: "row" };
     setMessage({
       text: updated.status === "published" ? t("admin.videos.saved", { title: updated.title }) : t("admin.videos.nowPending", { title: updated.title }),
       tone: "success",
     });
-    setTick((n) => n + 1);
-    reloadSeries();
+    reload();
   }
 
   const [toTrash, setToTrash] = useState(null);
@@ -423,13 +409,12 @@ function Board({ series, seriesError, reloadSeries }) {
     try {
       await adminApi.deleteVideo(video.id);
       pendingFocus.current = { id: neighbourOf(video.id), focus: "row" };
-      setData((d) => ({ ...d, videos: d.videos.filter((v) => v.id !== video.id) }));
+      updateVideos(section, (videos) => videos.filter((v) => v.id !== video.id));
       if (editingId === video.id) setEditingId(null);
       setToTrash(null);
       setTrashState({ busy: false, error: null });
       setMessage({ text: t("admin.videos.deleted", { title: video.title }), tone: "success" });
-      setTick((n) => n + 1);
-      reloadSeries();
+      reload();
     } catch (err) {
       setTrashState({ busy: false, error: err });
     }
@@ -464,15 +449,7 @@ function Board({ series, seriesError, reloadSeries }) {
         </div>
       </div>
       <ErrorText error={saveState.error} />
-      {shown?.error && <ErrorText error={shown.error} />}
-      {!shown && (
-        <div className="stack" role="status" aria-label={t("common.loading")} style={{ "--stack-gap": "var(--space-2)" }}>
-          {Array.from({ length: 4 }, (_, i) => (
-            <Skeleton key={i} style={{ blockSize: "4.5rem", borderRadius: "var(--radius)" }} />
-          ))}
-        </div>
-      )}
-      {shown && !shown.error && order.length === 0 && <p className="card muted">{t("admin.board.empty")}</p>}
+      {order.length === 0 && <p className="card muted">{t("admin.board.empty")}</p>}
       <ol ref={listRef} className={styles.list} role="list" aria-busy={loading || undefined} data-dragging={draggingId != null || undefined}>
         {order.map((id, i) => {
           const v = byId.get(id);
@@ -576,7 +553,8 @@ function Board({ series, seriesError, reloadSeries }) {
           </Link>
         )}
       </header>
-      <ErrorText error={seriesError} />
+      {/* A failed reload (the board keeps showing the last good data). */}
+      <ErrorText error={error} />
 
       <div className={styles.sectionBar}>
         <div role="group" aria-labelledby={`${base}-section`} aria-describedby={available.length ? undefined : `${base}-none`} className="cluster">
