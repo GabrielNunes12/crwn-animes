@@ -61,8 +61,8 @@ const paletteElement = (page) => page.locator("dialog").filter({ has: page.locat
 /**
  * Esc, then waits for the dialog's native `close` event, which the browser fires in a later task.
  * The palette still reacts to that event, and one that arrives after the palette was reopened
- * closes it again (app bug, see the test.fail below): waiting for it keeps this race out of the
- * tests that are about something else.
+ * used to close it again (fixed in CommandPalette; the regression test is below): waiting for it
+ * keeps these tests independent of that timing.
  */
 async function escapeAndWaitForClose(page) {
   await paletteElement(page).evaluate((d) => {
@@ -180,10 +180,9 @@ test.describe("command palette", () => {
   // onClose={() => open && close()} handler does not check that the dialog is still closed. If
   // Ctrl+K reopens the palette before that event arrives (a fast Esc → Ctrl+K, or simply a busy
   // main thread: it made "Escape closes it…" flaky in full runs), the stale event closes the new
-  // palette at once. Here Esc and Ctrl+K are dispatched in ONE task, so the event always comes
-  // after the reopen. Fix idea: ignore `close` while dialogRef.current.open is true.
+  // palette at once (fixed: the handler now ignores `close` while the dialog is open again). Here Esc
+  // and Ctrl+K are dispatched in ONE task, so the event always comes after the reopen: regression test.
   test("Esc then Ctrl+K at once: the palette stays open (the previous close's late `close` event must not close it)", async ({ page }) => {
-    test.fail(true, "CommandPalette: a late native `close` event from the previous Esc closes the reopened palette");
     await openHome(page);
     await page.keyboard.press("Control+k");
     await expect(dialog(page)).toBeVisible();
