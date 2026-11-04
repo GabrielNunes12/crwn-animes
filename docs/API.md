@@ -359,6 +359,13 @@ deleted forever.
   accordingly; old episode URLs then 404 (or 301 if they match another video's canonical form).
 - Manga: season is always 1.
 
+## Board data
+`GET /api/admin/series/:id` (admin, `private, no-store`) → `200 { series, sections }` where
+`series` includes `videoCounts`, and `sections` is
+`{ anime: { seasons: number[], videos: Video[] }, manga: { seasons: number[], videos: Video[] } }` —
+the published, non-trashed videos (available or not) of each section, ordered by season, number:
+exactly the set `PUT …/order` expects per season. Trashed series → `404` (use the trash endpoints).
+
 ## Draft preview
 `GET /api/admin/videos/:id/preview` (admin) → `200 { video, series }` for any non-purged video,
 including `pending` and trashed ones (`classification` + `overrides` included). The client renders it
