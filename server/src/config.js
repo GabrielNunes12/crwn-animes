@@ -66,7 +66,9 @@ export function loadConfig(env = process.env) {
     isProduction: nodeEnv === "production",
     port: int(env.PORT, 4000),
     databaseFile: env.DATABASE_FILE || "./data/crwn-animes.db",
-    clientOrigins: env.CLIENT_ORIGIN ? list(env.CLIENT_ORIGIN) : ["http://localhost:5173"],
+    // The Vite dev origin is only a default outside production; in production the app is
+    // served same-origin, so no extra origin is trusted unless CLIENT_ORIGIN says so.
+    clientOrigins: env.CLIENT_ORIGIN ? list(env.CLIENT_ORIGIN) : nodeEnv === "production" ? [] : ["http://localhost:5173"],
     appUrl: (env.APP_URL || "http://localhost:5173").replace(/\/+$/, ""),
     appUrlSet: Boolean(env.APP_URL),
     adminEmails: list(env.ADMIN_EMAILS).map((email) => email.toLowerCase()),
@@ -77,6 +79,9 @@ export function loadConfig(env = process.env) {
           host: env.SMTP_HOST,
           port: int(env.SMTP_PORT, 587),
           secure: env.SMTP_SECURE === "true",
+          // Without implicit TLS, STARTTLS is mandatory: never send credentials or
+          // password-equivalent links in clear text. Only a loopback relay may opt out.
+          requireTls: env.SMTP_REQUIRE_TLS !== "false",
           user: env.SMTP_USER || null,
           pass: env.SMTP_PASS || null,
         }

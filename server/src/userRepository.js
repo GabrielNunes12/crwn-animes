@@ -43,6 +43,7 @@ export function createUserRepository(db) {
     deleteSession: db.prepare("DELETE FROM sessions WHERE token_hash = ?"),
     deleteSessionsOfUser: db.prepare("DELETE FROM sessions WHERE user_id = ?"),
     sessionsOfUser: db.prepare("SELECT expires_at FROM sessions WHERE user_id = ? ORDER BY expires_at"),
+    emailTokensOfUser: db.prepare("SELECT purpose, expires_at FROM email_tokens WHERE user_id = ? ORDER BY expires_at"),
 
     insertToken: db.prepare("INSERT INTO email_tokens (token_hash, user_id, purpose, expires_at) VALUES (?, ?, ?, ?)"),
     tokenRow: db.prepare("SELECT * FROM email_tokens WHERE token_hash = ? AND purpose = ? AND expires_at > ?"),
@@ -77,6 +78,9 @@ export function createUserRepository(db) {
     deleteSession: (tokenHash) => q.deleteSession.run(tokenHash),
     deleteSessionsOfUser: (userId) => q.deleteSessionsOfUser.run(userId),
     listSessions: (userId) => q.sessionsOfUser.all(userId).map((row) => ({ expiresAt: row.expires_at })),
+    /** Pending verify/reset links: purpose and expiry only, never the token hash. */
+    listEmailTokens: (userId) =>
+      q.emailTokensOfUser.all(userId).map((row) => ({ purpose: row.purpose, expiresAt: row.expires_at })),
 
     createEmailToken: (tokenHash, userId, purpose, expiresAt) => q.insertToken.run(tokenHash, userId, purpose, expiresAt),
     deleteEmailTokens: (userId, purpose) => q.deleteTokensOfUser.run(userId, purpose),

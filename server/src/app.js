@@ -141,6 +141,20 @@ export function createApp({ db, config: overrides = {}, mailer, fetchVideoInfo =
       res.set("Cache-Control", "no-cache");
       res.redirect(301, `/${query >= 0 ? req.originalUrl.slice(query) : ""}`);
     });
+    // Any other spelling that resolves to index.html (//index.html, /%69ndex.html,
+    // /./index.html, /assets/../index.html) is redirected too, never served raw.
+    app.use((req, res, next) => {
+      if (req.method !== "GET" && req.method !== "HEAD") return next();
+      let decoded;
+      try {
+        decoded = decodeURIComponent(req.path);
+      } catch {
+        return next(); // malformed escapes are answered by the 400 handling
+      }
+      if (path.posix.basename(path.posix.normalize(decoded)).toLowerCase() !== "index.html") return next();
+      res.set("Cache-Control", "no-cache");
+      res.redirect(301, "/");
+    });
     app.use(
       express.static(config.clientDist, {
         index: false, // "/" goes through the SEO fallback below, like every other page

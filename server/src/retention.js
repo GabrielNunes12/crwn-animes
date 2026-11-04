@@ -7,11 +7,20 @@ const UNVERIFIED_TTL_MS = 7 * DAY;
 const ACTIVITY_DAYS = 30;
 const HOUR = 60 * 60 * 1000;
 
+/** Moves the WAL into the main file and truncates it, so erased rows leave no copy behind. */
+export function checkpoint(db) {
+  try {
+    db.pragma("wal_checkpoint(TRUNCATE)");
+  } catch {
+    // In-memory databases have no WAL; a busy checkpoint is retried by the next one.
+  }
+}
+
 export function purgeExpired(db, now = new Date()) {
   const at = now.toISOString();
   const unverifiedBefore = new Date(now.getTime() - UNVERIFIED_TTL_MS).toISOString();
   const activityBefore = new Date(now.getTime() - ACTIVITY_DAYS * DAY).toISOString().slice(0, 10);
-  return db.transaction(() => ({
+  const result = db.transaction(() => ({
     sessions: db.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(at).changes,
     emailTokens: db.prepare("DELETE FROM email_tokens WHERE expires_at <= ?").run(at).changes,
     unverifiedUsers: db
@@ -19,6 +28,9 @@ export function purgeExpired(db, now = new Date()) {
       .run(unverifiedBefore).changes,
     ratingActivity: db.prepare("DELETE FROM rating_activity WHERE day < ?").run(activityBefore).changes,
   }))();
+  // Purged accounts must not survive in the WAL either (secure_delete covers the main file).
+  if (result.unverifiedUsers) checkpoint(db);
+  return result;
 }
 
 /** Runs now and then every hour. The timer is unref'd so it never keeps the process alive. */
